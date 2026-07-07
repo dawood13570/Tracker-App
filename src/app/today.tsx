@@ -1,11 +1,11 @@
 // app/index.tsx
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
 import { drizzle, useLiveQuery } from 'drizzle-orm/expo-sqlite';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useState } from 'react';
+import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { syncLogs } from '../db/schema'; // Ensure this matches your schema path
-import { useStore } from '../store/useStore'; 
-import { executeSyncRoutine, scheduleFiveMinuteTimer } from '../tasks/background';      // Our Zustand memory corkboard store
+import { useStore } from '../store/useStore';
+import { executeSyncRoutine, scheduleFiveMinuteTimer } from '../tasks/background'; // Our Zustand memory corkboard store
 
 export default function AppDashboard() {
   // 1. Gain active access to the physical open database instance on disk
