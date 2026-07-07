@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.3",
+    "@shopify/flash-list": "2.0.2",
     "drizzle-orm": "^0.45.2",
     "expo": "~57.0.2",
     "expo-background-fetch": "~57.0.2",

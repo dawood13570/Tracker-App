@@ -16,10 +16,10 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 
 - [x] 1.2.0 - Clean 'today.tsx' before doing anything
 - [ ] 1.2.1 — Create a hardcoded array of 5-6 fake tasks in `today.tsx` with varied types and priorities
-- [ ] 1.2.2 — Render the list using `FlatList` (not `ScrollView` — learn why FlatList is better for lists)
+- [ ] 1.2.2 — Render the list using `FlatList` (not `ScrollView` — learn why FlatList is better for lists, 'Note' apparently FlashList is superior to FlatList, so check that out.)
 - [ ] 1.2.3 — Add a date header at the top showing today's date ("Tuesday, July 7")
 - [ ] 1.2.4 — Add a basic count summary: "4 tasks · 1 high priority"
-- [ ] 1.2.5 — Make it not ugly: consistent padding, readable font sizes, clear hierarchy
+- [ ] 1.2.5 — Make it not ugly: consistent padding, readable font sizes, clear hierarchy (for FlashList, contentContainerStyle is better instead of standard padding)
 
 ---
 
