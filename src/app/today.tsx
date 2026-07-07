@@ -1,39 +1,8 @@
 // app/index.tsx
-import { drizzle, useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { syncLogs } from '../db/schema'; // Ensure this matches your schema path
-import { useStore } from '../store/useStore';
-import { executeSyncRoutine, scheduleFiveMinuteTimer } from '../tasks/background'; // Our Zustand memory corkboard store
+import { SafeAreaView, ScrollView, StyleSheet, Text } from 'react-native';
 
 export default function AppDashboard() {
-  // 1. Gain active access to the physical open database instance on disk
-  const expoDb = useSQLiteContext();
-  const db = drizzle(expoDb);
 
-  // 2. Consume shared variables and functions from our Zustand store
-  const isSidebarOpen = useStore((state) => state.isSidebarOpen);
-  const toggleSidebar = useStore((state) => state.toggleSidebar);
-  const userId = useStore((state) => state.userId);
-  const setUserId = useStore((state) => state.setUserId);
-
-  // Local state to track profile identity configurations
-  const [isLogged, setIsLogged] = useState(false);
-
-  // 3. Drizzle Live Query: Listens to the SQLite binary file natively.
-  // If rows alter anywhere in the app process (even in the background), this array refreshes instantly.
-  const { data: logs } = useLiveQuery(db.select().from(syncLogs));
-
-  const handleProfileToggle = () => {
-    if (!isLogged) {
-      setUserId("USER_DAWOOD_77");
-      setIsLogged(true);
-    } else {
-      setUserId(null);
-      setIsLogged(false);
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -43,69 +12,6 @@ export default function AppDashboard() {
         <Text style={styles.headerTitle}>System Architecture</Text>
         <Text style={styles.dateSubtitle}>Active Environment Monitor</Text>
 
-        {/* --- SECTION 1: ZUSTAND STATE CONTROL --- */}
-        <View style={styles.card}>
-          <Text style={styles.cardHeader}>🧠 Zustand Store (Memory RAM State)</Text>
-          
-          <View style={styles.metricRow}>
-            <Text style={styles.label}>Sidebar Parameter:</Text>
-            <Text style={[styles.value, { color: isSidebarOpen ? '#03DAC6' : '#CF6679' }]}>
-              {isSidebarOpen ? "OPEN" : "CLOSED"}
-            </Text>
-          </View>
-
-          <View style={styles.metricRow}>
-            <Text style={styles.label}>Active Identity Token:</Text>
-            <Text style={[styles.value, { color: userId ? '#BB86FC' : '#666' }]}>
-              {userId ?? "EMPTY (NULL)"}
-            </Text>
-          </View>
-
-<View style={styles.buttonActionRow}>
-  <TouchableOpacity style={styles.actionButton} onPress={toggleSidebar}>
-    <Text style={styles.buttonText}>Toggle Sidebar</Text>
-  </TouchableOpacity>
-
-{/* TEAL FORCE SYNC TEST TRIGGER */}
-<TouchableOpacity 
-  style={[styles.actionButton, { backgroundColor: '#03DAC6' }]} 
-  onPress={async () => {
-    // 1. Run the database row insert right now
-    await executeSyncRoutine(); 
-    // 2. Schedule the hardware lock screen alarm for 5 minutes from now
-    await scheduleFiveMinuteTimer(); 
-  }}
->
-  <Text style={[styles.buttonText, { color: '#121212' }]}>Force Sync</Text>
-</TouchableOpacity>
-
-  <TouchableOpacity style={[styles.actionButton, styles.secondaryButton]} onPress={handleProfileToggle}>
-    <Text style={styles.buttonText}>{isLogged ? "Clear Profile" : "Assign Profile"}</Text>
-  </TouchableOpacity>
-</View>
-        </View>
-
-        {/* --- SECTION 2: DRIZZLE PERSISTENT LOGS --- */}
-        <View style={styles.card}>
-          <Text style={styles.cardHeader}>💾 SQLite Storage (Disk File Monitor)</Text>
-          <Text style={styles.description}>
-            The rows below display persistent records stored inside the database binary. 
-            When a background fetch executes, a new timestamp row will inject automatically.
-          </Text>
-
-          <View style={styles.logContainer}>
-            {logs && logs.length > 0 ? (
-              logs.map((log) => (
-                <View key={log.id} style={styles.logRow}>
-                  <Text style={styles.logStatus}>[{log.status}]</Text>
-                  <Text style={styles.logTime}>{log.timestamp}</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.emptyText}>No background iterations recorded yet.</Text>
-            )}
-          </View>
-        </View>
 
       </ScrollView>
     </SafeAreaView>

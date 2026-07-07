@@ -11,23 +11,10 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 
 ---
 
-### 1.1 — Set Up Project Structure
-**Done when:** All folders exist, no empty crashes, you understand what each folder is for.
-
-- [ ] 1.1.1 — Create `/app` folder with placeholder `today.tsx`, `week.tsx`, `month.tsx`, `goals.tsx`
-- [ ] 1.1.2 — Create `/components` folder with empty `TaskCard.tsx`, `ProgressBar.tsx`, `ProcrastinationBadge.tsx`
-- [ ] 1.1.3 — Create `/store` folder with empty `taskStore.ts`
-- [ ] 1.1.4 — Create `/db` folder with empty `schema.ts`, `queries.ts`, and a `/migrations` subfolder
-- [ ] 1.1.5 — Create `/engine` folder with empty `rollover.ts`, `recurrence.ts`, `pace.ts`
-- [ ] 1.1.6 — Create `/services` folder with empty `notifications.ts`, `sync.ts`
-- [ ] 1.1.7 — Create `/docs` folder and move VISION.md and ROADMAP.md into it
-- [ ] 1.1.8 — Confirm app still launches with no errors after restructure
-
----
-
 ### 1.2 — Build a Static Today Screen
 **Done when:** Today screen renders a hardcoded list of tasks. Scrollable. Looks intentional.
 
+- [x] 1.2.0 - Clean 'today.tsx' before doing anything
 - [ ] 1.2.1 — Create a hardcoded array of 5-6 fake tasks in `today.tsx` with varied types and priorities
 - [ ] 1.2.2 — Render the list using `FlatList` (not `ScrollView` — learn why FlatList is better for lists)
 - [ ] 1.2.3 — Add a date header at the top showing today's date ("Tuesday, July 7")
@@ -342,3 +329,7 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 - [x] Independent APK running on Android device
 - [x] Local notifications working
 - [x] Background task running (1-minute timer notification)
+
+---
+
+- [x] 1.1 — Set Up Project Structure
