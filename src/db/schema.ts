@@ -7,3 +7,12 @@ export const syncLogs = sqliteTable('sync_logs', {
   timestamp: text('timestamp').notNull(),                 // Stores the exact clock time of the update
   status: text('status').notNull(),                      // Stores 'SUCCESS' or 'FAILED' labels
 });
+
+
+export const customMigrations = [
+  `CREATE TABLE IF NOT EXISTS \`sync_logs\` (
+    \`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    \`timestamp\` text NOT NULL,
+    \`status\` text NOT NULL
+  );`
+];

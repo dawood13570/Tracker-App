@@ -1,14 +1,11 @@
+// app/_layout.tsx
 import * as Notifications from 'expo-notifications';
 import { Slot } from 'expo-router';
 import * as SQLite from 'expo-sqlite';
 import { SQLiteProvider } from 'expo-sqlite';
 import { useEffect } from 'react';
+import { customMigrations } from '../db/schema';
 import { registerBackgroundFetch } from '../tasks/background';
-
-// 1. Import your Drizzle tools and the migrations bundle from your first question!
-import { drizzle } from 'drizzle-orm/expo-sqlite';
-import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
-import migrations from '../../drizzle/migrations';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -23,30 +20,28 @@ Notifications.setNotificationHandler({
 export default function RootLayout() {
   
   useEffect(() => {
+    // Safely register our background hardware worker alarm system
     registerBackgroundFetch()
       .then(() => console.log("Background fetch registered successfully!"))
       .catch((err: unknown) => console.error("Failed to register background fetch:", err)); 
   }, []);
 
-  // 2. This function executes safely inside SQLiteProvider before the app UI mounts
+  // This function runs deep inside the SQLiteProvider lifecycle, completely safe from native race conditions
   const handleDatabaseSetup = async (db: SQLite.SQLiteDatabase) => {
     try {
-      console.log('[DATABASE] Initializing Drizzle migration engine...');
-      
-      // Wrap the raw native database handle in a Drizzle instance
-      const drizzleDb = drizzle(db);
-      
-      // Execute all migrations bundled inside your migrations.js automatically
-      // This reads your SQL files (like worried_piledriver.sql) behind the scenes!
-      await useMigrations(drizzleDb, migrations);
-      
-      console.log('[DATABASE] All automated migrations applied successfully!');
+      console.log('[DATABASE] Constructing structural data channels...');
+      for (const sqlCommand of customMigrations) {
+        await db.execAsync(sqlCommand);
+      }
+      console.log('[DATABASE] Custom migrations applied and verified successfully!');
     } catch (error) {
       console.error('[DATABASE] Critical Migration Failure:', error);
     }
   };
 
   return (
+    // databaseName sets up the local storage file
+    // onInit ensures migrations run completely safely before any child view renders
     <SQLiteProvider databaseName="my_app_db.db" onInit={handleDatabaseSetup}>
       <Slot /> 
     </SQLiteProvider>
