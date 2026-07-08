@@ -176,6 +176,10 @@ Feel: like saving up vacation days.
 - **2026-07-07** — Correlation insights: "On days you log 2+ hours of social media,
   you complete 40% fewer tasks." Long-term feature, needs usage tracking first.
 
+- **2026-08-07** - One to-do list is daily, and one is weekly , there could also be monthly and yearly, and there should be an option to connects these 2 or 4 tabs , so like today's to-do is connected to the week's to-do. Weekly to-do's might be progression based and have sub task which you do daily.
+
+- **2026-08-07** - Being able to set some tasks to evolve, from low to high as days pass and you don't do them, it becomes high like 'yoo you havent draw in a bazillion days even though you wanted to. so draw something today". this feature might also cause other 'high' priority tasks to be skipped for the sake of the evolved task.
+
 ---
 
 ## Decisions Log
