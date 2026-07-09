@@ -114,42 +114,68 @@ const MOCK_TASKS: Task[] = [
   { id: '100', title: 'Calibrate gaming monitor colors', type: 'simple', priority: 'low', isCompleted: false }
 ];
 
-export default function AppDashboard() {
+
+
+export function DateHeader() {
+  const currentDate = new Date().toLocaleDateString('ur-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View>
+      <Text style={styles.dateHeaderText}>{currentDate}</Text>
+    </View>
+  );
+}
+export default function AppDashboard() {
+  const summary = MOCK_TASKS.reduce((acc, task) => {
+  acc.total++;
+  acc.types[task.type] = (acc.types[task.type] || 0) +1;
+  acc.priorities[task.priority] = (acc.priorities[task.priority] || 0) + 1;
+  if (task.isCompleted) acc.completed++; else acc.incomplete++;
+  
 
+  return acc;
+}, {
+  total: 0,
+  types: {} as Record<string,number>,
+  priorities: {} as Record<string, number>,
+  completed: 0,
+  incomplete: 0
+});
+  return (
+    <SafeAreaView style={styles.container}>
+      ListHeaderComponent={<DateHeader/>}
       <StatusBar barStyle="dark-content" backgroundColor={styles.container.backgroundColor} />
       
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerText}>This is the Header, and the list must go on and on and on and on</Text>
+
+      <View style={{ paddingHorizontal: 20, marginVertical: 10, backgroundColor: "#cacaca"}}>
+        <Text style={{ fontWeight:"500", textAlign:"center"}}>Task Metrics</Text>
+        <Text>Total Tasks: {summary.total} | Completed:<Text style={{ color:"#40af69"}}> {summary.completed}</Text> | Pending: {summary.incomplete}</Text>
+        <Text>Simple: {summary.types['simple']} | Hybrid: {summary.types['hybrid']} | Progression: {summary.types['progression']}</Text>
+        <Text><Text style={{ color:"#c40000"}}>High Priority: {summary.priorities['high']} </Text>| Medium Priority: {summary.priorities['medium']} | Low Priority: {summary.priorities['low']}</Text>
       </View>
 
       <FlashList
-      data={MOCK_TASKS}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.listContent}
-      renderItem={({ item}) => (
-        <View style={styles.taskCard}>
-          <Text style={styles.taskTitle}>{item.title}</Text>
-          <Text style={styles.taskMeta}>
-            {item.type.toUpperCase()} . {item.priority.toUpperCase()}
+        data={MOCK_TASKS}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => (
+          <View style={styles.taskCard}>
+            <Text style={styles.taskTitle}>{item.title}</Text>
+            <Text style={styles.taskMeta}>
+              {item.type.toUpperCase()} • {item.priority.toUpperCase()}
             </Text>
-           </View>
-      )}
+          </View>
+        )}
       />
-
-      {/* <ScrollView contentContainerStyle={styles.scrollContent}>
-        
-  
-        <Text style={styles.headerTitle}>System Architecture</Text>
-        <Text style={styles.dateSubtitle}>Active Environment Monitor</Text>
-
-
-      </ScrollView> */}
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -161,8 +187,15 @@ const styles = StyleSheet.create({
   },
   headerText: {
     fontSize: 16,
-    color: '#ff000081',
+    color: '#99999981',
     fontWeight: '900',
+  },
+  dateHeaderText: {
+  fontSize: 22, // Bumped up the text size for a clean header look
+  color: '#1A1A1A',
+  fontWeight: '800',
+  paddingLeft: 10,
+  paddingVertical: 20
   },
   listContent: {
     paddingHorizontal: 20,

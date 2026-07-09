@@ -3,9 +3,8 @@ import * as Notifications from 'expo-notifications';
 import { Slot } from 'expo-router';
 import * as SQLite from 'expo-sqlite';
 import { SQLiteProvider } from 'expo-sqlite';
-import { useEffect } from 'react';
 import { customMigrations } from '../db/schema';
-import { registerBackgroundFetch } from '../tasks/background';
+// import { registerBackgroundFetch } from '../tasks/background';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -19,12 +18,12 @@ Notifications.setNotificationHandler({
 
 export default function RootLayout() {
   
-  useEffect(() => {
-    // Safely register our background hardware worker alarm system
-    registerBackgroundFetch()
-      .then(() => console.log("Background fetch registered successfully!"))
-      .catch((err: unknown) => console.error("Failed to register background fetch:", err)); 
-  }, []);
+  // useEffect(() => {
+  //   // Safely register our background hardware worker alarm system
+  //   registerBackgroundFetch()
+  //     .then(() => console.log("Background fetch registered successfully!"))
+  //     .catch((err: unknown) => console.error("Failed to register background fetch:", err)); 
+  // }, []);
 
   // This function runs deep inside the SQLiteProvider lifecycle, completely safe from native race conditions
   const handleDatabaseSetup = async (db: SQLite.SQLiteDatabase) => {
