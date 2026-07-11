@@ -11,6 +11,44 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 
 ---
 
+### 1.1 — Set Up Project Structure
+**Done when:** All folders exist, no empty crashes, you understand what each folder is for.
+
+- [x] 1.1.1 — Create `/app` folder with placeholder `today.tsx`, `week.tsx`, `month.tsx`, `goals.tsx`
+- [x] 1.1.2 — Create `/components` folder with empty `TaskCard.tsx`, `ProgressBar.tsx`, `ProcrastinationBadge.tsx`
+- [x] 1.1.3 — Create `/store` folder with empty `taskStore.ts`
+- [x] 1.1.4 — Create `/db` folder with empty `schema.ts`, `queries.ts`, and a `/migrations` subfolder
+- [x] 1.1.5 — Create `/engine` folder with empty `rollover.ts`, `recurrence.ts`, `pace.ts`
+- [x] 1.1.6 — Create `/services` folder with empty `notifications.ts`, `sync.ts`
+- [x] 1.1.7 — Create `/docs` folder and move VISION.md and ROADMAP.md into it
+- [x] 1.1.8 — Confirm app still launches with no errors after restructure
+
+---
+
+### 1.2 — Build a Static Today Screen
+**Done when:** Today screen renders a hardcoded list of tasks. Scrollable. Looks intentional.
+
+- [x] 1.2.1 — Create a hardcoded array of 5-6 fake tasks in `today.tsx` with varied types and priorities
+- [x] 1.2.2 — Render the list using `FlatList` (not `ScrollView` — learn why FlatList is better for lists)
+- [x] 1.2.3 — Add a date header at the top showing today's date ("Tuesday, July 7")
+- [x] 1.2.4 — Add a basic count summary: "4 tasks · 1 high priority"
+- [x] 1.2.5 — Make it not ugly: consistent padding, readable font sizes, clear hierarchy
+
+---
+
+### 1.3 — Build the TaskCard Component
+**Done when:** TaskCard renders all three types visually differently. Pass it any task object, it renders correctly.
+
+- [x] 1.3.1 — Create `TaskCard.tsx` that accepts a `task` prop
+- [x] 1.3.2 — Simple task: plain card, checkbox on the left, title, priority indicator
+- [x] 1.3.3 — Progression task: same as simple but with a thin progress bar at the bottom and "X / Y unit" label
+- [x] 1.3.4 — Hybrid task: same as simple but with a sub-task count badge ("3/5 done")
+- [x] 1.3.5 — High priority tasks get a distinct visual treatment (color accent, bold, or icon — pick one and commit)
+- [x] 1.3.6 — Add `ProcrastinationBadge` to TaskCard: only shows if `procrastination_count > 0`, displays "+N days"
+- [x] 1.3.7 — Replace the hardcoded rendering in `today.tsx` with `<TaskCard task={item} />` inside FlatList
+
+---
+
 ### 1.4 — Build the New Task Form
 **Done when:** You can open a form, fill it in, and see the values in console.log. Nothing saves yet.
 

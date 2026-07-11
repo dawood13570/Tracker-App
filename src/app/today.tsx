@@ -122,14 +122,14 @@ export function DateHeader() {
     </View>
   );
 }
+
 export default function AppDashboard() {
+  {/*This is the calculation for metric */}
   const summary = MOCK_TASKS.reduce((acc, task) => {
   acc.total++;
   acc.types[task.type] = (acc.types[task.type] || 0) +1;
   acc.priorities[task.priority] = (acc.priorities[task.priority] || 0) + 1;
   if (task.isCompleted) acc.completed++; else acc.incomplete++;
-  
-
   return acc;
 }, {
   total: 0,
@@ -138,25 +138,31 @@ export default function AppDashboard() {
   completed: 0,
   incomplete: 0
 });
+
   return (
     <SafeAreaView style={styles.container}>
-      ListHeaderComponent={<DateHeader/>}
       <StatusBar barStyle="dark-content" backgroundColor={styles.container.backgroundColor} />
-      
+      <View style={styles.stickyHeader}>
+        <DateHeader/>
 
-      <View style={{ paddingHorizontal: 20, marginVertical: 10, backgroundColor: "#cacaca"}}>
-        <Text style={{ fontWeight:"500", textAlign:"center"}}>Task Metrics</Text>
-        <Text>Total Tasks: {summary.total} | Completed:<Text style={{ color:"#40af69"}}> {summary.completed}</Text> | Pending: {summary.incomplete}</Text>
-        <Text>Simple: {summary.types['simple']} | Hybrid: {summary.types['hybrid']} | Progression: {summary.types['progression']}</Text>
-        <Text><Text style={{ color:"#c40000"}}>High Priority: {summary.priorities['high']} </Text>| Medium Priority: {summary.priorities['medium']} | Low Priority: {summary.priorities['low']}</Text>
+        {/*This is the metric */}
+        <View style={{ paddingHorizontal: 20, marginHorizontal: 10, marginVertical:20, backgroundColor: "#ededed", borderRadius: 12}}>
+          <Text style={{ fontWeight:"500", textAlign:"center"}}>Task Metrics</Text>
+          <Text>Total Tasks: {summary.total} | Completed:<Text style={{ color:"#40af69"}}> {summary.completed}</Text> | Pending: {summary.incomplete}</Text>
+          <Text>Simple: {summary.types['simple']} | Hybrid: {summary.types['hybrid']} | Progression: {summary.types['progression']}</Text>
+          <Text><Text style={{ color:"#c40000"}}>High Priority: {summary.priorities['high']} </Text>| Medium Priority: {summary.priorities['medium']} | Low Priority: {summary.priorities['low']}</Text>
+        </View>
       </View>
 
+      {/*This is the list */}
+      <View style={{flex: 1}}>
       <FlashList
         data={MOCK_TASKS}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => <TaskCard task={item} />}
       />
+      </View>
     </SafeAreaView>
   );
 }
@@ -167,21 +173,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FAFAFA',
   },
-  headerContainer: {
-    paddingHorizontal: 20,
-  },
-  headerText: {
-    fontSize: 16,
-    color: '#99999981',
-    fontWeight: '900',
-  },
   dateHeaderText: {
-  fontSize: 22, // Bumped up the text size for a clean header look
+  fontSize: 22,
   color: '#1A1A1A',
   fontWeight: '800',
   paddingLeft: 10,
   paddingTop: 20
   },
+  stickyHeader:{
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderColor: '#EAEAEA',
+    elevation: 2,
+  },
+  
   listContent: {
     paddingHorizontal: 20,
     paddingTop: 4
