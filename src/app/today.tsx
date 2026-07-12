@@ -1,7 +1,11 @@
 // app/today.tsx
+import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList } from "@shopify/flash-list";
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { useRef } from 'react';
+import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import NewTaskModal from '../components/new-task';
 import { Task, TaskCard } from '../components/TaskCard';
 
 
@@ -124,6 +128,7 @@ export function DateHeader() {
 }
 
 export default function AppDashboard() {
+  const taskSheetRef = useRef<BottomSheet>(null);
   {/*This is the calculation for metric */}
   const summary = MOCK_TASKS.reduce((acc, task) => {
   acc.total++;
@@ -140,8 +145,10 @@ export default function AppDashboard() {
 });
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={styles.container.backgroundColor} />
+      {/* This is the header */}
       <View style={styles.stickyHeader}>
         <DateHeader/>
 
@@ -163,10 +170,18 @@ export default function AppDashboard() {
         renderItem={({ item }) => <TaskCard task={item} />}
       />
       </View>
-    </SafeAreaView>
+
+      {/*This is the button */}
+      <Pressable onPress={() => taskSheetRef.current?.expand()} style={({ pressed }) => [
+        styles.buttonStuff, { backgroundColor: pressed ? "#155b76" : "#1c8db9" }
+      ]}>
+        <Text style={styles.buttonText}>+</Text>
+      </Pressable>
+      <NewTaskModal sheetRef={taskSheetRef} />
+    </SafeAreaView> 
+    </GestureHandlerRootView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -191,4 +206,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 4
   },
+  buttonStuff:{
+    width: 75,
+    height: 75,
+    position:"absolute",
+    bottom:65,
+    right:15,
+    backgroundColor: "#1c8db9",
+    justifyContent: "center",
+    alignItems: "center", 
+    borderRadius: 37.5
+
+  },
+  buttonText:{
+    color: "#ffffff",
+  }
 });

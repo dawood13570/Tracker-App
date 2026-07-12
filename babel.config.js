@@ -10,7 +10,8 @@ module.exports = function(api) {
           extensions: ['.sql'],
           rootPath: '.' // <--- Crucial for Windows: Tells the plugin to start searching from the project root folder
         }
-      ]
+      ],
+      'react-native-reanimated/plugin',
     ],
   };
 };
