@@ -52,15 +52,15 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 1.4 — Build the New Task Form
 **Done when:** You can open a form, fill it in, and see the values in console.log. Nothing saves yet.
 
-- [~] 1.4.1 — Create `new-task.tsx` screen (or a bottom sheet modal — your choice, bottom sheet feels better)
-- [ ] 1.4.2 — Add a text input for task title
-- [ ] 1.4.3 — Add a type selector: Simple / Progression / Hybrid (three tappable options, not a dropdown)
-- [ ] 1.4.4 — Show/hide progression fields (target value, unit, deadline) based on selected type
-- [ ] 1.4.5 — Add priority selector: Low / Normal / High
-- [ ] 1.4.6 — Add a toggle for "Move to next day if not completed" (rollover)
-- [ ] 1.4.7 — Add a recurrence selector: None / Daily / Every N days / Weekly
-- [ ] 1.4.8 — Add a Submit button that `console.log`s the full form state
-- [~] 1.4.9 — Add a button on the Today screen that navigates to this form
+- [x] 1.4.1 — Create `new-task.tsx` screen (or a bottom sheet modal — your choice, bottom sheet feels better)
+- [x] 1.4.2 — Add a text input for task title
+- [x] 1.4.3 — Add a type selector: Simple / Progression / Hybrid (three tappable options, not a dropdown)
+- [x] 1.4.4 — Show/hide progression fields (target value, unit, deadline) based on selected type
+- [x] 1.4.5 — Add priority selector: Low / Normal / High
+- [x] 1.4.6 — Add a toggle for "Move to next day if not completed" (rollover)
+- [x] 1.4.7 — Add a recurrence selector: None / Daily / Every N days / Weekly
+- [x] 1.4.8 — Add a Submit button that `console.log`s the full form state
+- [x] 1.4.9 — Add a button on the Today screen that navigates to this form
 
 ---
 

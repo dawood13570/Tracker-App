@@ -10,7 +10,7 @@ import { Task, TaskCard } from '../components/TaskCard';
 
 
 const MOCK_TASKS: Task[] = [
-  { id: '1', title: 'Brush teeth', type: 'simple', priority: 'high', isCompleted: true },
+  { id: '1', title: 'Brush teeth', type: 'simple', priority: 'high', isCompleted: true},
   { id: '2', title: 'Eat breakfast', type: 'simple', priority: 'high', isCompleted: true },
   { id: '3', title: 'Complete 1.2 milestone', type: 'hybrid', priority: 'medium', isCompleted: false, subtasks_completed: 3, subtasks_total: 5 },
   { id: '4', title: 'Play Metro: Last Light', type: 'simple', priority: 'low', isCompleted: false, procrastination_count: 5 },
@@ -153,7 +153,7 @@ export default function AppDashboard() {
         <DateHeader/>
 
         {/*This is the metric */}
-        <View style={{ paddingHorizontal: 20, marginHorizontal: 10, marginVertical:20, backgroundColor: "#ededed", borderRadius: 12}}>
+        <View style={{ paddingHorizontal: 20, marginHorizontal: 25, marginVertical:20, backgroundColor: "#ededed", borderRadius: 12, paddingVertical: 10, elevation: 10 }}>
           <Text style={{ fontWeight:"500", textAlign:"center"}}>Task Metrics</Text>
           <Text>Total Tasks: {summary.total} | Completed:<Text style={{ color:"#40af69"}}> {summary.completed}</Text> | Pending: {summary.incomplete}</Text>
           <Text>Simple: {summary.types['simple']} | Hybrid: {summary.types['hybrid']} | Progression: {summary.types['progression']}</Text>

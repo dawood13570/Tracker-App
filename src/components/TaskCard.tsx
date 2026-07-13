@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export interface Task {
   id: string;
@@ -25,18 +25,34 @@ export function TaskCard({ task }: TaskCardProps) {
     const progressRatio = task.total_progress && task.total_progress > 0 
       ? (task.current_progress || 0) / task.total_progress 
       : 0;
-return (
-         <View style={[styles.taskCard, task.isCompleted && styles.completedCard]}>
-            <Text style={[styles.taskTitle, task.isCompleted && styles.completedText]}>{task.title}</Text>
+
+    // 1. Calculate dynamic progress color based on ratio thresholds
+    let progressBarColor = '#4CAF50'; // Green (default / high)
+    
+    if (progressRatio < 0.3) {
+      progressBarColor = '#F44336'; // Red (low)
+    } else if (progressRatio < 0.8) {
+      progressBarColor = '#FFC107'; // Amber/Yellow (medium)
+    }
+
+    return (
+      <View style={[styles.taskCard, task.isCompleted && styles.completedCard]}>
+        <View style={styles.cardRow}>
+          
+          {/* Left Column: Task Main Content */}
+          <View style={styles.cardContent}>
+            <Text style={[styles.taskTitle, task.isCompleted && styles.completedText]}>
+              {task.title}
+            </Text>
             
             <Text style={styles.taskMeta}>
-                {task.isCompleted ? "✅ DONE • " : ""}
-                {task.type.toUpperCase()} • <Text style={(!task.isCompleted && task.priority === 'high') && styles.highPriorityIncomplete}>{task.priority.toUpperCase()}</Text> {task.procrastination_count && task.procrastination_count > 0 ? (
-                ` • Procrastinating for ${task.procrastination_count} day(s)`
-                ) : null}
+              {task.isCompleted ? "✅ DONE • " : ""}
+              {task.type.toUpperCase()} • <Text style={(!task.isCompleted && task.priority === 'high') && styles.highPriorityIncomplete}>{task.priority.toUpperCase()}</Text> {task.procrastination_count && task.procrastination_count > 0 ? (
+              ` • Procrastinating for ${task.procrastination_count} day(s)`
+              ) : null}
             </Text>
 
-            {/* [1.3.4] Hybrid task target indicator label */}
+            {/* Hybrid task target indicator label */}
             {task.type === 'hybrid' && task.subtasks_total !== undefined && (
               <View style={styles.hybridBadge}>
                 <Text style={styles.hybridBadgeText}>
@@ -45,24 +61,45 @@ return (
               </View>
             )}
 
-            {/* [1.3.3] Progression task label & thin progress bar container */}
+            {/* Progression task label & thin progress bar container */}
             {task.type === 'progression' && task.total_progress !== undefined && (
               <View style={styles.progressionContainer}>
                 <Text style={styles.progressionLabel}>
                   Progress: {task.current_progress || 0} / {task.total_progress} {task.progress_unit || ''}
                 </Text>
                 <View style={styles.progressBarBackground}>
-                  <View style={[styles.progressBarFill, { width: `${Math.min(progressRatio * 100, 100)}%` }]} />
+                  {/* 2. Apply the dynamic color in style array */}
+                  <View 
+                    style={[
+                      styles.progressBarFill, 
+                      { 
+                        width: `${Math.min(progressRatio * 100, 100)}%`,
+                        backgroundColor: progressBarColor 
+                      }
+                    ]} 
+                  />
                 </View>
               </View>
             )}
-         </View>
-    )
+          </View>
+
+          {/* Right Column: Expand Arrow Button (Only for Hybrid tasks) */}
+          {task.type === 'hybrid' && (
+            <TouchableOpacity 
+              style={styles.expandButton} 
+              onPress={() => { /* Expand action will go here */ }}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.arrowIcon}>▼</Text>
+            </TouchableOpacity>
+          )}
+
+        </View>
+      </View>
+    );
 }
 
-
 export const styles = StyleSheet.create({
-
   taskCard: {
     backgroundColor: '#ffffff',
     padding: 16,
@@ -75,7 +112,24 @@ export const styles = StyleSheet.create({
     shadowRadius: 1.41,
     elevation: 2,
   },
-
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardContent: {
+    flex: 1,
+  },
+  expandButton: {
+    paddingLeft: 12,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arrowIcon: {
+    fontSize: 14,
+    color: '#888888',
+  },
   completedCard: {
     backgroundColor: '#d6d6d6',
     shadowOpacity: 0.05,
@@ -113,7 +167,6 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0288D1',
   },
-  // New styles for Progression indicators layout
   progressionContainer: {
     marginTop: 8,
   },
@@ -131,7 +184,7 @@ export const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#4CAF50',
+    // Removed static backgroundColor here so inline styles can override it seamlessly
     borderRadius: 2,
   },
-})
+});
