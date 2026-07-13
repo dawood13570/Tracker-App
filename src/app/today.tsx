@@ -186,7 +186,7 @@ export default function AppDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#fafafa',
   },
   dateHeaderText: {
   fontSize: 22,
@@ -212,7 +212,6 @@ const styles = StyleSheet.create({
     position:"absolute",
     bottom:65,
     right:15,
-    backgroundColor: "#1c8db9",
     justifyContent: "center",
     alignItems: "center", 
     borderRadius: 37.5
@@ -220,5 +219,6 @@ const styles = StyleSheet.create({
   },
   buttonText:{
     color: "#ffffff",
+    fontSize: 25,
   }
 });
