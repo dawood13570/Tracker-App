@@ -1,6 +1,6 @@
 # Development Roadmap
 > Format: Milestone → Goal → Task (1 → 1.1 → 1.1.1)
-> Update status as you go: [ ] todo · [x] done · [~] in progress · [!] blocked
+> Update status as you go: [ ] todo · [x] done · [~] in progress · [!] blocked/skipped
 
 ---
 
@@ -58,7 +58,7 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 - [x] 1.4.4 — Show/hide progression fields (target value, unit, deadline) based on selected type
 - [x] 1.4.5 — Add priority selector: Low / Normal / High
 - [x] 1.4.6 — Add a toggle for "Move to next day if not completed" (rollover)
-- [x] 1.4.7 — Add a recurrence selector: None / Daily / Every N days / Weekly
+- [!] 1.4.7 — Add a recurrence selector: None / Daily / Every N days / Weekly
 - [x] 1.4.8 — Add a Submit button that `console.log`s the full form state
 - [x] 1.4.9 — Add a button on the Today screen that navigates to this form
 
@@ -67,11 +67,11 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 1.5 — Local Visual Interaction
 **Done when:** Tapping a task visually marks it done/undone. No DB involved.
 
-- [ ] 1.5.1 — Add `useState` to track which task IDs are "done" in the Today screen
-- [ ] 1.5.2 — Pass an `onToggle` callback from Today into TaskCard
-- [ ] 1.5.3 — When toggled, apply a visual done state: strikethrough title, reduced opacity, checkbox filled
-- [ ] 1.5.4 — Tapping again undoes it
-- [ ] 1.5.5 — Done tasks sink to the bottom of the list automatically (sort by status)
+- [x] 1.5.1 — Add `useState` to track which task IDs are "done" in the Today screen
+- [x] 1.5.2 — Pass an `onToggle` callback from Today into TaskCard
+- [x] 1.5.3 — When toggled, apply a visual done state: strikethrough title, reduced opacity, checkbox filled
+- [x] 1.5.4 — Tapping again undoes it
+- [!] 1.5.5 — Done tasks sink to the bottom of the list automatically (sort by status)
 
 ---
 
