@@ -1,4 +1,4 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export interface Task {
   id: string;
@@ -19,27 +19,26 @@ export interface Task {
 
 interface TaskCardProps {
     task: Task;
+    onToggle: (id: string) => void;
 }
 
-export function TaskCard({ task }: TaskCardProps) {
+export function TaskCard({ task, onToggle }: TaskCardProps) {
     const progressRatio = task.total_progress && task.total_progress > 0 
       ? (task.current_progress || 0) / task.total_progress 
       : 0;
 
-    // 1. Calculate dynamic progress color based on ratio thresholds
-    let progressBarColor = '#4CAF50'; // Green (default / high)
+    let progressBarColor = '#4CAF50';
     
     if (progressRatio < 0.3) {
-      progressBarColor = '#F44336'; // Red (low)
+      progressBarColor = '#F44336';
     } else if (progressRatio < 0.8) {
-      progressBarColor = '#FFC107'; // Amber/Yellow (medium)
+      progressBarColor = '#FFC107';
     }
 
     return (
-      <View style={[styles.taskCard, task.isCompleted && styles.completedCard]}>
+      <Pressable style={[styles.taskCard, task.isCompleted && styles.completedCard]} onPress={() => onToggle(task.id)}>
         <View style={styles.cardRow}>
           
-          {/* Left Column: Task Main Content */}
           <View style={styles.cardContent}>
             <Text style={[styles.taskTitle, task.isCompleted && styles.completedText]}>
               {task.title}
@@ -52,7 +51,6 @@ export function TaskCard({ task }: TaskCardProps) {
               ) : null}
             </Text>
 
-            {/* Hybrid task target indicator label */}
             {task.type === 'hybrid' && task.subtasks_total !== undefined && (
               <View style={styles.hybridBadge}>
                 <Text style={styles.hybridBadgeText}>
@@ -61,14 +59,12 @@ export function TaskCard({ task }: TaskCardProps) {
               </View>
             )}
 
-            {/* Progression task label & thin progress bar container */}
             {task.type === 'progression' && task.total_progress !== undefined && (
               <View style={styles.progressionContainer}>
                 <Text style={styles.progressionLabel}>
                   Progress: {task.current_progress || 0} / {task.total_progress} {task.progress_unit || ''}
                 </Text>
                 <View style={styles.progressBarBackground}>
-                  {/* 2. Apply the dynamic color in style array */}
                   <View 
                     style={[
                       styles.progressBarFill, 
@@ -83,7 +79,7 @@ export function TaskCard({ task }: TaskCardProps) {
             )}
           </View>
 
-          {/* Right Column: Expand Arrow Button (Only for Hybrid tasks) */}
+          
           {task.type === 'hybrid' && (
             <TouchableOpacity 
               style={styles.expandButton} 
@@ -95,7 +91,7 @@ export function TaskCard({ task }: TaskCardProps) {
           )}
 
         </View>
-      </View>
+      </Pressable>
     );
 }
 
@@ -184,7 +180,5 @@ export const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    // Removed static backgroundColor here so inline styles can override it seamlessly
-    borderRadius: 2,
   },
 });

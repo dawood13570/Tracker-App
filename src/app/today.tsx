@@ -1,7 +1,7 @@
 // app/today.tsx
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList } from "@shopify/flash-list";
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -129,8 +129,26 @@ export function DateHeader() {
 
 export default function AppDashboard() {
   const taskSheetRef = useRef<BottomSheet>(null);
+
+  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
+
+const handleToggleTask = (id: string) => {
+  setTasks((prevTasks) => {
+    return prevTasks.map((task) => {
+      if (task.id === id) {
+        return { ...task, isCompleted: !task.isCompleted };
+      } else {
+        return task;
+      }
+    });
+  });
+};
+  // const sortedTasks = [...tasks].sort((a, b) => Number(a.isCompleted) - Number(b.isCompleted));
+
+
+
   {/*This is the calculation for metric */}
-  const summary = MOCK_TASKS.reduce((acc, task) => {
+  const summary = tasks.reduce((acc, task) => {
   acc.total++;
   acc.types[task.type] = (acc.types[task.type] || 0) +1;
   acc.priorities[task.priority] = (acc.priorities[task.priority] || 0) + 1;
@@ -164,10 +182,10 @@ export default function AppDashboard() {
       {/*This is the list */}
       <View style={{flex: 1}}>
       <FlashList
-        data={MOCK_TASKS}
+        data={tasks} // to make it sorted, do data={sortedTasks}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => <TaskCard task={item} />}
+        renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} />}
       />
       </View>
 
