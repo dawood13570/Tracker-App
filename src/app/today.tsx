@@ -241,7 +241,7 @@
 
 import { useEffect } from 'react';
 import { db } from '../db/client'; // Your path to client
-import { goals, progressLogs, tasks } from '../db/schema'; // Your path to schema
+import { events, goals, habitLogs, habits, notes, progressLogs, tags, tasks, taskTags } from '../db/schema'; // Your path to schema
 
 export default function HomeScreen() {
   useEffect(() => {
@@ -252,6 +252,12 @@ export default function HomeScreen() {
         await db.select().from(tasks).limit(1);
         await db.select().from(progressLogs).limit(1);
         await db.select().from(goals).limit(1);
+        await db.select().from(habits).limit(1);
+        await db.select().from(habitLogs).limit(1);
+        await db.select().from(events).limit(1);
+        await db.select().from(notes).limit(1);
+        await db.select().from(tags).limit(1);
+        await db.select().from(taskTags).limit(1);
         
         console.log("=========================================");
         console.log("SUCCESS! All tables exist and verified on device!");

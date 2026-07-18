@@ -65,6 +65,53 @@ export default function RootLayout() {
           \`title\` text NOT NULL,
           \`target_date\` text
         );
+
+        CREATE TABLE IF NOT EXISTS \`habits\` (
+          \`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+          \`title\` text NOT NULL,
+          \`cadence_type\` text NOT NULL,
+          \`cadence_target\` integer,
+          \`created_at\` text DEFAULT (CURRENT_TIMESTAMP) NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS \`habit_logs\` (
+          \`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+          \`habit_id\` integer NOT NULL,
+          \`date\` text NOT NULL,
+          \`created_at\` text DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
+          FOREIGN KEY (\`habit_id\`) REFERENCES \`habits\`(\`id\`) ON UPDATE no action ON DELETE cascade
+        );
+
+        CREATE TABLE IF NOT EXISTS \`events\` (
+          \`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+          \`title\` text NOT NULL,
+          \`start_time\` text NOT NULL,
+          \`end_time\` text,
+          \`location\` text,
+          \`created_at\` text DEFAULT (CURRENT_TIMESTAMP) NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS \`notes\` (
+          \`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+          \`scope\` text NOT NULL,
+          \`date_key\` text NOT NULL,
+          \`content\` text,
+          \`created_at\` text DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
+          \`updated_at\` text DEFAULT (CURRENT_TIMESTAMP) NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS \`tags\` (
+          \`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+          \`name\` text NOT NULL,
+          \`color\` text
+        );
+
+        CREATE TABLE IF NOT EXISTS \`task_tags\` (
+          \`task_id\` integer NOT NULL,
+          \`tag_id\` integer NOT NULL,
+          FOREIGN KEY (\`task_id\`) REFERENCES \`tasks\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+          FOREIGN KEY (\`tag_id\`) REFERENCES \`tags\`(\`id\`) ON UPDATE no action ON DELETE cascade
+        );
       `);
 
       setIsDbReady(true);
