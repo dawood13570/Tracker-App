@@ -45,6 +45,57 @@ Eventually: public, cross-platform (iOS, desktop), multi-user with accounts.
 
 ---
 
+## Other Entity Types
+*Added: 2026-07-18 — these are separate entities, not Task variants.*
+
+Tasks are procrastination-tracked and rollover-aware. Habits and Events don't behave
+that way, so they get their own tables instead of being forced into the Task shape.
+
+### Habit
+- Cadence-based, not deadline-based: "do X daily" or "do X N times a week."
+- Tracked by **streak**, not `procrastination_count` — habits reward consistency,
+  they don't punish delay the way tasks do.
+- Own `habit_logs` table: one row per completion (date, habit_id).
+- Missing a day breaks the streak. It doesn't roll forward like a task does.
+- Examples: "Read Quran", "Journal before bed", "No sugar"
+
+### Event
+- Point-in-time, not a to-do. Has a start time (and optional end time).
+- No completion state, no rollover, no procrastination count — it either happened
+  or it's scheduled.
+- Examples: "Meeting with Ali at 3pm", "Dentist appointment"
+
+### Note
+- One entity, multiple scopes: `daily | weekly | monthly | yearly`.
+- Replaces the old "Journal" idea in Views — same freetext + auto-seeded-summary
+  pattern, just at different cadences.
+- Daily: seeded with the day's task/habit summary. Weekly/monthly/yearly: seeded
+  with rollups (completion rate, streaks, procrastination trends).
+- This is where the muhasabah framing lives — a reflection prompt at each cadence
+  boundary, not just a log.
+
+*Status: Not yet built. Schema sketch planned in Milestone 2 (2.1.7), full
+implementation in Milestone 5.*
+
+---
+
+## Tags
+*Added: 2026-07-18*
+
+- User-defined, freeform (e.g. "Deen", "Creativity", "Study", "Career") — not a
+  fixed list. The user creates their own tags as they go.
+- Many-to-many: one Task can carry multiple tags, one tag applies to many tasks.
+- **Primary use case is Tasks.** Habits and Events could carry tags too via the
+  same join-table pattern, but that's not an MVP priority — build it for Tasks
+  first, extend later if it's actually needed.
+- Needs a `tags` table (id, name, color?) and a `task_tags` join table
+  (task_id, tag_id).
+
+*Status: Not yet built. Schema sketch planned in Milestone 2 (2.1.7), full
+implementation in Milestone 5.*
+
+---
+
 ## Core Behaviours
 
 ### Procrastination Counter
@@ -125,6 +176,31 @@ Feel: like saving up vacation days.
 
 ---
 
+### IDEA: Evolving Priority System [Milestone 3.5 candidate]
+*Added: 2026-08-07, expanded: 2026-07-18*
+
+A Low priority task that keeps getting procrastinated on should gradually raise
+its own priority — Low → Medium → High — the longer it sits undone. At the
+extreme, a low-turned-high task can push other Low priority tasks for that day
+into archive/delayed status until it's done.
+
+**Toggleable, not forced:**
+- Global setting, off or on by default (TBD).
+- Per-task override — same pattern as the surplus modes above.
+
+**Open questions to resolve before building:**
+- Threshold: how many days of `procrastination_count` before Low → Medium?
+  Medium → High?
+- Does "archive other low tasks" apply only that day, or does it keep affecting
+  future days until the evolved task is done?
+- Do archived tasks' own `procrastination_count` freeze, or keep climbing while
+  archived?
+
+*Status: Not yet built. Depends on the Priority System (3.5) and Procrastination
+Counter (3.1) both being live first.*
+
+---
+
 ## Notification Strategy
 - One morning digest, not per-task pings.
 - Morning summary: "5 tasks today, 2 carried over, 1 deadline this week."
@@ -135,11 +211,12 @@ Feel: like saving up vacation days.
 ---
 
 ## Views
-- **Today** — default home. All tasks for today. Swipe to complete.
-- **Week** — tasks grouped by day for current week.
+- **Today** — default home. All tasks, habits, and events for today. Swipe to complete.
+- **Week** — tasks (and events) grouped by day for current week.
 - **Month** — high-level summary view.
 - **Goals** — progression tasks only, with pace bars.
-- **Journal** — daily freetext note, optionally auto-seeded with the day's summary.
+- **Notes** — freetext reflection at daily/weekly/monthly/yearly scope, auto-seeded
+  with that period's summary. (Replaces "Journal" — same concept, multiple cadences.)
 - **History/Archive** — browse any past date.
 
 ---
@@ -179,6 +256,7 @@ Feel: like saving up vacation days.
 - **2026-08-07** - One to-do list is daily, and one is weekly , there could also be monthly and yearly, and there should be an option to connects these 2 or 4 tabs , so like today's to-do is connected to the week's to-do. Weekly to-do's might be progression based and have sub task which you do daily.
 
 - **2026-08-07** - Being able to set some tasks to evolve, from low to high as days pass and you don't do them, it becomes high like 'yoo you havent draw in a bazillion days even though you wanted to. so draw something today". this feature might also cause other 'high' priority tasks to be skipped for the sake of the evolved task.
+  *(Promoted to full spec — see "IDEA: Evolving Priority System" under Core Behaviours.)*
 
 ---
 
@@ -193,3 +271,6 @@ Feel: like saving up vacation days.
 | 2026-07-07 | App usage tracking deferred | Complexity too high for MVP. Personal use first. |
 | 2026-07-07 | History is never mutated by engine | Preserves honest log. Rollover creates forward, not edits. |
 | 2026-07-07 | Manual reschedule doesn't reset procrastination count | Only completion resets it. Honest accounting. |
+| 2026-07-18 | Habits and Events are separate entities, not Task variants | Procrastination/rollover logic doesn't apply to habits (streak-based) or events (point-in-time). Keeping them separate avoids polluting the Task schema and logic. |
+| 2026-07-18 | Tags are many-to-many, freeform, Task-first | Matches the real categorization need (Deen/Creativity/Study/Career). Habits/Events can extend to tags later via the same join-table pattern if needed. |
+| 2026-07-18 | Notes replace Journal, with a `scope` field instead of separate screens | Daily/weekly/monthly/yearly reflection is one entity type at different cadences, not four different features. |

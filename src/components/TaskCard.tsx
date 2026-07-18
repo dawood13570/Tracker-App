@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-nativ
 export interface Task {
   id: string;
   title: string;
-  type: 'simple' | 'progression' | 'hybrid';
+  type: 'Simple' | 'Progression' | 'Hybrid';
   priority: 'low' | 'medium' | 'high';
   isCompleted: boolean;
 
@@ -51,7 +51,7 @@ export function TaskCard({ task, onToggle }: TaskCardProps) {
               ) : null}
             </Text>
 
-            {task.type === 'hybrid' && task.subtasks_total !== undefined && (
+            {task.type === 'Hybrid' && task.subtasks_total !== undefined && (
               <View style={styles.hybridBadge}>
                 <Text style={styles.hybridBadgeText}>
                   {task.subtasks_completed || 0}/{task.subtasks_total} done
@@ -59,7 +59,7 @@ export function TaskCard({ task, onToggle }: TaskCardProps) {
               </View>
             )}
 
-            {task.type === 'progression' && task.total_progress !== undefined && (
+            {task.type === 'Progression' && task.total_progress !== undefined && (
               <View style={styles.progressionContainer}>
                 <Text style={styles.progressionLabel}>
                   Progress: {task.current_progress || 0} / {task.total_progress} {task.progress_unit || ''}
@@ -80,7 +80,7 @@ export function TaskCard({ task, onToggle }: TaskCardProps) {
           </View>
 
           
-          {task.type === 'hybrid' && (
+          {task.type === 'Hybrid' && (
             <TouchableOpacity 
               style={styles.expandButton} 
               onPress={() => { /* Expand action will go here */ }}

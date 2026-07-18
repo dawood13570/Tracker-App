@@ -90,6 +90,7 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 - [ ] 2.1.4 — Write the `goals` table schema (even if empty — defines the shape now)
 - [ ] 2.1.5 — Set up the DB connection and run initial migration on app start
 - [ ] 2.1.6 — Verify tables exist using a DB browser (install `DB Browser for SQLite` on PC)
+- [ ] 2.1.7 — Sketch (schema only, no UI/logic yet) `habits`, `habit_logs`, `events`, `notes`, `tags`, and `task_tags` table shapes in `/db/schema.ts` — cheap to define now, expensive to retrofit later
 
 ---
 
@@ -208,6 +209,7 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 - [ ] 3.5.2 — High priority tasks: stronger visual treatment on TaskCard (confirm it's clearly distinct)
 - [ ] 3.5.3 — Today screen sorts: High priority first, then Normal, then Low, then Done at bottom
 - [ ] 3.5.4 — Confirm rollover logic correctly handles low priority differently (3.2.4)
+- [ ] 3.5.5 — *(Not started — open questions in VISION.md)* Evolving Priority System: Low → Medium → High as procrastination_count climbs, toggleable, with the archive-other-low-tasks behaviour
 
 ---
 
@@ -284,54 +286,83 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 
 ---
 
-## Milestone 5 — Views and History
+## Milestone 5 — Habits, Events, Tags
+*Added: 2026-07-18*
+**Target: ~1-2 weeks**
+**Done when:** Habits track streaks, Events show on relevant views, Tags can be
+created and applied to tasks.
+
+### 5.1 — Habits
+- [ ] 5.1.1 — Write `habits` and `habit_logs` schema in `/db/schema.ts` (if not already sketched in 2.1.7)
+- [ ] 5.1.2 — `insertHabit`, `logHabitCompletion`, `getHabitsByDate` in `/db/queries.ts`
+- [ ] 5.1.3 — Habit card UI: distinct from TaskCard, shows current streak
+- [ ] 5.1.4 — Streak calculation: consecutive days/weeks logged, resets on a missed one
+- [ ] 5.1.5 — Habits appear on Today screen alongside tasks, visually distinct
+
+### 5.2 — Events
+- [ ] 5.2.1 — Write `events` schema (title, start_time, end_time, location?)
+- [ ] 5.2.2 — `insertEvent`, `getEventsByDate` in `/db/queries.ts`
+- [ ] 5.2.3 — Event card UI: time-based, no checkbox/completion state
+- [ ] 5.2.4 — Events appear on Today, Week, and Month views
+
+### 5.3 — Tags
+- [ ] 5.3.1 — Write `tags` and `task_tags` schema (many-to-many)
+- [ ] 5.3.2 — `createTag`, `assignTag`, `removeTag`, `getTasksByTag` in `/db/queries.ts`
+- [ ] 5.3.3 — Tag picker/creator in New Task form — multi-select, create-new-on-the-fly
+- [ ] 5.3.4 — Small tag chips rendered on TaskCard
+- [ ] 5.3.5 — Filter Today/Week/Month views by tag
+
+---
+
+## Milestone 6 — Views and History
 **Target: ~1-2 weeks**
 
-### 5.1 — Weekly View
-- [ ] 5.1.1 — Week screen shows 7 columns or 7 grouped sections for current week
-- [ ] 5.1.2 — Each day shows tasks with status (done/todo/skipped/moved)
-- [ ] 5.1.3 — Navigate to previous/next weeks
-- [ ] 5.1.4 — Tapping a task opens its detail
+### 6.1 — Weekly View
+- [ ] 6.1.1 — Week screen shows 7 columns or 7 grouped sections for current week
+- [ ] 6.1.2 — Each day shows tasks (and events) with status (done/todo/skipped/moved)
+- [ ] 6.1.3 — Navigate to previous/next weeks
+- [ ] 6.1.4 — Tapping a task opens its detail
 
-### 5.2 — Monthly View
-- [ ] 5.2.1 — Calendar grid showing each day of month
-- [ ] 5.2.2 — Each day has a dot or count indicator (e.g. green = all done, red = incomplete)
-- [ ] 5.2.3 — Tapping a day shows that day's task summary
+### 6.2 — Monthly View
+- [ ] 6.2.1 — Calendar grid showing each day of month
+- [ ] 6.2.2 — Each day has a dot or count indicator (e.g. green = all done, red = incomplete)
+- [ ] 6.2.3 — Tapping a day shows that day's task summary
 
-### 5.3 — Journal Screen
-- [ ] 5.3.1 — One freetext entry per day
-- [ ] 5.3.2 — Auto-seed with summary: "Completed 4 tasks · Logged 22 pages · 1 task moved"
-- [ ] 5.3.3 — User can add their own text below the summary
-- [ ] 5.3.4 — Browse past journal entries
+### 6.3 — Notes (multi-cadence)
+- [ ] 6.3.1 — Write `notes` schema with a `scope` field: daily | weekly | monthly | yearly (if not already sketched in 2.1.7)
+- [ ] 6.3.2 — Daily note: auto-seed with day's summary ("Completed 4 tasks · Logged 22 pages · 1 task moved")
+- [ ] 6.3.3 — Weekly/monthly/yearly notes: auto-seed with period rollups (completion rate, streaks, procrastination trends)
+- [ ] 6.3.4 — User can add their own reflection text below the auto-seeded summary
+- [ ] 6.3.5 — Browse past notes, filterable by scope
 
-### 5.4 — History / Archive
-- [ ] 5.4.1 — Browse any past date's tasks
-- [ ] 5.4.2 — Filter by: completed / skipped / moved
-- [ ] 5.4.3 — See procrastination history for a specific task (how many times it moved, when it was done)
+### 6.4 — History / Archive
+- [ ] 6.4.1 — Browse any past date's tasks
+- [ ] 6.4.2 — Filter by: completed / skipped / moved
+- [ ] 6.4.3 — See procrastination history for a specific task (how many times it moved, when it was done)
 
 ---
 
-## Milestone 6 — Polish
+## Milestone 7 — Polish
 **Target: ~1 week**
 
-- [ ] 6.1 — Morning digest notification
-- [ ] 6.2 — Swipe right to complete, swipe left to skip/postpone on TaskCard
-- [ ] 6.3 — Dark / light mode toggle
-- [ ] 6.4 — Global settings screen (default surplus mode, notification times, etc.)
-- [ ] 6.5 — JSON export of all data
-- [ ] 6.6 — Onboarding flow for first-time launch
+- [ ] 7.1 — Morning digest notification
+- [ ] 7.2 — Swipe right to complete, swipe left to skip/postpone on TaskCard
+- [ ] 7.3 — Dark / light mode toggle
+- [ ] 7.4 — Global settings screen (default surplus mode, evolving priority toggle, notification times, etc.)
+- [ ] 7.5 — JSON export of all data
+- [ ] 7.6 — Onboarding flow for first-time launch
 
 ---
 
-## Milestone 7 — Cloud Sync
+## Milestone 8 — Cloud Sync
 **Target: ~2 weeks**
 
-- [ ] 7.1 — Set up Supabase project and mirror schema in Postgres
-- [ ] 7.2 — Email / Google auth
-- [ ] 7.3 — Upload local data to Supabase on first login
-- [ ] 7.4 — Bidirectional sync: push local changes, pull remote changes
-- [ ] 7.5 — Conflict resolution strategy: last-write-wins with timestamp comparison
-- [ ] 7.6 — Test: uninstall app, reinstall, log in, confirm all data restored
+- [ ] 8.1 — Set up Supabase project and mirror schema in Postgres
+- [ ] 8.2 — Email / Google auth
+- [ ] 8.3 — Upload local data to Supabase on first login
+- [ ] 8.4 — Bidirectional sync: push local changes, pull remote changes
+- [ ] 8.5 — Conflict resolution strategy: last-write-wins with timestamp comparison
+- [ ] 8.6 — Test: uninstall app, reinstall, log in, confirm all data restored
 
 ---
 
@@ -345,6 +376,4 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 
 ---
 
-- [x] 1.1 — Set Up Project Structure
-- [x] 1.2 — Build a Static Today Screen
-- [x] 1.3 — Build the TaskCard Component
+- [x] Milestone 1 — Learn the Tools While Building Real UI
