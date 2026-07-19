@@ -78,19 +78,19 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ## Milestone 2 — Real Data with SQLite
 **Target: ~1-2 weeks**
 **Done when:** Full CRUD works, data survives app restarts, Zustand manages shared state.
-
+**manual SQL over useMigrations was used because useMigration has been causing some issues, and don't even think about babel**
 ---
 
 ### 2.1 — Database Setup
-**Done when:** DB initialises on app launch, table exists, no errors.
+**Done when:** DB initialises on app launch, table exists, no errors. 
 
-- [ ] 2.1.1 — Install `expo-sqlite` and `drizzle-orm`
-- [ ] 2.1.2 — Write the `tasks` table schema in `/db/schema.ts` using all fields from the spec
-- [ ] 2.1.3 — Write the `progress_logs` table schema
-- [ ] 2.1.4 — Write the `goals` table schema (even if empty — defines the shape now)
-- [ ] 2.1.5 — Set up the DB connection and run initial migration on app start
-- [ ] 2.1.6 — Verify tables exist using a DB browser (install `DB Browser for SQLite` on PC)
-- [ ] 2.1.7 — Sketch (schema only, no UI/logic yet) `habits`, `habit_logs`, `events`, `notes`, `tags`, and `task_tags` table shapes in `/db/schema.ts` — cheap to define now, expensive to retrofit later
+- [x] 2.1.1 — Install `expo-sqlite` and `drizzle-orm`
+- [x] 2.1.2 — Write the `tasks` table schema in `/db/schema.ts` using all fields from the spec
+- [x] 2.1.3 — Write the `progress_logs` table schema
+- [x] 2.1.4 — Write the `goals` table schema (even if empty — defines the shape now)
+- [x] 2.1.5 — Set up the DB connection and run initial migration on app start
+- [x] 2.1.6 — Verify tables exist
+- [x] 2.1.7 — Sketch (schema only, no UI/logic yet) `habits`, `habit_logs`, `events`, `notes`, `tags`, and `task_tags` table shapes in `/db/schema.ts` — cheap to define now, expensive to retrofit later
 
 ---
 
@@ -377,3 +377,4 @@ created and applied to tasks.
 ---
 
 - [x] Milestone 1 — Learn the Tools While Building Real UI
+- [x] 2.1 - Database Setup

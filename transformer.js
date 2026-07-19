@@ -1,0 +1,13 @@
+const upstreamTransformer = require('@expo/metro-config/babel-transformer');
+
+module.exports.transform = function ({ src, filename, options }) {
+  if (filename.endsWith('.sql')) {
+    // Turn the raw SQL file contents directly into a string export
+    return upstreamTransformer.transform({
+      src: `module.exports = ${JSON.stringify(src)};`,
+      filename,
+      options,
+    });
+  }
+  return upstreamTransformer.transform({ src, filename, options });
+};

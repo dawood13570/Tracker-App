@@ -1,4 +1,4 @@
-// // app/today.tsx
+// app/today.tsx
 // import BottomSheet from '@gorhom/bottom-sheet';
 // import { FlashList } from "@shopify/flash-list";
 // import { useMemo, useRef, useState } from 'react';
@@ -127,7 +127,7 @@
 //   );
 // }
 
-// export default function AppDashboard() {
+// export function AppDashboard() {
 //   const taskSheetRef = useRef<BottomSheet>(null);
 
 //   const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);

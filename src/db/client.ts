@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/expo-sqlite';
 import * as SQLite from 'expo-sqlite';
 
 // Open a physical connection to your device's storage file
-export const expoDb = SQLite.openDatabaseSync('my_app_db.db');
+export const expoDb = SQLite.openDatabaseSync('my_app_db_v3.db');
 
 // Creates a single, shared Drizzle instance for your whole application
 export const db = drizzle(expoDb);
