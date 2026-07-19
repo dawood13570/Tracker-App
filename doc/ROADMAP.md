@@ -78,7 +78,7 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ## Milestone 2 — Real Data with SQLite
 **Target: ~1-2 weeks**
 **Done when:** Full CRUD works, data survives app restarts, Zustand manages shared state.
-**manual SQL over useMigrations was used because useMigration has been causing some issues, and don't even think about babel**
+
 ---
 
 ### 2.1 — Database Setup
@@ -97,12 +97,10 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 2.2 — Create Tasks
 **Done when:** Submitting the New Task form saves a real row to SQLite.
 
-- [ ] 2.2.1 — Write an `insertTask` function in `/db/queries.ts`
-- [ ] 2.2.2 — Wire the form's Submit button to call `insertTask` instead of `console.log`
-- [ ] 2.2.3 — Generate a UUID for each new task (`crypto.randomUUID()` or `uuid` package)
-- [ ] 2.2.4 — Set `scheduled_date` to today, `status` to 'todo', `procrastination_count` to 0 on creation
-- [ ] 2.2.5 — After save, navigate back to Today screen
-- [ ] 2.2.6 — Confirm row appears in DB Browser
+- [x] 2.2.1 — Write an `insertTask` function in `/db/queries.ts`
+- [x] 2.2.2 — Wire the form's Submit button to call `insertTask` instead of `console.log`
+- [x] 2.2.3 — After save, navigate back to Today screen
+- [x] 2.2.4 — Confirm row appears
 
 ---
 

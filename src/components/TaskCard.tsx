@@ -1,34 +1,33 @@
+// src/components/TaskCard.tsx
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export interface Task {
-  id: string;
+  id: number; // Changed from string to number to match SQLite autoincrement ID keys
   title: string;
   type: 'Simple' | 'Progression' | 'Hybrid';
   priority: 'low' | 'medium' | 'high';
   isCompleted: boolean;
 
-  current_progress?: number;
-  total_progress?: number;
-  progress_unit?: string;
+  currentProgress?: number | null;
+  totalProgress?: number | null;
+  progressUnit?: string | null;
 
-  subtasks_completed?: number;
-  subtasks_total?: number;
-  
-  procrastination_count?: number;
+  subtasksCompleted?: number | null;
+  subtasksTotal?: number | null;
+  procrastinationCount?: number | null;
 }
 
 interface TaskCardProps {
     task: Task;
-    onToggle: (id: string) => void;
+    onToggle: (id: number, currentStatus: boolean) => void; // Updated parameter contract
 }
 
 export function TaskCard({ task, onToggle }: TaskCardProps) {
-    const progressRatio = task.total_progress && task.total_progress > 0 
-      ? (task.current_progress || 0) / task.total_progress 
+    const progressRatio = task.totalProgress && task.totalProgress > 0 
+      ? (task.currentProgress || 0) / task.totalProgress 
       : 0;
 
     let progressBarColor = '#4CAF50';
-    
     if (progressRatio < 0.3) {
       progressBarColor = '#F44336';
     } else if (progressRatio < 0.8) {
@@ -36,9 +35,8 @@ export function TaskCard({ task, onToggle }: TaskCardProps) {
     }
 
     return (
-      <Pressable style={[styles.taskCard, task.isCompleted && styles.completedCard]} onPress={() => onToggle(task.id)}>
+      <Pressable style={[styles.taskCard, task.isCompleted && styles.completedCard]} onPress={() => onToggle(task.id, task.isCompleted)}>
         <View style={styles.cardRow}>
-          
           <View style={styles.cardContent}>
             <Text style={[styles.taskTitle, task.isCompleted && styles.completedText]}>
               {task.title}
@@ -46,23 +44,23 @@ export function TaskCard({ task, onToggle }: TaskCardProps) {
             
             <Text style={styles.taskMeta}>
               {task.isCompleted ? "✅ DONE • " : ""}
-              {task.type.toUpperCase()} • <Text style={(!task.isCompleted && task.priority === 'high') && styles.highPriorityIncomplete}>{task.priority.toUpperCase()}</Text> {task.procrastination_count && task.procrastination_count > 0 ? (
-              ` • Procrastinating for ${task.procrastination_count} day(s)`
+              {task.type.toUpperCase()} • <Text style={(!task.isCompleted && task.priority === 'high') && styles.highPriorityIncomplete}>{task.priority.toUpperCase()}</Text> {task.procrastinationCount && task.procrastinationCount > 0 ? (
+              ` • Procrastinating for ${task.procrastinationCount} day(s)`
               ) : null}
             </Text>
 
-            {task.type === 'Hybrid' && task.subtasks_total !== undefined && (
+            {task.type === 'Hybrid' && task.subtasksTotal !== null && task.subtasksTotal !== undefined && (
               <View style={styles.hybridBadge}>
                 <Text style={styles.hybridBadgeText}>
-                  {task.subtasks_completed || 0}/{task.subtasks_total} done
+                  {task.subtasksCompleted || 0}/{task.subtasksTotal} done
                 </Text>
               </View>
             )}
 
-            {task.type === 'Progression' && task.total_progress !== undefined && (
+            {task.type === 'Progression' && task.totalProgress !== null && task.totalProgress !== undefined && (
               <View style={styles.progressionContainer}>
                 <Text style={styles.progressionLabel}>
-                  Progress: {task.current_progress || 0} / {task.total_progress} {task.progress_unit || ''}
+                  Progress: {task.currentProgress || 0} / {task.totalProgress} {task.progressUnit || ''}
                 </Text>
                 <View style={styles.progressBarBackground}>
                   <View 
@@ -79,21 +77,16 @@ export function TaskCard({ task, onToggle }: TaskCardProps) {
             )}
           </View>
 
-          
           {task.type === 'Hybrid' && (
-            <TouchableOpacity 
-              style={styles.expandButton} 
-              onPress={() => { /* Expand action will go here */ }}
-              activeOpacity={0.6}
-            >
+            <TouchableOpacity style={styles.expandButton} onPress={() => {}}>
               <Text style={styles.arrowIcon}>▼</Text>
             </TouchableOpacity>
           )}
-
         </View>
       </Pressable>
     );
 }
+
 
 export const styles = StyleSheet.create({
   taskCard: {

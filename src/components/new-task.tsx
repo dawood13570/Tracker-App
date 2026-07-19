@@ -1,6 +1,7 @@
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import React, { useMemo, useState } from 'react';
 import { Button, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { insertTask } from '../db/queries';
 
 interface SubTaskDraft {
   id: string;
@@ -10,9 +11,11 @@ interface SubTaskDraft {
 
 interface NewTaskModalProps {
   sheetRef: React.RefObject<BottomSheet | null>;
+  onTaskCreated: () => void;
 }
 
-export default function NewTaskModal({ sheetRef }: NewTaskModalProps) {
+
+export default function NewTaskModal({ sheetRef, onTaskCreated }: NewTaskModalProps) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState('');
   const [priority, setPriority] = useState('');
@@ -129,7 +132,7 @@ export default function NewTaskModal({ sheetRef }: NewTaskModalProps) {
           <Switch value={allowRollover} onValueChange={setallowRollover} />
         </View>
 
-        {/* 1. PROGRESSION TASK INPUTS */}
+        {/* PROGRESSION TASK INPUTS */}
         {type === 'Progression' && (
           <View style={styles.dynamicContainer}>
             <View style={styles.row}>
@@ -157,7 +160,7 @@ export default function NewTaskModal({ sheetRef }: NewTaskModalProps) {
           </View>
         )}
 
-        {/* 2. HYBRID TASK INPUTS (SUBTASKS DRAWER) */}
+        {/* HYBRID TASK INPUTS (SUBTASKS DRAWER) */}
         {type === 'Hybrid' && (
           <View style={styles.dynamicContainer}>
             <Text style={styles.subSectionTitle}>Add Subtasks</Text>
@@ -193,25 +196,35 @@ export default function NewTaskModal({ sheetRef }: NewTaskModalProps) {
           </View>
         )}
 
+        {/* Submit Button */}
         <View style={{ marginTop: 24, width: '100%', paddingBottom: 40 }}>
           <Button
             title="Submit Task"
-            onPress={() => {
-              console.log('Task Submitted:', {
+            onPress={async () => {
+              try{
+                await insertTask({
                 title,
-                type,
-                priority,
-                allowRollover,
-                ...(type === 'Progression' && { targetValue, unit }),
+                type: type as "Simple" | "Hybrid" | "Progression" ,
+                priority: priority.toLowerCase() as "low" | "medium" | "high",
+                rolloverEnabled: allowRollover,
+                scheduledDate: new Date().toISOString().split('T')[0],
+                ...(type === 'Progression' && {
+                   totalProgress: Number(targetValue),
+                  progressUnit: unit 
+                }),
                 ...(type === 'Hybrid' && { 
-                  subtasks, 
-                  subtasks_completed: 0, 
-                  subtasks_total: subtasks.length 
-                })
+                  subtasksTotal: subtasks.length,
+                  subtasksCompleted: 0, 
+                }),
               });
               resetForm();
+              onTaskCreated();
               sheetRef.current?.close();
-            }}
+            } catch (err) {
+              console.error("Failed to save task:", err);
+            }
+          }
+        }
           />
         </View>
       </BottomSheetScrollView>
