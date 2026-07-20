@@ -107,19 +107,19 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 2.3 — Read Tasks
 **Done when:** Today screen loads real tasks from DB on mount.
 
-- [ ] 2.3.1 — Write a `getTasksByDate(date)` function in `/db/queries.ts`
-- [ ] 2.3.2 — Replace hardcoded task array in `today.tsx` with a `useEffect` that calls `getTasksByDate`
-- [ ] 2.3.3 — Handle loading state: show a spinner while tasks load
-- [ ] 2.3.4 — Handle empty state: show a friendly message if no tasks today
+- [x] 2.3.1 — Replace hardcoded task array in today.tsx with a call to the DB on mount
+- [x] 2.3.2 — Filter by scheduled_date. Current query (db.select().from(tasksTable)) has no WHERE clause — it pulls every task ever created, not just today's. Invisible now with a handful of test tasks; will misbehave once tasks accumulate across days. Priority item.
+- [x] 2.3.3 — Handle loading state: show a spinner while tasks load
+- [x] 2.3.4 — Handle empty state: show a friendly message if no tasks today
 
 ---
 
 ### 2.4 — Update Task Status
 **Done when:** Marking done/undone writes to DB and persists after app restart.
 
-- [ ] 2.4.1 — Write an `updateTaskStatus(id, status)` function in `/db/queries.ts`
-- [ ] 2.4.2 — Replace the local `useState` toggle with a call to `updateTaskStatus`
-- [ ] 2.4.3 — Re-fetch tasks after update so UI reflects DB truth
+- [x] 2.4.1 — Write a `toggleTaskStatus(id, currentStatus)` function in `/db/queries.ts` (schema uses boolean isCompleted, not a status string — function name/shape matches that)
+- [x] 2.4.2 — Replace the local `useState` toggle with a call to `toggleTaskStatus`
+- [x] 2.4.3 — Reflect the change in UI immediately (optimistic local update rather than a full re-fetch — fine, since the DB write already succeeded first)
 - [ ] 2.4.4 — Confirm status persists after closing and reopening app
 
 ---

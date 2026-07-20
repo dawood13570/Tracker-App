@@ -1,18 +1,21 @@
 // app/today.tsx
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList } from "@shopify/flash-list";
+import { eq } from 'drizzle-orm';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import NewTaskModal from '../components/new-task';
+import NewTaskModal, { getLocalDateString } from '../components/new-task';
 import { Task, TaskCard } from '../components/TaskCard';
 import { db } from '../db/client';
 import { toggleTaskStatus } from '../db/queries';
 import { tasks as tasksTable } from '../db/schema';
 
+
+
 export function DateHeader() {
-  const currentDate = new Date().toLocaleDateString('en-US', {
+  const currentDate = new Date().toLocaleDateString('ur-US', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -31,13 +34,16 @@ export default function AppDashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Read tasks dynamically from your phone's storage file
   async function fetchActiveTasks() {
     try {
-      const result = await db.select().from(tasksTable);
+      const todayStr = getLocalDateString();
 
-      console.log("Tasks currently stored inside the SQlite file:", result);
-      // Explicitly cast to our component's interface expectations
+      const result = await db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.scheduledDate, todayStr))
+
+      // console.log("Tasks currently stored inside the SQlite file:", result);
       setTasks(result as Task[]);
     } catch (err) {
       console.error("Failed to read tasks from local store file:", err);
@@ -53,9 +59,7 @@ export default function AppDashboard() {
 
   const handleToggleTask = async (id: number, currentStatus: boolean) => {
     try {
-      // 1. Run database change query
       await toggleTaskStatus(id, currentStatus);
-      // 2. Reflect change dynamically inside your state engine
       setTasks((prev) =>
         prev.map((t) => (t.id === id ? { ...t, isCompleted: !currentStatus } : t))
       );
@@ -64,7 +68,7 @@ export default function AppDashboard() {
     }
   };
 
-  // Compile calculations safely from live dataset metrics
+
   const summary = useMemo(() => {
     return tasks.reduce((acc, task) => {
       acc.total++;
@@ -110,6 +114,12 @@ export default function AppDashboard() {
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={styles.listContent}
               renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} />}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>Nothing to do today.</Text>
+                  <Text style={styles.emptyStateSubtext}>Tap + to add task.</Text>
+                </View>
+              }
             />
           )}
         </View>
@@ -190,5 +200,21 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     textAlign: 'center',
     marginTop: -4
-  }
+  },
+  emptyState: {
+  marginTop: 60,
+  alignItems: 'center',
+  paddingHorizontal: 32,
+},
+emptyStateText: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#444',
+},
+emptyStateSubtext: {
+  fontSize: 14,
+  color: '#888',
+  marginTop: 6,
+  textAlign: 'center',
+},
 });

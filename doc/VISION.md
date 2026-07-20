@@ -74,8 +74,18 @@ that way, so they get their own tables instead of being forced into the Task sha
 - This is where the muhasabah framing lives — a reflection prompt at each cadence
   boundary, not just a log.
 
-*Status: Not yet built. Schema sketch planned in Milestone 2 (2.1.7), full
-implementation in Milestone 5.*
+### Activity
+*Added: 2026-07-18, decided: 2026-07-18 (Option A — new entity, not a Habit variant)*
+- No fixed schedule, no cadence target, no streak. Just a name and a log of
+  dates/notes each time it's touched.
+- Purpose: "when did I last do X, and what happened that time" — Python
+  practice, drawing, reading an Arabic book, expanding story lore.
+- Own `activity_logs` table: one row per touch (date, activity_id, note?).
+- Different from Habit specifically because Habit implies a target cadence
+  (3x/week) and a streak; Activity has neither — it's pure recall, no
+  pressure, no target.
+
+*Status: Not yet built. Schema sketch planned alongside Milestone 5 (Habits, Events, Tags).*
 
 ---
 
@@ -258,6 +268,76 @@ Counter (3.1) both being live first.*
 - **2026-08-07** - Being able to set some tasks to evolve, from low to high as days pass and you don't do them, it becomes high like 'yoo you havent draw in a bazillion days even though you wanted to. so draw something today". this feature might also cause other 'high' priority tasks to be skipped for the sake of the evolved task.
   *(Promoted to full spec — see "IDEA: Evolving Priority System" under Core Behaviours.)*
 
+- **2026-07-18** — "Last time I did X" / activity history, not just a future to-do list.
+  Came from describing an actual workflow: gym exercises tracked in dated notes
+  folders (Monday/Wednesday/Friday etc.), looked back on the following week to
+  adjust weights. Generalizes past gym: "when did I last work on my Python
+  project," "when did I last draw," "when did I last read that Arabic book,"
+  "when did I last expand my story's lore." None of these are on a fixed
+  schedule and none have a numeric target — they're just things the user wants
+  to log whenever touched, and recall the most recent entry (and ideally full
+  history) on demand.
+
+  This doesn't fit any current entity cleanly:
+  - **Task** — tied to one scheduled day, wrong shape for "no fixed day."
+  - **Habit** — closest fit, but implies a cadence target (3x/week). These
+    activities have no target, just irregular touch-and-log.
+  - **Progression Task** — has the right idea (logged entries over time) but
+    is tied to a deadline and a numeric goal, which doesn't apply to "drew
+    something" or "read some pages" with no target in mind.
+
+  **Decided 2026-07-18:** Option A — new "Activity" entity, not a stretched
+  Habit. See "Activity" under Other Entity Types.
+
+  *(Related to the earlier gym-exercise note under Decisions Log about
+  `progress_logs` being tied to a single dated Task — same root gap: history
+  needs to be decoupled from "today's schedule.")*
+
+---
+
+### IDEA: Goal Decomposition Engine (Week/Month/Year → Today) [big rock]
+*Added: 2026-07-18*
+
+Week/Month/Year screens aren't read-only summaries — they're where a target
+gets set, and the app auto-generates Today's task from what's left, so nothing
+has to be manually typed out day to day.
+
+Two decomposition strategies depending on task type:
+
+- **Count-based (Simple tasks):** e.g. "Draw, 8 times this month." Month view
+  shows a tally: "0/8 this month." Open question: which days get a generated
+  "Draw" task — spread evenly, adaptive to what else is scheduled that day,
+  or user-adjustable?
+- **Quantity-based (Progression tasks):** e.g. "Read 20 pages this week."
+  Each day: `(target − done so far) ÷ days remaining` = today's number.
+  Recalculates daily — overshoot today, tomorrow's number drops.
+
+Both connect to systems already speced: skipping a generated daily task
+increases `procrastination_count` like any Task, which can trigger the
+Evolving Priority System (low-priority tasks pushed aside for the neglected one).
+
+**This is the same underlying idea as Activity and Evolving Priority, from a
+different angle** — something with no fixed schedule that the app nags about
+with escalating urgency, decomposed from a higher-level target into daily
+nudges. Worth designing as one coherent system, not three overlapping ones,
+before building any of them.
+
+This also means the `goals` table (2.1.4, currently just `id, title,
+description`) is a placeholder in the truest sense — it'll need real shape:
+target amount or count, cadence, decomposition strategy, and a way to trace
+which Task rows a goal generated.
+
+**Open questions:**
+- Does a goal-generated Task need a `sourceGoalId` to trace it back, or is it
+  indistinguishable from a manually created one?
+- Editing today's auto-generated amount — does it recompute tomorrow's target
+  immediately, or only at the next daily generation run?
+- How do Activity, Evolving Priority, and this engine reconcile into one
+  system rather than three?
+
+*Status: Not yet built. Milestone 4+ concept (Progression Task Intelligence).
+Reshapes the `goals` table. Revisit before building the real Goals screen.*
+
 ---
 
 ## Decisions Log
@@ -274,3 +354,4 @@ Counter (3.1) both being live first.*
 | 2026-07-18 | Habits and Events are separate entities, not Task variants | Procrastination/rollover logic doesn't apply to habits (streak-based) or events (point-in-time). Keeping them separate avoids polluting the Task schema and logic. |
 | 2026-07-18 | Tags are many-to-many, freeform, Task-first | Matches the real categorization need (Deen/Creativity/Study/Career). Habits/Events can extend to tags later via the same join-table pattern if needed. |
 | 2026-07-18 | Notes replace Journal, with a `scope` field instead of separate screens | Daily/weekly/monthly/yearly reflection is one entity type at different cadences, not four different features. |
+| 2026-07-18 | Activity is a new entity, not a Habit variant | Habit implies a cadence target and streak; Activity has neither — keeps Habit's semantics clean instead of overloading it with an optional-everything config. |
