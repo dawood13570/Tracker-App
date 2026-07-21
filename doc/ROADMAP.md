@@ -120,18 +120,18 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 - [x] 2.4.1 — Write a `toggleTaskStatus(id, currentStatus)` function in `/db/queries.ts` (schema uses boolean isCompleted, not a status string — function name/shape matches that)
 - [x] 2.4.2 — Replace the local `useState` toggle with a call to `toggleTaskStatus`
 - [x] 2.4.3 — Reflect the change in UI immediately (optimistic local update rather than a full re-fetch — fine, since the DB write already succeeded first)
-- [ ] 2.4.4 — Confirm status persists after closing and reopening app
+- [x] 2.4.4 — Confirm status persists after closing and reopening app
 
 ---
 
 ### 2.5 — Edit and Delete Tasks
 **Done when:** Long-press opens edit options. Edit pre-fills form. Delete removes from list.
 
-- [ ] 2.5.1 — Write `updateTask(id, fields)` and `deleteTask(id)` in `/db/queries.ts`
-- [ ] 2.5.2 — Add long-press handler on TaskCard that opens an action sheet (Edit / Delete / Cancel)
-- [ ] 2.5.3 — Edit navigates to the New Task form pre-filled with existing task data
-- [ ] 2.5.4 — Delete removes the task and updates the list immediately
-- [ ] 2.5.5 — Add a confirmation dialog before delete ("Are you sure?")
+- [x] 2.5.1 — Write `updateTask(id, fields)` and `deleteTask(id)` in `/db/queries.ts`
+- [x] 2.5.2 — Add long-press handler on TaskCard that opens an action sheet (Edit / Delete / Cancel)
+- [x] 2.5.3 — Edit navigates to the New Task form pre-filled with existing task data
+- [x] 2.5.4 — Delete removes the task and updates the list immediately
+- [x] 2.5.5 — Add a confirmation dialog before delete ("Are you sure?")
 
 ---
 
@@ -310,6 +310,16 @@ created and applied to tasks.
 - [ ] 5.3.4 — Small tag chips rendered on TaskCard
 - [ ] 5.3.5 — Filter Today/Week/Month views by tag
 
+### 5.4 — Activities
+
+Added: 2026-07-18
+
+- [ ] 5.4.1 — Write activities and activity_logs schema in /db/schema.ts
+- [ ] 5.4.2 — insertActivity, logActivity, getLastActivityLog(activityId) in /db/queries.ts
+- [ ] 5.4.3 — Activity card UI: name + "last done: [date]" + optional note, no checkbox, no streak
+- [ ] 5.4.4 — Activity history view: full log list for one activity, most recent first
+- [ ] 5.4.5 — Quick-log entry point (log now, optionally with a note) from Activity card
+
 ---
 
 ## Milestone 6 — Views and History
@@ -376,3 +386,7 @@ created and applied to tasks.
 
 - [x] Milestone 1 — Learn the Tools While Building Real UI
 - [x] 2.1 - Database Setup
+- [x] 2.2 — Create Tasks
+- [x] 2.3 — Read Tasks
+- [x] 2.4 — Update Task Status
+- [x] 2.5 — Edit and Delete Tasks

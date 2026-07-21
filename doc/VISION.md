@@ -6,9 +6,7 @@
 
 ## What This App Is
 
-A personal productivity OS that lives on your phone. It combines a to-do list, a goal tracker,
-a journal, and a calendar into one system that thinks ahead for you — auto-managing your day
-based on what you've committed to, how you're progressing, and what you've been putting off.
+A personal productivity OS that lives on your phone. It combines a to-do list, a goal tracker, a journal, and a calendar into one system that thinks ahead for you — auto-managing your day based on what you've committed to, how you're progressing, and what you've been putting off.
 
 The core philosophy: **the app does the logistics, you do the living.**
 

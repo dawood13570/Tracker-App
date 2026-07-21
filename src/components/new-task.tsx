@@ -1,7 +1,7 @@
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import React, { useMemo, useState } from 'react';
-import { Button, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { insertTask } from '../db/queries';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Pressable, StyleSheet, Switch, Task, Text, TouchableOpacity, View } from 'react-native';
+import { insertTask, updateTask } from '../db/queries';
 
 interface SubTaskDraft {
   id: string;
@@ -12,7 +12,15 @@ interface SubTaskDraft {
 interface NewTaskModalProps {
   sheetRef: React.RefObject<BottomSheet | null>;
   onTaskCreated: () => void;
+  taskToEdit?: any | null;
+  onClose?: () => void;
 }
+
+interface NewTaskProps {
+  initialData?: Task | null;
+  onSubmitSuccess: () => void;
+}
+
 
 export function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
@@ -21,7 +29,7 @@ export function getLocalDateString(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-export default function NewTaskModal({ sheetRef, onTaskCreated }: NewTaskModalProps) {
+export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onClose }: NewTaskModalProps) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState('');
   const [priority, setPriority] = useState('');
@@ -65,6 +73,24 @@ export default function NewTaskModal({ sheetRef, onTaskCreated }: NewTaskModalPr
     setSubtasks([]);
     setSubtaskInput('');
   };
+
+
+
+  useEffect(() => {
+    if (taskToEdit) {
+      setTitle(taskToEdit.title ?? '');
+      setTitle(taskToEdit.title ?? '');
+      setType(taskToEdit.type ?? '');
+      setPriority(taskToEdit.priority ?? '');
+      setallowRollover(Boolean(taskToEdit.rolloverEnabled));
+
+      setTargetValue(taskToEdit.totalProgress ? String(taskToEdit.totalProgress) : '');
+      setUnit(taskToEdit.progressUnit ?? '');
+    } else {
+      resetForm();
+    }
+  }, [taskToEdit]);
+
 
   return (
     <BottomSheet
@@ -205,13 +231,13 @@ export default function NewTaskModal({ sheetRef, onTaskCreated }: NewTaskModalPr
         {/* Submit Button */}
         <View style={{ marginTop: 24, width: '100%', paddingBottom: 40 }}>
           <Button
-            title="Submit Task"
+            title={taskToEdit ? "Update Task" : "Submit Task"}
             onPress={async () => {
               try{
-                await insertTask({
+                const payload = {
                 title,
                 type: type as "Simple" | "Hybrid" | "Progression" ,
-                priority: priority.toLowerCase() as "low" | "medium" | "high",
+                priority: priority as "Low" | "Medium" | "High",
                 rolloverEnabled: allowRollover,
                 scheduledDate: getLocalDateString(),
                 ...(type === 'Progression' && {
@@ -222,9 +248,20 @@ export default function NewTaskModal({ sheetRef, onTaskCreated }: NewTaskModalPr
                   subtasksTotal: subtasks.length,
                   subtasksCompleted: 0, 
                 }),
-              });
+              };
+
+              if (taskToEdit) {
+                await updateTask(taskToEdit.id,payload);
+              } else {
+                await insertTask({
+                  ...payload,
+                  scheduledDate: getLocalDateString(),
+                  ...(type === 'Hybrid' && { subtasksCompleted: 0}),
+                });
+              }
               resetForm();
               onTaskCreated();
+              if (onClose) onClose();
               sheetRef.current?.close();
             } catch (err) {
               console.error("Failed to save task:", err);

@@ -9,13 +9,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import NewTaskModal, { getLocalDateString } from '../components/new-task';
 import { Task, TaskCard } from '../components/TaskCard';
 import { db } from '../db/client';
-import { toggleTaskStatus } from '../db/queries';
+import { deleteTask, toggleTaskStatus } from '../db/queries';
 import { tasks as tasksTable } from '../db/schema';
 
 
 
 export function DateHeader() {
-  const currentDate = new Date().toLocaleDateString('ur-US', {
+  const currentDate = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -33,6 +33,12 @@ export default function AppDashboard() {
   const taskSheetRef = useRef<BottomSheet>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    taskSheetRef.current?.expand();
+  };
 
   async function fetchActiveTasks() {
     try {
@@ -85,6 +91,16 @@ export default function AppDashboard() {
     });
   }, [tasks]);
 
+  const handleDeleteTask = async (id: number) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+
+  try {
+    await deleteTask(id);
+  } catch (error) {
+    console.error("Failed to delete task:", error);
+  }
+};
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container}>
@@ -98,9 +114,9 @@ export default function AppDashboard() {
             <Text style={styles.metricLine}>Total: {summary.total} | Completed:<Text style={{ color: "#40af69" }}> {summary.completed}</Text> | Pending: {summary.incomplete}</Text>
             <Text style={styles.metricLine}>Simple: {summary.types['Simple'] || 0} | Hybrid: {summary.types['Hybrid'] || 0} | Progression: {summary.types['Progression'] || 0}</Text>
             <Text style={styles.metricLine}>
-              <Text style={{ color: "#c40000" }}>High: {summary.priorities['high'] || 0} </Text>| 
-              Medium: {summary.priorities['medium'] || 0} | 
-              Low: {summary.priorities['low'] || 0}
+              <Text style={{ color: "#c40000" }}>High: {summary.priorities['High'] || 0} </Text>| 
+              Medium: {summary.priorities['Medium'] || 0} | 
+              Low: {summary.priorities['Low'] || 0}
             </Text>
           </View>
         </View>
@@ -113,7 +129,7 @@ export default function AppDashboard() {
               data={tasks}
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} />}
+              renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} onDelete={handleDeleteTask} onEdit={handleEditTask}/>}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyStateText}>Nothing to do today.</Text>
@@ -125,7 +141,8 @@ export default function AppDashboard() {
         </View>
 
         <Pressable 
-          onPress={() => taskSheetRef.current?.expand()} 
+          onPress={() => {setEditingTask(null);
+                         taskSheetRef.current?.expand();}}
           style={({ pressed }) => [
             styles.buttonStuff, 
             { backgroundColor: pressed ? "#155b76" : "#1c8db9" }
@@ -135,7 +152,7 @@ export default function AppDashboard() {
         </Pressable>
 
         {/* Wire parent data refresher directly to task modal completion listener hooks */}
-        <NewTaskModal sheetRef={taskSheetRef} onTaskCreated={fetchActiveTasks} />
+        <NewTaskModal sheetRef={taskSheetRef} onTaskCreated={fetchActiveTasks} taskToEdit={editingTask} onClose={() => setEditingTask(null)} />
       </SafeAreaView> 
     </GestureHandlerRootView>
   );

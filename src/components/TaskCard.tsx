@@ -1,11 +1,11 @@
 // src/components/TaskCard.tsx
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export interface Task {
   id: number; // Changed from string to number to match SQLite autoincrement ID keys
   title: string;
   type: 'Simple' | 'Progression' | 'Hybrid';
-  priority: 'low' | 'medium' | 'high';
+  priority: 'Low' | 'Medium' | 'High';
   isCompleted: boolean;
 
   currentProgress?: number | null;
@@ -19,10 +19,12 @@ export interface Task {
 
 interface TaskCardProps {
     task: Task;
-    onToggle: (id: number, currentStatus: boolean) => void; // Updated parameter contract
+    onToggle: (id: number, currentStatus: boolean) => void;
+    onEdit: (task: Task) => void;
+    onDelete: (id: number) => void;
 }
 
-export function TaskCard({ task, onToggle }: TaskCardProps) {
+export function TaskCard({ task, onToggle, onEdit, onDelete }: TaskCardProps) {
     const progressRatio = task.totalProgress && task.totalProgress > 0 
       ? (task.currentProgress || 0) / task.totalProgress 
       : 0;
@@ -34,8 +36,47 @@ export function TaskCard({ task, onToggle }: TaskCardProps) {
       progressBarColor = '#FFC107';
     }
 
+    const handleLongPress = () => {
+      Alert.alert(
+        'Task Options',
+        'Choose an action for this task',
+        [
+          {
+            text: 'Edit',
+            onPress: () => onEdit(task),
+          },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => confirmDelete(),
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ],
+        { cancelable: true }
+      );
+    };
+
+    const confirmDelete = () => {
+      Alert.alert(
+        'Are you sure?',
+        'This action cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel'},
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => onDelete(task.id)
+          }
+        ],
+        { cancelable: true }
+      )
+    }
+
     return (
-      <Pressable style={[styles.taskCard, task.isCompleted && styles.completedCard]} onPress={() => onToggle(task.id, task.isCompleted)}>
+      <Pressable style={[styles.taskCard, task.isCompleted && styles.completedCard]} onPress={() => onToggle(task.id, task.isCompleted)} onLongPress={handleLongPress}>
         <View style={styles.cardRow}>
           <View style={styles.cardContent}>
             <Text style={[styles.taskTitle, task.isCompleted && styles.completedText]}>
@@ -44,7 +85,7 @@ export function TaskCard({ task, onToggle }: TaskCardProps) {
             
             <Text style={styles.taskMeta}>
               {task.isCompleted ? "✅ DONE • " : ""}
-              {task.type.toUpperCase()} • <Text style={(!task.isCompleted && task.priority === 'high') && styles.highPriorityIncomplete}>{task.priority.toUpperCase()}</Text> {task.procrastinationCount && task.procrastinationCount > 0 ? (
+              {task.type.toUpperCase()} • <Text style={(!task.isCompleted && task.priority === 'High') && styles.highPriorityIncomplete}>{task.priority.toUpperCase()}</Text> {task.procrastinationCount && task.procrastinationCount > 0 ? (
               ` • Procrastinating for ${task.procrastinationCount} day(s)`
               ) : null}
             </Text>

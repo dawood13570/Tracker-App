@@ -1,5 +1,5 @@
 import type { InferInsertModel } from 'drizzle-orm';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from './client';
 import { tasks } from './schema';
 
@@ -13,9 +13,28 @@ export async function insertTask(data: NewTask) {
 export async function toggleTaskStatus(id: number, currentStatus: boolean) {
     const [updated]  = await db
         .update(tasks)
-        .set({ isCompleted: !currentStatus })
+        .set({ isCompleted: sql`NOT ${tasks.isCompleted}` })
         .where(eq(tasks.id, id))
         .returning()
     return updated;
 
+}
+
+export type UpdateTask = Partial<NewTask>;
+
+export async function updateTask(id: number, data: UpdateTask) {
+    const [updated] = await db
+        .update(tasks)
+        .set(data)
+        .where(eq(tasks.id, id))
+        .returning();
+    return updated;  
+}
+
+export async function deleteTask(id: number) {
+    const [deleted] = await db
+        .delete(tasks)
+        .where(eq(tasks.id, id))
+        .returning();
+    return deleted;  
 }

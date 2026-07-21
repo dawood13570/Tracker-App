@@ -6,7 +6,7 @@ export const tasks= sqliteTable('tasks', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   title: text('title').notNull(),
   type: text('type', { enum: ["Simple", "Hybrid", "Progression"] }).notNull(),
-  priority: text('priority', { enum: ['low', 'medium', 'high'] }).notNull(),
+  priority: text('priority', { enum: ['Low', 'Medium', 'High'] }).notNull(),
   isCompleted: integer('is_completed', { mode: 'boolean' }).default(false).notNull(),
   scheduledDate: text('scheduled_date').notNull(), 
 
