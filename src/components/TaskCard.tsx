@@ -15,6 +15,7 @@ export interface Task {
   subtasksCompleted?: number | null;
   subtasksTotal?: number | null;
   procrastinationCount?: number | null;
+  rolloverEnabled?: boolean | null;
 }
 
 interface TaskCardProps {

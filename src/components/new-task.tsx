@@ -1,7 +1,8 @@
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Pressable, StyleSheet, Switch, Task, Text, TouchableOpacity, View } from 'react-native';
+import { Button, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { insertTask, updateTask } from '../db/queries';
+import { Task } from './TaskCard';
 
 interface SubTaskDraft {
   id: string;
@@ -12,15 +13,9 @@ interface SubTaskDraft {
 interface NewTaskModalProps {
   sheetRef: React.RefObject<BottomSheet | null>;
   onTaskCreated: () => void;
-  taskToEdit?: any | null;
+  taskToEdit?: Task | null;
   onClose?: () => void;
 }
-
-interface NewTaskProps {
-  initialData?: Task | null;
-  onSubmitSuccess: () => void;
-}
-
 
 export function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
@@ -78,7 +73,6 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
   useEffect(() => {
     if (taskToEdit) {
-      setTitle(taskToEdit.title ?? '');
       setTitle(taskToEdit.title ?? '');
       setType(taskToEdit.type ?? '');
       setPriority(taskToEdit.priority ?? '');
@@ -234,29 +228,30 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
             title={taskToEdit ? "Update Task" : "Submit Task"}
             onPress={async () => {
               try{
-                const payload = {
+                const sharedFields = {
                 title,
                 type: type as "Simple" | "Hybrid" | "Progression" ,
                 priority: priority as "Low" | "Medium" | "High",
                 rolloverEnabled: allowRollover,
-                scheduledDate: getLocalDateString(),
                 ...(type === 'Progression' && {
                    totalProgress: Number(targetValue),
                   progressUnit: unit 
                 }),
                 ...(type === 'Hybrid' && { 
                   subtasksTotal: subtasks.length,
-                  subtasksCompleted: 0, 
                 }),
               };
 
               if (taskToEdit) {
-                await updateTask(taskToEdit.id,payload);
+                // Editing: don't touch scheduledDate (task keeps its original day)
+                // and don't touch subtasksCompleted (editing shouldn't wipe progress)
+                await updateTask(taskToEdit.id, sharedFields);
               } else {
+                // Creating: set today's date, and Hybrid tasks start at 0 completed
                 await insertTask({
-                  ...payload,
+                  ...sharedFields,
                   scheduledDate: getLocalDateString(),
-                  ...(type === 'Hybrid' && { subtasksCompleted: 0}),
+                  ...(type === 'Hybrid' && { subtasksCompleted: 0 }),
                 });
               }
               resetForm();
