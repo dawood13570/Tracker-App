@@ -1,18 +1,13 @@
 // app/today.tsx
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList } from "@shopify/flash-list";
-import { eq } from 'drizzle-orm';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import NewTaskModal, { getLocalDateString } from '../components/new-task';
+import NewTaskModal from '../components/new-task';
 import { Task, TaskCard } from '../components/TaskCard';
-import { db } from '../db/client';
-import { deleteTask, toggleTaskStatus } from '../db/queries';
-import { tasks as tasksTable } from '../db/schema';
-
-
+import { useTaskStore } from "../store/taskStore";
 
 export function DateHeader() {
   const currentDate = new Date().toLocaleDateString('en-GB', {
@@ -31,48 +26,26 @@ export function DateHeader() {
 
 export default function AppDashboard() {
   const taskSheetRef = useRef<BottomSheet>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null); //remove
+
+  const { tasks, isLoading, loadTasks, updateTask, removeTask } = useTaskStore();
+
+  useEffect(() => {
+    loadTasks();
+  }, []);
 
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
     taskSheetRef.current?.expand();
   };
 
-  async function fetchActiveTasks() {
-    try {
-      const todayStr = getLocalDateString();
-
-      const result = await db
-      .select()
-      .from(tasksTable)
-      .where(eq(tasksTable.scheduledDate, todayStr))
-
-      // console.log("Tasks currently stored inside the SQlite file:", result);
-      setTasks(result as Task[]);
-    } catch (err) {
-      console.error("Failed to read tasks from local store file:", err);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleToggleTask = (id: number, currentStatus: boolean) => {
+    updateTask(id, { isCompleted: !currentStatus });
   }
 
-  useEffect(() => {
-    fetchActiveTasks();
-  }, []);
-  
-
-  const handleToggleTask = async (id: number, currentStatus: boolean) => {
-    try {
-      await toggleTaskStatus(id, currentStatus);
-      setTasks((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, isCompleted: !currentStatus } : t))
-      );
-    } catch (err) {
-      console.error("Failed to alter complete status:", err);
-    }
-  };
+  const handleDeleteTask = (id: number) => {
+    removeTask(id);
+  }
 
 
   const summary = useMemo(() => {
@@ -90,16 +63,6 @@ export default function AppDashboard() {
       incomplete: 0
     });
   }, [tasks]);
-
-  const handleDeleteTask = async (id: number) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-
-  try {
-    await deleteTask(id);
-  } catch (error) {
-    console.error("Failed to delete task:", error);
-  }
-};
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -152,7 +115,7 @@ export default function AppDashboard() {
         </Pressable>
 
         {/* Wire parent data refresher directly to task modal completion listener hooks */}
-        <NewTaskModal sheetRef={taskSheetRef} onTaskCreated={fetchActiveTasks} taskToEdit={editingTask} onClose={() => setEditingTask(null)} />
+        <NewTaskModal sheetRef={taskSheetRef} onTaskCreated={() => loadTasks()} taskToEdit={editingTask} onClose={() => setEditingTask(null)} />
       </SafeAreaView> 
     </GestureHandlerRootView>
   );

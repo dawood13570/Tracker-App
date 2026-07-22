@@ -1,7 +1,7 @@
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { insertTask, updateTask } from '../db/queries';
+import { useTaskStore } from '../store/taskStore';
 import { Task } from './TaskCard';
 
 interface SubTaskDraft {
@@ -17,12 +17,8 @@ interface NewTaskModalProps {
   onClose?: () => void;
 }
 
-export function getLocalDateString(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+const { addTask, updateTask, selectedDate } = useTaskStore();
+
 
 export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onClose }: NewTaskModalProps) {
   const [title, setTitle] = useState('');
@@ -243,14 +239,11 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
               };
 
               if (taskToEdit) {
-                // Editing: don't touch scheduledDate (task keeps its original day)
-                // and don't touch subtasksCompleted (editing shouldn't wipe progress)
                 await updateTask(taskToEdit.id, sharedFields);
               } else {
-                // Creating: set today's date, and Hybrid tasks start at 0 completed
-                await insertTask({
+                await addTask({
                   ...sharedFields,
-                  scheduledDate: getLocalDateString(),
+                  scheduledDate: selectedDate,
                   ...(type === 'Hybrid' && { subtasksCompleted: 0 }),
                 });
               }

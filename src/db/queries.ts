@@ -10,7 +10,7 @@ export async function insertTask(data: NewTask) {
     return inserted;
 }
 
-export async function toggleTaskStatus(id: number, currentStatus: boolean) {
+export async function toggleTaskStatus(id: number) {
     const [updated]  = await db
         .update(tasks)
         .set({ isCompleted: sql`NOT ${tasks.isCompleted}` })

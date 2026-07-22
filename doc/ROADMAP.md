@@ -138,11 +138,11 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 2.6 — Zustand State Management
 **Done when:** Task state lives in the store, not in individual screen components.
 
-- [ ] 2.6.1 — Install `zustand`
-- [ ] 2.6.2 — Create `taskStore.ts` with state: `tasks`, `isLoading`, `selectedDate`
-- [ ] 2.6.3 — Create actions: `loadTasks`, `addTask`, `updateTask`, `removeTask`
-- [ ] 2.6.4 — Replace all direct DB calls in screens with store actions
-- [ ] 2.6.5 — Confirm Today screen and any other screen that uses tasks stays in sync automatically
+- [x] 2.6.1 — Install `zustand`
+- [x] 2.6.2 — Create `taskStore.ts` with state: `tasks`, `isLoading`, `selectedDate`
+- [x] 2.6.3 — Create actions: `loadTasks`, `addTask`, `updateTask`, `removeTask`
+- [x] 2.6.4 — Replace all direct DB calls in screens with store actions
+- [x] 2.6.5 — Confirm Today screen and any other screen that uses tasks stays in sync automatically
 
 ---
 
