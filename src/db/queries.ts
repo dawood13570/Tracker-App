@@ -5,6 +5,10 @@ import { tasks } from './schema';
 
 export type NewTask = InferInsertModel<typeof tasks>;
 
+export async function getTaskByDate(date: string) {
+    return db.select().from(tasks).where(eq(tasks.scheduledDate, date));
+}
+
 export async function insertTask(data: NewTask) {
     const [inserted] = await db.insert(tasks).values(data).returning();
     return inserted;

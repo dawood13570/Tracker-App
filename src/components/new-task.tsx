@@ -17,7 +17,7 @@ interface NewTaskModalProps {
   onClose?: () => void;
 }
 
-const { addTask, updateTask, selectedDate } = useTaskStore();
+
 
 
 export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onClose }: NewTaskModalProps) {
@@ -27,6 +27,8 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const [targetValue, setTargetValue] = useState('');
   const [unit, setUnit] = useState('');
   const [allowRollover, setallowRollover] = useState(false);
+
+  const { addTask, updateTask, selectedDate } = useTaskStore();
   
   // States for handling hybrid subtasks
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);

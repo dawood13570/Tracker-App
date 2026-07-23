@@ -28,7 +28,7 @@ export default function AppDashboard() {
   const taskSheetRef = useRef<BottomSheet>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null); //remove
 
-  const { tasks, isLoading, loadTasks, updateTask, removeTask } = useTaskStore();
+  const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
 
   useEffect(() => {
     loadTasks();
@@ -39,9 +39,10 @@ export default function AppDashboard() {
     taskSheetRef.current?.expand();
   };
 
-  const handleToggleTask = (id: number, currentStatus: boolean) => {
-    updateTask(id, { isCompleted: !currentStatus });
+  const handleToggleTask = (id: number) => {
+    toggleTask(id);
   }
+
 
   const handleDeleteTask = (id: number) => {
     removeTask(id);

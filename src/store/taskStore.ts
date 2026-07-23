@@ -1,11 +1,12 @@
-import { InferInsertModel, InferSelectModel, eq } from 'drizzle-orm';
+import { eq, InferSelectModel } from 'drizzle-orm';
 import { create } from 'zustand';
 import { db } from '../db/client';
+import { deleteTask, insertTask, NewTask, toggleTaskStatus, updateTask, UpdateTask as UpdateTaskQuery } from '../db/queries';
 import { tasks as tasksTable } from '../db/schema';
 import { getLocalDateString } from '../utils/date';
 
 export type Task = InferSelectModel<typeof tasksTable>;
-export type NewTask = InferInsertModel<typeof tasksTable>;
+export type { NewTask };
 
 interface TaskState {
     tasks: Task[];
@@ -17,6 +18,7 @@ interface TaskState {
     loadTasks: (date?: string) => Promise<void>;
     addTask: (newTask: NewTask) => Promise<Task | null>;
     updateTask: (id: number, update: Partial<Task>) => Promise<void>;
+    toggleTask: (id: number) => Promise<void>;
     removeTask: (id: number) => Promise<void>;
 }
 
@@ -50,37 +52,29 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     addTask: async (newTaskData: NewTask) => {
         try {
-            const [insertedTask] = await db
-                .insert(tasksTable)
-                .values(newTaskData)
-                .returning();
+            const inserted = await insertTask(newTaskData);
+                
             
-            if (insertedTask && insertedTask.scheduledDate === get().selectedDate) {
-                set((state) => ({ tasks: [...state.tasks, insertedTask] }));
+            if (inserted && inserted.scheduledDate === get().selectedDate) {
+                set((state) => ({ tasks: [...state.tasks, inserted] }));
             }
 
-            return insertedTask ?? null;
+            return inserted ?? null;
         } catch (error) {
             console.error('Failed to add task:', error);
             return null;
         }
     },
 
-    updateTask: async (id: number, updates: Partial<Task>) => {
+    updateTask: async (id: number, updates: UpdateTaskQuery) => {
         try {
-            const [updatedTask] = await db
-                .update(tasksTable)
-                .set({
-                    ...updates,
-                    updatedAt: new Date().toISOString(),
-                })
-                .where(eq(tasksTable.id, id))
-                .returning();
+            const updated = await updateTask(id, updates);
+
             
-            if (updatedTask) {
+            if (updated) {
                 set((state) => ({
                     tasks: state.tasks.map((task) =>
-                    task.id === id ? updatedTask : task
+                    task.id === id ? updated : task
                 ),
                 }));
             }
@@ -89,9 +83,25 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         }
     },
 
+    toggleTask: async (id: number) => {
+        try {
+            const updated = await toggleTaskStatus(id);
+
+            if (updated) {
+                set((state) => ({
+                    tasks: state.tasks.map((task) =>
+                        task.id === id ? updated : task
+                    ),
+                }));
+        }
+    } catch (error) {
+        console.error("Failed to toggle task ${id}", error);
+      }
+    },
+
     removeTask: async (id: number) => {
         try {
-            await db.delete(tasksTable).where(eq(tasksTable.id, id));
+            await deleteTask(id);
 
             set((state) => ({
                 tasks: state.tasks.filter((task) => task.id !== id),
