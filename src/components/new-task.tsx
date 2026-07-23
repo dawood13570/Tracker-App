@@ -1,6 +1,6 @@
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Keyboard, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useTaskStore } from '../store/taskStore';
 import { Task } from './TaskCard';
 
@@ -29,7 +29,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const [allowRollover, setallowRollover] = useState(false);
 
   const { addTask, updateTask, selectedDate } = useTaskStore();
-  
+
   // States for handling hybrid subtasks
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
@@ -94,7 +94,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
       keyboardBehavior="fillParent"
       keyboardBlurBehavior="restore"
     >
-      <BottomSheetScrollView contentContainerStyle={styles.contentContainer}>
+      <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
         <Text style={styles.titleText}>New Task Input</Text>
 
         <BottomSheetTextInput 
@@ -222,9 +222,22 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
         {/* Submit Button */}
         <View style={{ marginTop: 24, width: '100%', paddingBottom: 40 }}>
-          <Button
-            title={taskToEdit ? "Update Task" : "Submit Task"}
+          <Pressable
+            disabled={!title.trim()}
             onPress={async () => {
+              Keyboard.dismiss();
+              if (!title.trim()){
+                Alert.alert('Title required', 'Please enter a task title before saving');
+                return;
+              }
+              if (!type) {
+                Alert.alert("Type required", 'Please choose Simple, Progression, or Hybrid');
+                return;
+              }
+              if (!priority) {
+                Alert.alert('Priority required', 'Please choose a priority.');
+                return;
+              }
               try{
                 const sharedFields = {
                 title,
@@ -258,7 +271,16 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
             }
           }
         }
-          />
+        style={({ pressed }) => [
+          styles.submitButton,
+          !title.trim() && styles.submitButtonDisabled,
+          pressed && title.trim() ? { opacity: 0.85} : null,
+        ]}
+        > 
+        <Text style={styles.submitButtonText}>
+          {taskToEdit ? "Update Task" : "Submit Task"}
+            </Text>
+          </Pressable>
         </View>
       </BottomSheetScrollView>
     </BottomSheet>
@@ -282,6 +304,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     backgroundColor: "#fff",
+    color: "#222",
   },
   row: {
     flexDirection: 'row',
@@ -358,6 +381,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#fff',
     marginLeft: 12,
+    color: "#222",
   },
   inputStyleNested: {
     flex: 1.5,
@@ -369,6 +393,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#fff',
     marginLeft: 12,
+    color: "#222",
   },
   dynamicContainer: {
     marginTop: 10,
@@ -399,6 +424,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: '#fff',
     marginRight: 8,
+    color: "#222"
   },
   addSubtaskButton: {
     backgroundColor: '#1c8db9',
@@ -449,4 +475,18 @@ const styles = StyleSheet.create({
     color: '#c40000',
     fontWeight: '600',
   },
+  submitButton: {
+    backgroundColor: '#0070f3',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  submitButtonDisabled: {
+    backgroundColor: "#d0d0d0"
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  }
 });
