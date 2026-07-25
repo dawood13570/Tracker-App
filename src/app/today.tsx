@@ -2,9 +2,9 @@
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList } from "@shopify/flash-list";
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View, } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import NewTaskModal from '../components/new-task';
 import { Task, TaskCard } from '../components/TaskCard';
 import { useTaskStore } from "../store/taskStore";
@@ -26,9 +26,10 @@ export function DateHeader() {
 
 export default function AppDashboard() {
   const taskSheetRef = useRef<BottomSheet>(null);
-  const [editingTask, setEditingTask] = useState<Task | null>(null); //remove
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const insets = useSafeAreaInsets();
 
-  const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
+  const { tasks, isLoading, loadTasks, toggleTask, removeTask, addTask, selectedDate } = useTaskStore();
 
   useEffect(() => {
     loadTasks();
@@ -73,6 +74,8 @@ export default function AppDashboard() {
         <View style={styles.stickyHeader}>
           <DateHeader/>
 
+          
+
           <View style={styles.metricCard}>
             <Text style={{ fontWeight: "600", textAlign: "center", marginBottom: 4 }}>Task Metrics</Text>
             <Text style={styles.metricLine}>Total: {summary.total} | Completed:<Text style={{ color: "#40af69" }}> {summary.completed}</Text> | Pending: {summary.incomplete}</Text>
@@ -92,7 +95,7 @@ export default function AppDashboard() {
             <FlashList
               data={tasks}
               keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[ styles.listContent, {paddingBottom: 20 + insets.bottom} ]}
               renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} onDelete={handleDeleteTask} onEdit={handleEditTask}/>}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
@@ -104,18 +107,28 @@ export default function AppDashboard() {
           )}
         </View>
 
+        <Pressable style={[ styles.procrastinationTaskButton, {bottom: 35 + insets.bottom} ]} onPress={() => addTask({
+          title: "Test procrastinated task",
+          type: 'Simple',
+          priority: "Medium",
+          rolloverEnabled: true,
+          scheduledDate: selectedDate,
+          procrastinationCount: 10,
+        })}>
+          <Text style= {{textAlign:'center', color: "#f8f5f5",}}>Insert test task</Text>
+        </Pressable>
+
         <Pressable 
           onPress={() => {setEditingTask(null);
                          taskSheetRef.current?.expand();}}
           style={({ pressed }) => [
             styles.buttonStuff, 
-            { backgroundColor: pressed ? "#155b76" : "#1c8db9" }
+            { backgroundColor: pressed ? "#155b76" : "#1c8db9", bottom: 35 + insets.bottom }
           ]}
         >
           <Text style={styles.buttonText}>+</Text>
         </Pressable>
 
-        {/* Wire parent data refresher directly to task modal completion listener hooks */}
         <NewTaskModal sheetRef={taskSheetRef} onTaskCreated={() => loadTasks()} taskToEdit={editingTask} onClose={() => setEditingTask(null)} />
       </SafeAreaView> 
     </GestureHandlerRootView>
@@ -158,7 +171,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 100
   },
   buttonStuff:{
     width: 65,
@@ -197,5 +209,16 @@ emptyStateSubtext: {
   color: '#888',
   marginTop: 6,
   textAlign: 'center',
+},
+procrastinationTaskButton: {
+  position: "absolute",
+  bottom: 35,
+  left: 25,
+  width: 80,
+  height: 60,
+  backgroundColor: "#398e22",
+  alignItems: 'center',
+  borderRadius: 10,
+  justifyContent: 'center'
 },
 });

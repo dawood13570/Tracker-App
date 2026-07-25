@@ -1,5 +1,6 @@
 // src/components/TaskCard.tsx
 import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ProcrastinationBadge } from './ProcrastinationBadge';
 
 export interface Task {
   id: number; // Changed from string to number to match SQLite autoincrement ID keys
@@ -84,12 +85,16 @@ export function TaskCard({ task, onToggle, onEdit, onDelete }: TaskCardProps) {
               {task.title}
             </Text>
             
-            <Text style={styles.taskMeta}>
-              {task.isCompleted ? "✅ DONE • " : ""}
-              {task.type.toUpperCase()} • <Text style={(!task.isCompleted && task.priority === 'High') && styles.highPriorityIncomplete}>{task.priority.toUpperCase()}</Text> {task.procrastinationCount && task.procrastinationCount > 0 ? (
-              ` • Procrastinating for ${task.procrastinationCount} day(s)`
-              ) : null}
-            </Text>
+            <View style={styles.metaRow}>
+              <Text style={styles.taskMeta}>
+                {task.isCompleted ? "✅ DONE • " : ""}
+                {task.type.toUpperCase()} • <Text style={(!task.isCompleted && task.priority === 'High') && styles.highPriorityIncomplete}>{task.priority.toUpperCase()}</Text>
+              </Text>
+
+              {task.procrastinationCount && task.procrastinationCount > 0 ? (
+                <ProcrastinationBadge count={task.procrastinationCount} />
+                ) : null}
+            </View>
 
             {task.type === 'Hybrid' && task.subtasksTotal !== null && task.subtasksTotal !== undefined && (
               <View style={styles.hybridBadge}>
@@ -179,6 +184,11 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1A1A1A',
     marginBottom: 4,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   taskMeta: {
     fontSize: 12,

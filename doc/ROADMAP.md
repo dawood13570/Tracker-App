@@ -155,21 +155,23 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 3.1 — Procrastination Counter Display
 **Done when:** Tasks that have been moved show correct count visually.
 
-- [ ] 3.1.1 — Manually update a test task's `procrastination_count` to 3 via DB Browser
-- [ ] 3.1.2 — Confirm `ProcrastinationBadge` renders "+3 days" on that task
-- [ ] 3.1.3 — Badge is invisible when count is 0
-- [ ] 3.1.4 — Choose a visual design: subtle for +1, more prominent for +3, alarming for +7+
+- [x] 3.1.1 — Manually update a test task's `procrastination_count` to 3
+- [x] 3.1.2 — Confirm `ProcrastinationBadge` renders "+3 days" on that task
+- [x] 3.1.3 — Badge is invisible when count is 0
+- [x] 3.1.4 — Choose a visual design: subtle for +1, more prominent for +3, alarming for +7+
 
 ---
 
 ### 3.2 — Rollover Logic (Pure Function First)
 **Done when:** The rollover function produces correct output given test inputs, no DB or background job yet.
 
+**Note**: no status field exists (schema stays 2-state: isCompleted boolean only — decided 2026-07-18). "Skipped" isn't a stored state — a task that isn't rolled forward just keeps its original scheduledDate and naturally stops appearing on Today once the day passes. There's only one kind of mutation: roll forward. Everything else is simply left untouched.
+
 - [ ] 3.2.1 — Write `processRollover(tasks, today)` in `/engine/rollover.ts`
-- [ ] 3.2.2 — It takes an array of yesterday's tasks and returns an array of mutations (what to update, what to skip)
-- [ ] 3.2.3 — Rule: todo + rollover enabled + high/normal priority → schedule for today, count +1
-- [ ] 3.2.4 — Rule: todo + rollover disabled OR low priority → set status to 'skipped'
-- [ ] 3.2.5 — Rule: already done/skipped → do nothing
+- [ ] 3.2.2 — It takes an array of yesterday's tasks and returns an array of mutations (only rollover tasks produce a mutation; everything else produces none)
+- [ ] 3.2.3 — Rule: `isCompleted === false + rolloverEnabled` + Medium/High priority → mutation: `scheduledDate` = today, `procrastinationCount` + 1
+- [ ] 3.2.4 — Rule: `isCompleted === false` + (`rolloverEnabled === false` OR priority is Low) → no mutation, left as-is on its original date
+- [ ] 3.2.5 — Rule: `isCompleted === true` → no mutation
 - [ ] 3.2.6 — Write 5 manual test cases (plain JS objects as input, assert on output). No test framework needed yet, just `console.log` and check.
 
 ---
@@ -195,7 +197,7 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 - [ ] 3.4.3 — Handle daily: next day
 - [ ] 3.4.4 — Handle every_n_days: fromDate + N
 - [ ] 3.4.5 — Handle weekly with specific days: find next matching weekday
-- [ ] 3.4.6 — Hook into `updateTaskStatus`: when a recurring task is marked done, call `getNextOccurrence` and insert a new task row (clone of the current with new date, status 'todo', count 0)
+- [ ] 3.4.6 — Hook into the store's `toggleTask`: when a recurring task is marked done, call `getNextOccurrence` and insert a new task row (clone of the current with new date, `isCompleted: false`, `procrastinationCount: 0`)
 - [ ] 3.4.7 — Confirm the original completed task is untouched in DB
 
 ---
@@ -203,9 +205,9 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 3.5 — Priority System
 **Done when:** Priority is assignable, visually meaningful, and affects rollover behaviour.
 
-- [ ] 3.5.1 — Confirm priority field is in schema and form (should be from Milestone 2)
+- [ ] 3.5.1 — Confirm priority field is in schema and form (done since Milestone 2)
 - [ ] 3.5.2 — High priority tasks: stronger visual treatment on TaskCard (confirm it's clearly distinct)
-- [ ] 3.5.3 — Today screen sorts: High priority first, then Normal, then Low, then Done at bottom
+- [ ] 3.5.3 — Today screen sorts: `High` priority first, then `Medium`, then `Low`, then `Done` at bottom
 - [ ] 3.5.4 — Confirm rollover logic correctly handles low priority differently (3.2.4)
 - [ ] 3.5.5 — *(Not started — open questions in VISION.md)* Evolving Priority System: Low → Medium → High as procrastination_count climbs, toggleable, with the archive-other-low-tasks behaviour
 
@@ -385,8 +387,4 @@ Added: 2026-07-18
 ---
 
 - [x] Milestone 1 — Learn the Tools While Building Real UI
-- [x] 2.1 - Database Setup
-- [x] 2.2 — Create Tasks
-- [x] 2.3 — Read Tasks
-- [x] 2.4 — Update Task Status
-- [x] 2.5 — Edit and Delete Tasks
+- [x] Milestone 2 — Real Data with SQLite
