@@ -1,5 +1,5 @@
 import type { InferInsertModel } from 'drizzle-orm';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, lt, sql } from 'drizzle-orm';
 import { db } from './client';
 import { tasks } from './schema';
 
@@ -41,4 +41,30 @@ export async function deleteTask(id: number) {
         .where(eq(tasks.id, id))
         .returning();
     return deleted;  
+}
+
+export async function getRolloverCandidates(todayStr: string) {
+    return db.select()
+    .from(tasks)
+    .where(
+        and(
+            eq(tasks.isCompleted, false),
+            eq(tasks.rolloverEnabled, true),
+            lt(tasks.scheduledDate, todayStr)
+        )
+    )
+}
+
+export async function applyRolloverMutations(
+    mutations: Array<{ id: number; scheduledDate: string; procrastinationCount: number}>
+) {
+    for(const mutation of mutations) {
+        await db
+        .update(tasks)
+        .set({
+            scheduledDate: mutation.scheduledDate,
+            procrastinationCount: mutation.procrastinationCount,
+        })
+        .where(eq(tasks.id, mutation.id))
+    }
 }

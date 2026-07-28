@@ -2,8 +2,11 @@
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import * as Notifications from 'expo-notifications';
 import { Slot } from 'expo-router';
+import { useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
-import migrations from '../../drizzle/migrations'; // Verify this path matches your folder structure
+import migrations from '../../drizzle/migrations';
+import '../../src/tasks/rolloverTask';
+import { defineRolloverTask, registerRolloverTask } from '../../src/tasks/rolloverTask';
 import { db } from '../db/client';
 
 Notifications.setNotificationHandler({
@@ -16,10 +19,23 @@ Notifications.setNotificationHandler({
   }),
 });
 
+defineRolloverTask();
+
 export default function RootLayout() {
-  // Drizzle handles tracking and execution safely on its own now.
-  // No more manual execSync strings needed!
   const { success, error } = useMigrations(db, migrations);
+
+  useEffect(() => {
+    async function initBackgroundJobs() {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status === 'granted') {
+        await registerRolloverTask(60);
+      }
+    }
+
+    if (success) {
+      initBackgroundJobs();
+    }
+  }, [success]);
 
   if (error) {
     return (

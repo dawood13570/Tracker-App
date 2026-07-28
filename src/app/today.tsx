@@ -12,9 +12,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import NewTaskModal from '../components/new-task';
 import { Task, TaskCard } from '../components/TaskCard';
 // engine math
-import { processRollover } from '../engine/rollover';
 //store
 import { useTaskStore } from "../store/taskStore";
+
+import { AppState } from 'react-native';
+import { insertTask } from '../db/queries';
+
+import * as TaskManager from 'expo-task-manager';
 
 export function DateHeader() {
   const currentDate = new Date().toLocaleDateString('en-GB', {
@@ -41,6 +45,19 @@ export default function AppDashboard() {
   useEffect(() => {
     loadTasks();
   }, []);
+
+  useEffect(() => {
+  loadTasks();
+
+  // Reload tasks from DB whenever app returns to foreground
+  const subscription = AppState.addEventListener('change', (nextAppState) => {
+    if (nextAppState === 'active') {
+      loadTasks();
+    }
+  });
+
+  return () => subscription.remove();
+}, []);
 
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
@@ -116,41 +133,44 @@ export default function AppDashboard() {
 
         <Pressable 
           style={[ styles.TestButton, { bottom: 35 + insets.bottom } ]} 
-          onPress={() => {
-            const todayStr = selectedDate; 
-            const yesterdayStr = '2026-07-25';
-            const staleDateStr = '2026-07-20';
-
-            const testCases = [
-              { id: 101, title: '1. Standard Yesterday Task', isCompleted: false, rolloverEnabled: true, scheduledDate: yesterdayStr, procrastinationCount: 0 },
-              { id: 102, title: '2. Rollover Disabled', isCompleted: false, rolloverEnabled: false, scheduledDate: yesterdayStr, procrastinationCount: 0 },
-              { id: 103, title: '3. Completed Task', isCompleted: true, rolloverEnabled: true, scheduledDate: yesterdayStr, procrastinationCount: 0 },
-              { id: 104, title: '4. Already Today', isCompleted: false, rolloverEnabled: true, scheduledDate: todayStr, procrastinationCount: 0 },
-              { id: 105, title: '5. Stale Task (5 days old)', isCompleted: false, rolloverEnabled: true, scheduledDate: staleDateStr, procrastinationCount: 3 },
-            ];
-
-            const mutations = processRollover(testCases, todayStr);
-
-            console.log('\n================ ROLLOVER LOGIC TEST ================');
-            console.log('Total Input Tasks:', testCases.length);
-            console.log('Mutations Produced (Expected: 2):', mutations.length);
-            console.log('Detailed Mutations:', JSON.stringify(mutations, null, 2));
-            console.log('=====================================================\n');
+          onPress={async () => {
+            await insertTask({
+              title: 'Test Past Rollover Task',
+              type: 'Simple',
+              priority: 'High',
+              isCompleted: false,
+              scheduledDate: '2026-07-20', // Stale date
+              rolloverEnabled: true,
+            });
+            console.log('Stale task inserted!');
+            loadTasks(); // Refresh your Zustand store so it reflects in UI
           }}
         >
-          <Text style={{ textAlign: 'center', color: '#f8f5f5' }}>Log 5 Tests</Text>
+          <Text style={{ textAlign: 'center', color: '#f8f5f5' }}>Seed Stale Task</Text>
         </Pressable>
 
         <Pressable 
-          onPress={() => {setEditingTask(null);
-                         taskSheetRef.current?.expand();}}
-          style={({ pressed }) => [
-            styles.buttonStuff, 
-            { backgroundColor: pressed ? "#155b76" : "#1c8db9", bottom: 35 + insets.bottom }
-          ]}
-        >
-          <Text style={styles.buttonText}>+</Text>
-        </Pressable>
+  style={[ styles.TestButton, { bottom: 105 + insets.bottom, backgroundColor: '#0055ff' } ]} 
+  onPress={async () => {
+    console.log('Manually executing rollover task logic...');
+    // This executes the TaskManager function directly in development
+    await TaskManager.getRegisteredTasksAsync(); 
+    // Or directly run the task logic function if exported!
+  }}
+>
+  <Text style={{ color: '#fff', textAlign: 'center', fontSize: 12 }}>Run Background Job</Text>
+</Pressable>
+
+                <Pressable 
+                  onPress={() => {setEditingTask(null);
+                                taskSheetRef.current?.expand();}}
+                  style={({ pressed }) => [
+                    styles.buttonStuff, 
+                    { backgroundColor: pressed ? "#155b76" : "#1c8db9", bottom: 35 + insets.bottom }
+                  ]}
+                >
+                  <Text style={styles.buttonText}>+</Text>
+                </Pressable>
 
         <NewTaskModal sheetRef={taskSheetRef} onTaskCreated={() => loadTasks()} taskToEdit={editingTask} onClose={() => setEditingTask(null)} />
       </SafeAreaView> 
