@@ -167,12 +167,12 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 
 **Note**: no status field exists (schema stays 2-state: isCompleted boolean only — decided 2026-07-18). "Skipped" isn't a stored state — a task that isn't rolled forward just keeps its original scheduledDate and naturally stops appearing on Today once the day passes. There's only one kind of mutation: roll forward. Everything else is simply left untouched.
 
-- [ ] 3.2.1 — Write `processRollover(tasks, today)` in `/engine/rollover.ts`
-- [ ] 3.2.2 — It takes an array of yesterday's tasks and returns an array of mutations (only rollover tasks produce a mutation; everything else produces none)
-- [ ] 3.2.3 — Rule: `isCompleted === false + rolloverEnabled` + Medium/High priority → mutation: `scheduledDate` = today, `procrastinationCount` + 1
-- [ ] 3.2.4 — Rule: `isCompleted === false` + (`rolloverEnabled === false` OR priority is Low) → no mutation, left as-is on its original date
-- [ ] 3.2.5 — Rule: `isCompleted === true` → no mutation
-- [ ] 3.2.6 — Write 5 manual test cases (plain JS objects as input, assert on output). No test framework needed yet, just `console.log` and check.
+- [x] 3.2.1 — Write `processRollover(tasks, today)` in `/engine/rollover.ts`
+- [x] 3.2.2 — It takes an array of yesterday's tasks and returns an array of mutations (only rollover tasks produce a mutation; everything else produces none)
+- [x] 3.2.3 — Rule: `isCompleted === false` + `rolloverEnabled === true` → mutation: `scheduledDate` = today, `procrastinationCount` + 1 (priority irrelevant here — see decisions log, 2026-07-19)
+- [x] 3.2.4 — Rule: `isCompleted === false` + `rolloverEnabled === false` → no mutation, left as-is on its original date
+- [x] 3.2.5 — Rule: `isCompleted === true` → no mutation
+- [x] 3.2.6 — Write 5 manual test cases (plain JS objects as input, assert on output). No test framework needed yet, just `console.log` and check.
 
 ---
 
@@ -208,7 +208,7 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 - [ ] 3.5.1 — Confirm priority field is in schema and form (done since Milestone 2)
 - [ ] 3.5.2 — High priority tasks: stronger visual treatment on TaskCard (confirm it's clearly distinct)
 - [ ] 3.5.3 — Today screen sorts: `High` priority first, then `Medium`, then `Low`, then `Done` at bottom
-- [ ] 3.5.4 — Confirm rollover logic correctly handles low priority differently (3.2.4)
+- [ ] 3.5.4 — ~~Confirm rollover handles Low priority differently~~ N/A — rollover only checks `rolloverEnabled` now, not priority (2026-07-19). Priority's impact lives in sort order (3.5.3) and, later, Evolving Priority escalation.
 - [ ] 3.5.5 — *(Not started — open questions in VISION.md)* Evolving Priority System: Low → Medium → High as procrastination_count climbs, toggleable, with the archive-other-low-tasks behaviour
 
 ---

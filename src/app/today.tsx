@@ -1,12 +1,19 @@
 // app/today.tsx
+
+// external ui packages
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList } from "@shopify/flash-list";
+//system context
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View, } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+// custom Components:
 import NewTaskModal from '../components/new-task';
 import { Task, TaskCard } from '../components/TaskCard';
+// engine math
+import { processRollover } from '../engine/rollover';
+//store
 import { useTaskStore } from "../store/taskStore";
 
 export function DateHeader() {
@@ -107,15 +114,31 @@ export default function AppDashboard() {
           )}
         </View>
 
-        <Pressable style={[ styles.procrastinationTaskButton, {bottom: 35 + insets.bottom} ]} onPress={() => addTask({
-          title: "Test procrastinated task",
-          type: 'Simple',
-          priority: "Medium",
-          rolloverEnabled: true,
-          scheduledDate: selectedDate,
-          procrastinationCount: 10,
-        })}>
-          <Text style= {{textAlign:'center', color: "#f8f5f5",}}>Insert test task</Text>
+        <Pressable 
+          style={[ styles.TestButton, { bottom: 35 + insets.bottom } ]} 
+          onPress={() => {
+            const todayStr = selectedDate; 
+            const yesterdayStr = '2026-07-25';
+            const staleDateStr = '2026-07-20';
+
+            const testCases = [
+              { id: 101, title: '1. Standard Yesterday Task', isCompleted: false, rolloverEnabled: true, scheduledDate: yesterdayStr, procrastinationCount: 0 },
+              { id: 102, title: '2. Rollover Disabled', isCompleted: false, rolloverEnabled: false, scheduledDate: yesterdayStr, procrastinationCount: 0 },
+              { id: 103, title: '3. Completed Task', isCompleted: true, rolloverEnabled: true, scheduledDate: yesterdayStr, procrastinationCount: 0 },
+              { id: 104, title: '4. Already Today', isCompleted: false, rolloverEnabled: true, scheduledDate: todayStr, procrastinationCount: 0 },
+              { id: 105, title: '5. Stale Task (5 days old)', isCompleted: false, rolloverEnabled: true, scheduledDate: staleDateStr, procrastinationCount: 3 },
+            ];
+
+            const mutations = processRollover(testCases, todayStr);
+
+            console.log('\n================ ROLLOVER LOGIC TEST ================');
+            console.log('Total Input Tasks:', testCases.length);
+            console.log('Mutations Produced (Expected: 2):', mutations.length);
+            console.log('Detailed Mutations:', JSON.stringify(mutations, null, 2));
+            console.log('=====================================================\n');
+          }}
+        >
+          <Text style={{ textAlign: 'center', color: '#f8f5f5' }}>Log 5 Tests</Text>
         </Pressable>
 
         <Pressable 
@@ -210,7 +233,7 @@ emptyStateSubtext: {
   marginTop: 6,
   textAlign: 'center',
 },
-procrastinationTaskButton: {
+TestButton: {
   position: "absolute",
   bottom: 35,
   left: 25,

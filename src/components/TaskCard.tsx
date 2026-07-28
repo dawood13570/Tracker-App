@@ -3,7 +3,7 @@ import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'reac
 import { ProcrastinationBadge } from './ProcrastinationBadge';
 
 export interface Task {
-  id: number; // Changed from string to number to match SQLite autoincrement ID keys
+  id: number;
   title: string;
   type: 'Simple' | 'Progression' | 'Hybrid';
   priority: 'Low' | 'Medium' | 'High';
