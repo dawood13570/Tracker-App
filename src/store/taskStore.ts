@@ -1,7 +1,6 @@
-import { eq, InferSelectModel } from 'drizzle-orm';
+import { InferSelectModel } from 'drizzle-orm';
 import { create } from 'zustand';
-import { db } from '../db/client';
-import { deleteTask, insertTask, NewTask, toggleTaskStatus, updateTask, UpdateTask as UpdateTaskQuery } from '../db/queries';
+import { deleteTask, getTaskByDate, insertTask, NewTask, toggleTaskStatus, updateTask, UpdateTask as UpdateTaskQuery } from '../db/queries';
 import { tasks as tasksTable } from '../db/schema';
 import { getLocalDateString } from '../utils/date';
 
@@ -37,10 +36,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         set({ isLoading: true });
 
         try {
-            const result = await db
-                .select()
-                .from(tasksTable)
-                .where(eq(tasksTable.scheduledDate, targetDate));
+            const result = await getTaskByDate(targetDate);
             
             set({ tasks: result });
         } catch (error) {
@@ -79,7 +75,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                 }));
             }
         } catch (error) {
-            console.error("Failed to update task ${id}:", error)
+            console.error(`Failed to update task ${id}:`, error)
         }
     },
 
@@ -95,7 +91,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                 }));
         }
     } catch (error) {
-        console.error("Failed to toggle task ${id}", error);
+        console.error(`Failed to toggle task ${id}`, error);
       }
     },
 
@@ -107,7 +103,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                 tasks: state.tasks.filter((task) => task.id !== id),
             }));
         } catch (error) {
-            console.error("Failed to remove task ${id}:", error);
+            console.error(`Failed to remove task ${id}:`, error);
         }
     },   
 }));

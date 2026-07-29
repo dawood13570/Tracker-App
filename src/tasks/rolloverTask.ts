@@ -8,24 +8,18 @@ import { getLocalDateString } from '../utils/date';
 
 export const BACKGROUND_ROLLOVER_TASK = 'MIDNIGHT_ROLLOVER';
 
-export function defineRolloverTask() {
-  if (TaskManager.isTaskDefined(BACKGROUND_ROLLOVER_TASK)) {
-    return;
+export async function runRolloverNow(){
+  const todayStr = getLocalDateString();
+  console.log('--- [ROLLOVER RUNNING] --- Local Today:', todayStr);
+
+  const candidates = await getRolloverCandidates(todayStr);
+  console.log('Candidates in DB:', candidates.length);
+
+  if (candidates.length === 0) {
+    return BackgroundFetch.BackgroundFetchResult.NoData;
   }
 
-  TaskManager.defineTask(BACKGROUND_ROLLOVER_TASK, async () => {
-    try {
-      const todayStr = getLocalDateString();
-      console.log('--- [ROLLOVER RUNNING] --- Local Today:', todayStr);
-
-      const candidates = await getRolloverCandidates(todayStr);
-      console.log('Candidates in DB:', candidates.length);
-
-      if (candidates.length === 0) {
-        return BackgroundFetch.BackgroundFetchResult.NoData;
-      }
-
-      const inputs = candidates.map((t) => ({
+  const inputs = candidates.map((t) => ({
         id: t.id,
         isCompleted: Boolean(t.isCompleted),
         rolloverEnabled: Boolean(t.rolloverEnabled),
@@ -33,7 +27,7 @@ export function defineRolloverTask() {
         procrastinationCount: t.procrastinationCount,
       }));
 
-      const mutations = processRollover(inputs, todayStr);
+  const mutations = processRollover(inputs, todayStr);
       console.log('Mutations to apply:', mutations.length);
 
       if (mutations.length > 0) {
@@ -50,7 +44,18 @@ export function defineRolloverTask() {
         return BackgroundFetch.BackgroundFetchResult.NewData;
       }
 
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+    return BackgroundFetch.BackgroundFetchResult.NoData;
+
+}
+
+export function defineRolloverTask() {
+  if (TaskManager.isTaskDefined(BACKGROUND_ROLLOVER_TASK)) {
+    return;
+  }
+
+  TaskManager.defineTask(BACKGROUND_ROLLOVER_TASK, async () => {
+    try {
+      return await runRolloverNow()
     } catch (error) {
       console.error('[BackgroundFetch] Failed:', error);
       return BackgroundFetch.BackgroundFetchResult.Failed;

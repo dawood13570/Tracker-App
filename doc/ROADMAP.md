@@ -180,12 +180,12 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 **Done when:** App runs the rollover at midnight without being open.
 
 - [x] 3.3.1 — Install `expo-task-manager` and `expo-background-fetch`
-- [ ] 3.3.2 — Register a background task named `MIDNIGHT_ROLLOVER`
-- [ ] 3.3.3 — Inside the task: fetch yesterday's tasks from DB, run `processRollover`, apply mutations
-- [ ] 3.3.4 — Schedule the task to run once daily (as close to midnight as Android allows)
-- [ ] 3.3.5 — Test by temporarily setting the trigger to 1 minute and confirming tasks move
-- [ ] 3.3.6 — Send a local notification after rollover: "Good morning. X tasks carried over."
-- [ ] 3.3.7 — Restore trigger to daily / midnight after testing
+- [x] 3.3.2 — Register a background task named `MIDNIGHT_ROLLOVER`
+- [x] 3.3.3 — Inside the task: fetch yesterday's tasks from DB, run `processRollover`, apply mutations
+- [x] 3.3.4 — Schedule the task to run once daily (as close to midnight as Android allows)
+- [x] 3.3.5 — Test by temporarily setting the trigger to 1 minute and confirming tasks move
+- [x] 3.3.6 — Send a local notification after rollover: "Good morning. X tasks carried over."
+- [x] 3.3.7 — Restore trigger to daily / midnight after testing
 
 ---
 

@@ -5,7 +5,7 @@ import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList } from "@shopify/flash-list";
 //system context
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View, } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, StatusBar, StyleSheet, Text, View, } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 // custom Components:
@@ -15,8 +15,8 @@ import { Task, TaskCard } from '../components/TaskCard';
 //store
 import { useTaskStore } from "../store/taskStore";
 
-import { AppState } from 'react-native';
 import { insertTask } from '../db/queries';
+import { runRolloverNow } from '../tasks/rolloverTask';
 
 import * as TaskManager from 'expo-task-manager';
 
@@ -43,21 +43,21 @@ export default function AppDashboard() {
   const { tasks, isLoading, loadTasks, toggleTask, removeTask, addTask, selectedDate } = useTaskStore();
 
   useEffect(() => {
-    loadTasks();
+    const catchUpAndLoad = async () => {
+      await runRolloverNow();
+      await loadTasks();
+    };
+
+    catchUpAndLoad();
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        loadTasks();
+      }
+    });
+
+    return () => subscription.remove();
   }, []);
-
-  useEffect(() => {
-  loadTasks();
-
-  // Reload tasks from DB whenever app returns to foreground
-  const subscription = AppState.addEventListener('change', (nextAppState) => {
-    if (nextAppState === 'active') {
-      loadTasks();
-    }
-  });
-
-  return () => subscription.remove();
-}, []);
 
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
@@ -68,11 +68,9 @@ export default function AppDashboard() {
     toggleTask(id);
   }
 
-
   const handleDeleteTask = (id: number) => {
     removeTask(id);
   }
-
 
   const summary = useMemo(() => {
     return tasks.reduce((acc, task) => {
