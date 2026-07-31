@@ -192,20 +192,19 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 3.4 — Recurrence Engine
 **Done when:** Completing a recurring task automatically creates the next occurrence.
 
-- [ ] 3.4.1 — Install `date-fns` for date arithmetic
-- [ ] 3.4.2 — Write `getNextOccurrence(task, fromDate)` in `/engine/recurrence.ts`
-- [ ] 3.4.3 — Handle daily: next day
-- [ ] 3.4.4 — Handle every_n_days: fromDate + N
-- [ ] 3.4.5 — Handle weekly with specific days: find next matching weekday
-- [ ] 3.4.6 — Hook into the store's `toggleTask`: when a recurring task is marked done, call `getNextOccurrence` and insert a new task row (clone of the current with new date, `isCompleted: false`, `procrastinationCount: 0`)
-- [ ] 3.4.7 — Confirm the original completed task is untouched in DB
+- [x] 3.4.1 — Install `date-fns` for date arithmetic
+- [x] 3.4.2 — Write `getNextOccurrence(task, fromDate)` in `/engine/recurrence.ts`
+- [x] 3.4.3 — Handle daily: next day
+- [x] 3.4.4 — Handle every_n_days: fromDate + N
+- [x] 3.4.5 — Handle weekly with specific days: find next matching weekday
+- [x] 3.4.6 — Hook into the store's `toggleTask`: when a recurring task is marked done, call `getNextOccurrence` and insert a new task row (clone of the current with new date, `isCompleted: false`, `procrastinationCount: 0`)
+- [x] 3.4.7 — Confirm the original completed task is untouched in DB
 
 ---
-
 ### 3.5 — Priority System
 **Done when:** Priority is assignable, visually meaningful, and affects rollover behaviour.
 
-- [ ] 3.5.1 — Confirm priority field is in schema and form (done since Milestone 2)
+- [x] 3.5.1 — Confirm priority field is in schema and form (done since Milestone 2)
 - [ ] 3.5.2 — High priority tasks: stronger visual treatment on TaskCard (confirm it's clearly distinct)
 - [ ] 3.5.3 — Today screen sorts: `High` priority first, then `Medium`, then `Low`, then `Done` at bottom
 - [ ] 3.5.4 — ~~Confirm rollover handles Low priority differently~~ N/A — rollover only checks `rolloverEnabled` now, not priority (2026-07-19). Priority's impact lives in sort order (3.5.3) and, later, Evolving Priority escalation.

@@ -28,7 +28,7 @@ export default function RootLayout() {
     async function initBackgroundJobs() {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status === 'granted') {
-        await registerRolloverTask(60);
+        await registerRolloverTask(60 * 60 * 24);
       }
     }
 

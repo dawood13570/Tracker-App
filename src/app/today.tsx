@@ -15,10 +15,8 @@ import { Task, TaskCard } from '../components/TaskCard';
 //store
 import { useTaskStore } from "../store/taskStore";
 
-import { insertTask } from '../db/queries';
 import { runRolloverNow } from '../tasks/rolloverTask';
 
-import * as TaskManager from 'expo-task-manager';
 
 export function DateHeader() {
   const currentDate = new Date().toLocaleDateString('en-GB', {
@@ -128,36 +126,6 @@ export default function AppDashboard() {
             />
           )}
         </View>
-
-        <Pressable 
-          style={[ styles.TestButton, { bottom: 35 + insets.bottom } ]} 
-          onPress={async () => {
-            await insertTask({
-              title: 'Test Past Rollover Task',
-              type: 'Simple',
-              priority: 'High',
-              isCompleted: false,
-              scheduledDate: '2026-07-20', // Stale date
-              rolloverEnabled: true,
-            });
-            console.log('Stale task inserted!');
-            loadTasks(); // Refresh your Zustand store so it reflects in UI
-          }}
-        >
-          <Text style={{ textAlign: 'center', color: '#f8f5f5' }}>Seed Stale Task</Text>
-        </Pressable>
-
-        <Pressable 
-  style={[ styles.TestButton, { bottom: 105 + insets.bottom, backgroundColor: '#0055ff' } ]} 
-  onPress={async () => {
-    console.log('Manually executing rollover task logic...');
-    // This executes the TaskManager function directly in development
-    await TaskManager.getRegisteredTasksAsync(); 
-    // Or directly run the task logic function if exported!
-  }}
->
-  <Text style={{ color: '#fff', textAlign: 'center', fontSize: 12 }}>Run Background Job</Text>
-</Pressable>
 
                 <Pressable 
                   onPress={() => {setEditingTask(null);

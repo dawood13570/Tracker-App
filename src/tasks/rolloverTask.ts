@@ -10,10 +10,10 @@ export const BACKGROUND_ROLLOVER_TASK = 'MIDNIGHT_ROLLOVER';
 
 export async function runRolloverNow(){
   const todayStr = getLocalDateString();
-  console.log('--- [ROLLOVER RUNNING] --- Local Today:', todayStr);
+  //console.log('--- [ROLLOVER RUNNING] --- Local Today:', todayStr);
 
   const candidates = await getRolloverCandidates(todayStr);
-  console.log('Candidates in DB:', candidates.length);
+  //console.log('Candidates in DB:', candidates.length);
 
   if (candidates.length === 0) {
     return BackgroundFetch.BackgroundFetchResult.NoData;

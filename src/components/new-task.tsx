@@ -17,16 +17,29 @@ interface NewTaskModalProps {
   onClose?: () => void;
 }
 
+const RECURRENCE_OPTIONS = [
+  { value: 'none', label: 'None'},
+  { value: 'daily', label: 'Daily'},
+  { value: 'every_n_days', label: 'N Days'},
+  { value: 'weekly', label: 'Weekly'},
+] as const;
 
+const DAYS_OF_WEEK = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
+const TASK_TYPES = ['Simple', 'Progression', 'Hybrid'] as const;
+const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'] as const;
 
 export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onClose }: NewTaskModalProps) {
   const [title, setTitle] = useState('');
-  const [type, setType] = useState('');
-  const [priority, setPriority] = useState('');
+  const [type, setType] = useState<'Simple' | "Progression" | "Hybrid">("Simple"); 
+  const [priority, setPriority] = useState<"Low" | "Medium" | "High">("Low");
   const [targetValue, setTargetValue] = useState('');
   const [unit, setUnit] = useState('');
   const [allowRollover, setallowRollover] = useState(false);
+
+  const [recurrenceType, setRecurrenceType] = useState<'none' | 'daily' | 'every_n_days' | 'weekly'>('none');
+  const [recurrenceInterval, setRecurrenceInterval] = useState('');
+  const [recurrenceDaysOfWeek, setRecurrenceDaysOfWeek] = useState<string[]>([]);
 
   const { addTask, updateTask, selectedDate } = useTaskStore();
 
@@ -34,8 +47,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
 
-  const snapPoints = useMemo(() => ["80%",'35%'], []); // Bumped snapPoints to accommodate list growth
-
+  const snapPoints = useMemo(() => ["80%",'35%'], []);
   // Add subtask to our draft array
   const handleAddSubtask = () => {
     if (subtaskInput.trim() === '') return;
@@ -55,19 +67,26 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     setSubtasks((prev) => prev.filter(sub => sub.id !== id));
   };
 
+  const toggleRecurrenceDay = (day: string) => {
+    setRecurrenceDaysOfWeek((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
+
   // Reset all state variables
   const resetForm = () => {
     setTitle('');
-    setType('');
-    setPriority('');
+    setType('Simple');
+    setPriority('Low');
     setTargetValue('');
     setUnit('');
     setallowRollover(false);
+    setRecurrenceType('none');
+    setRecurrenceInterval('');
+    setRecurrenceDaysOfWeek([]);
     setSubtasks([]);
     setSubtaskInput('');
   };
-
-
 
   useEffect(() => {
     if (taskToEdit) {
@@ -78,6 +97,18 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
       setTargetValue(taskToEdit.totalProgress ? String(taskToEdit.totalProgress) : '');
       setUnit(taskToEdit.progressUnit ?? '');
+
+      setRecurrenceType((taskToEdit.recurrenceType as typeof recurrenceType) ?? 'none');
+      setRecurrenceInterval(
+        taskToEdit.recurrenceInterval ? String(taskToEdit.recurrenceInterval) : ''
+      );
+      try {
+        setRecurrenceDaysOfWeek(
+          taskToEdit.recurrenceDaysOfWeek ? JSON.parse(taskToEdit.recurrenceDaysOfWeek) : []
+        );
+      } catch {
+        setRecurrenceDaysOfWeek([]);
+      }
     } else {
       resetForm();
     }
@@ -108,7 +139,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
         <View style={styles.row}>
           <Text style={styles.label}>Type:</Text>
           <View style={styles.selectorGroup}>
-            {['Simple', 'Progression', 'Hybrid'].map((t) => {
+            {TASK_TYPES.map((t) => {
               const isSelected = type === t;
               return (
                 <Pressable 
@@ -128,7 +159,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
         <View style={styles.row}>
           <Text style={styles.label}>Priority:</Text>
           <View style={styles.selectorGroup}>
-            {['Low', 'Medium', 'High'].map((p) => {
+            {PRIORITY_OPTIONS.map((p) => {
               const isSelected = priority === p;
 
               const priorityStyles: Record<string, {item: any; text:any }> = {
@@ -155,6 +186,66 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
           <Text style={styles.label}>Rollover Task:</Text>
           <Switch value={allowRollover} onValueChange={setallowRollover} />
         </View>
+
+        <View style={styles.row}>
+          <Text style={styles.label}>Repeats:</Text>
+          <View style={[styles.selectorGroup,styles.recurrenceSelectorGroup]}>
+            {RECURRENCE_OPTIONS.map(({ value, label}) => {
+              const isSelected = recurrenceType === value;
+              return (
+                <Pressable
+                key={value}
+                style={[styles.selectorItem, isSelected && styles.selectedItem]}
+                onPress={() => setRecurrenceType(value)}
+                >
+                  <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
+                    {label}
+                    </Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        </View>
+
+        {recurrenceType === 'every_n_days' && (
+          <View style={styles.dynamicContainer}>
+            <View style={styles.row}>
+              <Text style={styles.label}>Repeat every:</Text>
+              <BottomSheetTextInput
+              style={styles.input}
+              value={recurrenceInterval}
+              onChangeText={setRecurrenceInterval}
+              placeholder='3'
+              keyboardType='numeric'
+              placeholderTextColor="#b0b0b0"
+              />
+              <Text style={styles.label}>days</Text>
+            </View>
+          </View>
+        )}
+
+
+        {recurrenceType === 'weekly' && (
+          <View style={styles.dynamicContainer}>
+            <Text style={styles.subSectionTitle}>Repeat on:</Text>
+            <View style={styles.dayOfWeekRow}>
+              {DAYS_OF_WEEK.map((day) => {
+                const isSelected = recurrenceDaysOfWeek.includes(day);
+                return (
+                  <Pressable
+                   key={day}
+                   style={[styles.dayPill, isSelected && styles.selectedItem]}
+                   onPress={() => toggleRecurrenceDay(day)}
+                  >
+                    <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
+                      {day.charAt(0).toUpperCase() + day.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* PROGRESSION TASK INPUTS */}
         {type === 'Progression' && (
@@ -230,12 +321,12 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                 Alert.alert('Title required', 'Please enter a task title before saving');
                 return;
               }
-              if (!type) {
-                Alert.alert("Type required", 'Please choose Simple, Progression, or Hybrid');
+              if (recurrenceType === 'every_n_days' && (!recurrenceInterval || Number(recurrenceInterval) <= 0)) {
+                Alert.alert('Interval required', 'Please enter how many days between repeats.');
                 return;
               }
-              if (!priority) {
-                Alert.alert('Priority required', 'Please choose a priority.');
+              if (recurrenceType === 'weekly' && recurrenceDaysOfWeek.length === 0) {
+                Alert.alert('Days required', 'Please select at least one day of the week.');
                 return;
               }
               try{
@@ -244,6 +335,9 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                 type: type as "Simple" | "Hybrid" | "Progression" ,
                 priority: priority as "Low" | "Medium" | "High",
                 rolloverEnabled: allowRollover,
+                recurrenceType,
+                recurrenceInterval: recurrenceType === 'every_n_days' ? (Number(recurrenceInterval) || null) : null,
+                recurrenceDaysOfWeek: recurrenceType === 'weekly' ? JSON.stringify(recurrenceDaysOfWeek) : null,
                 ...(type === 'Progression' && {
                    totalProgress: Number(targetValue),
                   progressUnit: unit 
@@ -318,6 +412,11 @@ const styles = StyleSheet.create({
   },
   selectorGroup: {
     flexDirection: 'row',
+  },
+  recurrenceSelectorGroup: {
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    flex: 1,
   },
   selectorItem: {
     paddingHorizontal: 12,
@@ -402,6 +501,20 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#dbdbdb',
+  },
+  dayOfWeekRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  dayPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 16,
+    backgroundColor: '#f5f5f5',
+    marginRight: 6,
+    marginBottom: 6,
   },
   subSectionTitle: {
     fontSize: 15,

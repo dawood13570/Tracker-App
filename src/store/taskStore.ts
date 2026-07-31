@@ -1,3 +1,4 @@
+import { getNextOccurrence } from '@/engine/recurrence';
 import { InferSelectModel } from 'drizzle-orm';
 import { create } from 'zustand';
 import { deleteTask, getTaskByDate, insertTask, NewTask, toggleTaskStatus, updateTask, UpdateTask as UpdateTaskQuery } from '../db/queries';
@@ -89,6 +90,31 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                         task.id === id ? updated : task
                     ),
                 }));
+
+                if (updated.isCompleted && updated.recurrenceType !== 'none') {
+                    const nextDate = getNextOccurrence({
+                        ...updated,
+                        recurrenceType:updated.recurrenceType as 'daily' | 'every_n_days' | 'weekly', }, new Date());
+
+                    if (nextDate) {
+                        const {
+                            id: _id,
+                            createdAt: _createdAt,
+                            updatedAt: _updatedAt,
+                            ...taskData
+                        } = updated;
+
+                        const newTaskPayload: NewTask = {
+                            ...(taskData as NewTask),
+                            scheduledDate: getLocalDateString(nextDate),
+                            isCompleted: false,
+                            procrastinationCount: 0,
+                            currentProgress: 0,
+                            subtasksCompleted: 0,
+                        };
+                        await get().addTask(newTaskPayload)
+                    }
+                }
         }
     } catch (error) {
         console.error(`Failed to toggle task ${id}`, error);

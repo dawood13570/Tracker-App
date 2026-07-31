@@ -17,6 +17,9 @@ export interface Task {
   subtasksTotal?: number | null;
   procrastinationCount?: number | null;
   rolloverEnabled?: boolean | null;
+  recurrenceType? : 'none' | 'daily' | 'every_n_days' | 'weekly' | string | null;
+  recurrenceInterval?: number | null;
+  recurrenceDaysOfWeek?: string | null;
 }
 
 interface TaskCardProps {

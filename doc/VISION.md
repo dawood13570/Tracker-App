@@ -249,6 +249,15 @@ Counter (3.1) both being live first.*
 ## Future Ideas Parking Lot
 > Dump ideas here. No idea is too rough. Date them so you know when you thought of it.
 
+- **2026-07-20** — Hybrid subtasks with mixed types, not just checkboxes.
+  Came from a gym example: a Hybrid task's subtasks might not all be simple
+  yes/no items — "bench: 3 sets" behaves like a small Progression task in its
+  own right, not a checkbox. Depends on the already-known gap that Hybrid
+  currently only stores `subtasksTotal`/`subtasksCompleted` as counts, not
+  real titled subtask rows (flagged after Milestone 2.5). A real `subtasks`
+  table would need its own `type` per row, not just per parent task. Revisit
+  once that table gets built — don't design it in isolation from that work.
+
 - **2026-07-07** — App/website usage tracking. Track how long spent in apps.
   correlate with task completion rates. Deferred to post-MVP.
 
