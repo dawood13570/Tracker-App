@@ -184,28 +184,56 @@ Feel: like saving up vacation days.
 
 ---
 
-### IDEA: Evolving Priority System [Milestone 3.5 candidate]
-*Added: 2026-08-07, expanded: 2026-07-18*
+### Evolving Priority System [Milestone 3.5.5 — built 2026-07-21]
+*Added: 2026-08-07, expanded: 2026-07-18, decided: 2026-07-21*
 
 A Low priority task that keeps getting procrastinated on should gradually raise
 its own priority — Low → Medium → High — the longer it sits undone. At the
 extreme, a low-turned-high task can push other Low priority tasks for that day
 into archive/delayed status until it's done.
 
-**Toggleable, not forced:**
-- Global setting, off or on by default (TBD).
-- Per-task override — same pattern as the surplus modes above.
+**Decided and built:**
+- **Threshold:** 4 days of `procrastination_count` per step — Low → Medium at 4,
+  Medium → High at 8. Applies uniformly regardless of starting priority, not
+  just Low — a neglected Medium task can climb to High too. The mechanism
+  (procrastination count crossing a threshold) has no natural reason to
+  special-case one tier. (`getEffectivePriority`, `src/utils/priority.ts`)
+- **Archive duration:** persists every day until the evolved task is completed,
+  not just the day it evolved. Needs no explicit "how long has this been
+  archived" tracking — it's recomputed fresh every render from live
+  `procrastinationCount`, so it naturally stays true until the evolved task's
+  count resets to 0 on completion. (`shouldArchiveTask`, same file)
+- **Archived tasks' `procrastination_count`:** keeps climbing normally. Rollover
+  already ignores priority when incrementing it (decided 2026-07-19) —
+  freezing it here would mean re-coupling something deliberately decoupled,
+  and "archived" isn't a stored field rollover could even check. This is also
+  self-correcting: a buried task eventually crosses its own threshold and
+  evolves out of hiding on its own.
+- **Computed, not stored.** `task.priority` in the DB always stays exactly what
+  the user set. `getEffectivePriority` computes the *effective* priority live,
+  used only for sorting and display. Same "compute it, don't store it" pattern
+  as skip (rollover) and archive — three instances of the same shape now, not
+  a coincidence. Turning the feature off requires no data migration, since
+  nothing was ever overwritten.
+- **Global toggle:** `evolvingPriorityEnabled` in `src/store/useStore.ts`,
+  default `true`. Gates both escalation and archiving at the call site
+  (`today.tsx`, `TaskCard.tsx`) — the engine functions themselves stay
+  toggle-agnostic, pure math.
 
-**Open questions to resolve before building:**
-- Threshold: how many days of `procrastination_count` before Low → Medium?
-  Medium → High?
-- Does "archive other low tasks" apply only that day, or does it keep affecting
-  future days until the evolved task is done?
-- Do archived tasks' own `procrastination_count` freeze, or keep climbing while
-  archived?
+**Deferred, not forgotten:**
+- **Persisting the toggle** across app restarts (currently in-memory only,
+  resets to `true` on every launch) and **a real settings UI** to flip it both
+  belong to Milestone 7.4 (Global settings screen) — building that screen now
+  would jump ahead of the roadmap's own sequencing. What exists now is the
+  underlying mechanism the settings screen will eventually control.
+- **Per-task override** ("same pattern as the surplus modes") is not built —
+  it would need a new schema column (e.g. `evolvingPriorityEnabled` per task),
+  which is a real schema decision on the same weight as the `status` field
+  question earlier, and wasn't explicitly signed off on. Revisit if a global
+  on/off ends up feeling too blunt in practice.
 
-*Status: Not yet built. Depends on the Priority System (3.5) and Procrastination
-Counter (3.1) both being live first.*
+*Status: Core mechanism built and wired into Today's sort, display, and
+filtering. Toggle UI and per-task override intentionally not yet built.*
 
 ---
 

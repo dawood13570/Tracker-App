@@ -1,6 +1,7 @@
 // src/components/TaskCard.tsx
-import { getEffectivePriority } from '@/utils/priority';
+import { getEffectivePriority } from '@/engine/priority';
 import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useStore } from '../store/useStore';
 import { ProcrastinationBadge } from './ProcrastinationBadge';
 
 export interface Task {
@@ -31,10 +32,14 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, onToggle, onEdit, onDelete }: TaskCardProps) {
-    const effectivePriority = getEffectivePriority({
-      priority: task.priority,
-      procrastinationCount: task.procrastinationCount ?? 0,
-    });
+    const { evolvingPriorityEnabled } = useStore();
+
+    const effectivePriority = evolvingPriorityEnabled
+      ? getEffectivePriority({
+          priority: task.priority,
+          procrastinationCount: task.procrastinationCount ?? 0,
+        })
+      : task.priority;
 
     const progressRatio = task.totalProgress && task.totalProgress > 0 
       ? (task.currentProgress || 0) / task.totalProgress 

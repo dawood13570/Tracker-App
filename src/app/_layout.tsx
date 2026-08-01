@@ -5,8 +5,7 @@ import { Slot } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import migrations from '../../drizzle/migrations';
-import '../../src/tasks/rolloverTask';
-import { defineRolloverTask, registerRolloverTask } from '../../src/tasks/rolloverTask';
+import { registerRolloverTask } from '../../src/tasks/rolloverTask';
 import { db } from '../db/client';
 
 Notifications.setNotificationHandler({
@@ -18,8 +17,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-defineRolloverTask();
 
 export default function RootLayout() {
   const { success, error } = useMigrations(db, migrations);

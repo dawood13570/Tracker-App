@@ -1,6 +1,6 @@
 // app/today.tsx
 
-import { getEffectivePriority } from '@/utils/priority';
+import { getEffectivePriority, shouldArchiveTask } from '@/engine/priority';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList, FlashListRef } from "@shopify/flash-list";
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -10,6 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import NewTaskModal from '../components/new-task';
 import { Task, TaskCard } from '../components/TaskCard';
 import { useTaskStore } from "../store/taskStore";
+import { useStore } from '../store/useStore';
 import { runRolloverNow } from '../tasks/rolloverTask';
 
 const PRIORITY_WEIGHT: Record<string, number> = {
@@ -41,6 +42,7 @@ export default function AppDashboard() {
   const insets = useSafeAreaInsets();
 
   const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
+  const { evolvingPriorityEnabled } = useStore();
 
   useEffect(() => {
     const catchUpAndLoad = async () => {
@@ -65,7 +67,7 @@ export default function AppDashboard() {
   };
 
   const handleToggleTask = async (id: number) => {
-    const wasTopTask = sortedTasks[0]?.id === id;
+    const wasTopTask = visibleTasks[0]?.id === id;
 
     await toggleTask(id);
 
@@ -84,10 +86,12 @@ export default function AppDashboard() {
     return tasks.reduce((acc, task) => {
       acc.total++;
       acc.types[task.type] = (acc.types[task.type] || 0) + 1;
-      const effectivePriority = getEffectivePriority({
-        priority: task.priority,
-        procrastinationCount: task.procrastinationCount ?? 0,
-      });
+      const effectivePriority = evolvingPriorityEnabled
+        ? getEffectivePriority({
+            priority: task.priority,
+            procrastinationCount: task.procrastinationCount ?? 0,
+          })
+        : task.priority;
       acc.priorities[effectivePriority] = (acc.priorities[effectivePriority] || 0) + 1;
       if (task.isCompleted) acc.completed++; else acc.incomplete++;
       return acc;
@@ -98,7 +102,7 @@ export default function AppDashboard() {
       completed: 0, 
       incomplete: 0
     });
-  }, [tasks]);
+  }, [tasks, evolvingPriorityEnabled]);
 
   const sortedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => {
@@ -106,21 +110,43 @@ export default function AppDashboard() {
         return a.isCompleted ? 1 : -1;
       }
 
-      const effectiveA = getEffectivePriority({
-        priority: a.priority,
-        procrastinationCount: a.procrastinationCount ?? 0,
-      });
-      const effectiveB = getEffectivePriority({
-        priority: b.priority,
-        procrastinationCount: b.procrastinationCount ?? 0,
-      });
+      const effectiveA = evolvingPriorityEnabled
+        ? getEffectivePriority({ priority: a.priority, procrastinationCount: a.procrastinationCount ?? 0 })
+        : a.priority;
+      const effectiveB = evolvingPriorityEnabled
+        ? getEffectivePriority({ priority: b.priority, procrastinationCount: b.procrastinationCount ?? 0 })
+        : b.priority;
 
       const weightA = PRIORITY_WEIGHT[effectiveA] || 0;
       const weightB = PRIORITY_WEIGHT[effectiveB] || 0;
 
       return weightB - weightA;
     });
-  }, [tasks]);
+  }, [tasks, evolvingPriorityEnabled]);
+
+  const { visibleTasks, archivedCount } = useMemo(() => {
+    if (!evolvingPriorityEnabled) {
+      return { visibleTasks: sortedTasks, archivedCount: 0 };
+    }
+
+    const archiveInputs = tasks.map((t) => ({
+      id: t.id,
+      priority: t.priority,
+      procrastinationCount: t.procrastinationCount ?? 0,
+    }));
+
+    const visible = sortedTasks.filter((t) => {
+      if (t.isCompleted) return true; // never archive already-completed tasks
+
+      const input = { id: t.id, priority: t.priority, procrastinationCount: t.procrastinationCount ?? 0 };
+      return !shouldArchiveTask(input, archiveInputs);
+    });
+
+    return {
+      visibleTasks: visible,
+      archivedCount: sortedTasks.length - visible.length,
+    };
+  }, [sortedTasks, tasks, evolvingPriorityEnabled]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -148,20 +174,29 @@ export default function AppDashboard() {
           {isLoading ? (
             <ActivityIndicator size="large" color="#1c8db9" style={{ marginTop: 40 }} />
           ) : (
-            <FlashList
-              ref={flashListRef}
-              extraData={sortedTasks}
-              data={sortedTasks}
-              keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={[ styles.listContent, {paddingBottom: 20 + insets.bottom} ]}
-              renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} onDelete={handleDeleteTask} onEdit={handleEditTask}/>}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>Nothing to do today.</Text>
-                  <Text style={styles.emptyStateSubtext}>Tap + to add task.</Text>
+            <>
+              {archivedCount > 0 && (
+                <View style={styles.archiveBanner}>
+                  <Text style={styles.archiveBannerText}>
+                    {archivedCount} task{archivedCount > 1 ? 's' : ''} archived until an overdue task is done
+                  </Text>
                 </View>
-              }
-            />
+              )}
+              <FlashList
+                ref={flashListRef}
+                extraData={visibleTasks}
+                data={visibleTasks}
+                keyExtractor={(item) => item.id.toString()}
+                contentContainerStyle={[ styles.listContent, {paddingBottom: 20 + insets.bottom} ]}
+                renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} onDelete={handleDeleteTask} onEdit={handleEditTask}/>}
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>Nothing to do today.</Text>
+                    <Text style={styles.emptyStateSubtext}>Tap + to add task.</Text>
+                  </View>
+                }
+              />
+            </>
           )}
         </View>
 
@@ -257,15 +292,19 @@ emptyStateSubtext: {
   marginTop: 6,
   textAlign: 'center',
 },
-TestButton: {
-  position: "absolute",
-  bottom: 35,
-  left: 25,
-  width: 80,
-  height: 60,
-  backgroundColor: "#398e22",
-  alignItems: 'center',
-  borderRadius: 10,
-  justifyContent: 'center'
+archiveBanner: {
+  marginHorizontal: 20,
+  marginBottom: 10,
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  backgroundColor: '#fef2f2',
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: '#fca5a5',
+},
+archiveBannerText: {
+  fontSize: 12,
+  color: '#991b1b',
+  textAlign: 'center',
 },
 });
