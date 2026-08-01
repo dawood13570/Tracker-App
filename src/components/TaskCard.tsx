@@ -1,4 +1,5 @@
 // src/components/TaskCard.tsx
+import { getEffectivePriority } from '@/utils/priority';
 import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ProcrastinationBadge } from './ProcrastinationBadge';
 
@@ -30,6 +31,11 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, onToggle, onEdit, onDelete }: TaskCardProps) {
+    const effectivePriority = getEffectivePriority({
+      priority: task.priority,
+      procrastinationCount: task.procrastinationCount ?? 0,
+    });
+
     const progressRatio = task.totalProgress && task.totalProgress > 0 
       ? (task.currentProgress || 0) / task.totalProgress 
       : 0;
@@ -91,7 +97,7 @@ export function TaskCard({ task, onToggle, onEdit, onDelete }: TaskCardProps) {
             <View style={styles.metaRow}>
               <Text style={styles.taskMeta}>
                 {task.isCompleted ? "✅ DONE • " : ""}
-                {task.type.toUpperCase()} • <Text style={(!task.isCompleted && task.priority === 'High') && styles.highPriorityIncomplete}>{task.priority.toUpperCase()}</Text>
+                {task.type.toUpperCase()} • <Text style={(!task.isCompleted && effectivePriority === 'High') && styles.highPriorityIncomplete}>{effectivePriority.toUpperCase()}</Text>
               </Text>
 
               {task.procrastinationCount && task.procrastinationCount > 0 ? (

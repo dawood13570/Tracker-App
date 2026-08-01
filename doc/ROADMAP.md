@@ -205,9 +205,9 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 **Done when:** Priority is assignable, visually meaningful, and affects rollover behaviour.
 
 - [x] 3.5.1 — Confirm priority field is in schema and form (done since Milestone 2)
-- [ ] 3.5.2 — High priority tasks: stronger visual treatment on TaskCard (confirm it's clearly distinct)
-- [ ] 3.5.3 — Today screen sorts: `High` priority first, then `Medium`, then `Low`, then `Done` at bottom
-- [ ] 3.5.4 — ~~Confirm rollover handles Low priority differently~~ N/A — rollover only checks `rolloverEnabled` now, not priority (2026-07-19). Priority's impact lives in sort order (3.5.3) and, later, Evolving Priority escalation.
+- [x] 3.5.2 — High priority tasks: stronger visual treatment on TaskCard (confirm it's clearly distinct)
+- [x] 3.5.3 — Today screen sorts: `High` priority first, then `Medium`, then `Low`, then `Done` at bottom
+- [!] 3.5.4 — ~~Confirm rollover handles Low priority differently~~ N/A — rollover only checks `rolloverEnabled` now, not priority (2026-07-19). Priority's impact lives in sort order (3.5.3) and, later, Evolving Priority escalation.
 - [ ] 3.5.5 — *(Not started — open questions in VISION.md)* Evolving Priority System: Low → Medium → High as procrastination_count climbs, toggleable, with the archive-other-low-tasks behaviour
 
 ---

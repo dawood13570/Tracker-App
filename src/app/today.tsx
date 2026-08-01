@@ -1,21 +1,22 @@
 // app/today.tsx
 
-// external ui packages
+import { getEffectivePriority } from '@/utils/priority';
 import BottomSheet from '@gorhom/bottom-sheet';
-import { FlashList } from "@shopify/flash-list";
-//system context
+import { FlashList, FlashListRef } from "@shopify/flash-list";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StatusBar, StyleSheet, Text, View, } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-// custom Components:
 import NewTaskModal from '../components/new-task';
 import { Task, TaskCard } from '../components/TaskCard';
-// engine math
-//store
 import { useTaskStore } from "../store/taskStore";
-
 import { runRolloverNow } from '../tasks/rolloverTask';
+
+const PRIORITY_WEIGHT: Record<string, number> = {
+  High: 3,
+  Medium: 2,
+  Low: 1,
+}
 
 
 export function DateHeader() {
@@ -35,10 +36,11 @@ export function DateHeader() {
 
 export default function AppDashboard() {
   const taskSheetRef = useRef<BottomSheet>(null);
+  const flashListRef = useRef<FlashListRef<any>>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const insets = useSafeAreaInsets();
 
-  const { tasks, isLoading, loadTasks, toggleTask, removeTask, addTask, selectedDate } = useTaskStore();
+  const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
 
   useEffect(() => {
     const catchUpAndLoad = async () => {
@@ -62,8 +64,16 @@ export default function AppDashboard() {
     taskSheetRef.current?.expand();
   };
 
-  const handleToggleTask = (id: number) => {
-    toggleTask(id);
+  const handleToggleTask = async (id: number) => {
+    const wasTopTask = sortedTasks[0]?.id === id;
+
+    await toggleTask(id);
+
+    if (wasTopTask) {
+      requestAnimationFrame(() => {
+        flashListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      });
+    }
   }
 
   const handleDeleteTask = (id: number) => {
@@ -74,7 +84,11 @@ export default function AppDashboard() {
     return tasks.reduce((acc, task) => {
       acc.total++;
       acc.types[task.type] = (acc.types[task.type] || 0) + 1;
-      acc.priorities[task.priority] = (acc.priorities[task.priority] || 0) + 1;
+      const effectivePriority = getEffectivePriority({
+        priority: task.priority,
+        procrastinationCount: task.procrastinationCount ?? 0,
+      });
+      acc.priorities[effectivePriority] = (acc.priorities[effectivePriority] || 0) + 1;
       if (task.isCompleted) acc.completed++; else acc.incomplete++;
       return acc;
     }, {
@@ -83,6 +97,28 @@ export default function AppDashboard() {
       priorities: {} as Record<string, number>, 
       completed: 0, 
       incomplete: 0
+    });
+  }, [tasks]);
+
+  const sortedTasks = useMemo(() => {
+    return [...tasks].sort((a, b) => {
+      if (a.isCompleted !== b.isCompleted) {
+        return a.isCompleted ? 1 : -1;
+      }
+
+      const effectiveA = getEffectivePriority({
+        priority: a.priority,
+        procrastinationCount: a.procrastinationCount ?? 0,
+      });
+      const effectiveB = getEffectivePriority({
+        priority: b.priority,
+        procrastinationCount: b.procrastinationCount ?? 0,
+      });
+
+      const weightA = PRIORITY_WEIGHT[effectiveA] || 0;
+      const weightB = PRIORITY_WEIGHT[effectiveB] || 0;
+
+      return weightB - weightA;
     });
   }, [tasks]);
 
@@ -113,7 +149,9 @@ export default function AppDashboard() {
             <ActivityIndicator size="large" color="#1c8db9" style={{ marginTop: 40 }} />
           ) : (
             <FlashList
-              data={tasks}
+              ref={flashListRef}
+              extraData={sortedTasks}
+              data={sortedTasks}
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={[ styles.listContent, {paddingBottom: 20 + insets.bottom} ]}
               renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} onDelete={handleDeleteTask} onEdit={handleEditTask}/>}
