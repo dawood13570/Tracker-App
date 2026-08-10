@@ -1,9 +1,10 @@
 import type { InferInsertModel } from 'drizzle-orm';
-import { and, eq, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { db } from './client';
-import { tasks } from './schema';
+import { progressLogs, tasks } from './schema';
 
 export type NewTask = InferInsertModel<typeof tasks>;
+export type NewProgressLog = InferInsertModel<typeof progressLogs>;
 
 export async function getTaskByDate(date: string) {
     return db.select().from(tasks).where(eq(tasks.scheduledDate, date));
@@ -67,4 +68,24 @@ export async function applyRolloverMutations(
         })
         .where(eq(tasks.id, mutation.id))
     }
+}
+
+export async function insertProgressLog(data: NewProgressLog) {
+    const [inserted] = await db.insert(progressLogs).values(data).returning();
+    return inserted;
+}
+
+export async function getCurrentProgress(taskId: number): Promise<number> {
+    const result = await db.get<{ total: number | null }>(
+        sql`SELECT SUM(amount) as total FROM progress_logs WHERE task_id = ${taskId}`
+    );
+    return result?.total ?? 0;
+}
+
+export async function getProgressLogsByTask(taskId: number) {
+    return db
+    .select()
+    .from(progressLogs)
+    .where(eq(progressLogs.taskId, taskId))
+    .orderBy(desc(progressLogs.loggedAt));
 }

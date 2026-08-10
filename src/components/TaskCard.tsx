@@ -14,6 +14,7 @@ export interface Task {
   currentProgress?: number | null;
   totalProgress?: number | null;
   progressUnit?: string | null;
+  deadline?: string | null;
 
   subtasksCompleted?: number | null;
   subtasksTotal?: number | null;
@@ -29,9 +30,11 @@ interface TaskCardProps {
     onToggle: (id: number, currentStatus: boolean) => void;
     onEdit: (task: Task) => void;
     onDelete: (id: number) => void;
+    currentProgress?: number;
+    onOpenProgressLog?: (task: Task) => void;
 }
 
-export function TaskCard({ task, onToggle, onEdit, onDelete }: TaskCardProps) {
+export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, onOpenProgressLog }: TaskCardProps) {
     const { evolvingPriorityEnabled } = useStore();
 
     const effectivePriority = evolvingPriorityEnabled
@@ -41,6 +44,8 @@ export function TaskCard({ task, onToggle, onEdit, onDelete }: TaskCardProps) {
         })
       : task.priority;
 
+    const displayedProgress = currentProgress ?? task.currentProgress ?? 0;
+    
     const progressRatio = task.totalProgress && task.totalProgress > 0 
       ? (task.currentProgress || 0) / task.totalProgress 
       : 0;
@@ -119,9 +124,10 @@ export function TaskCard({ task, onToggle, onEdit, onDelete }: TaskCardProps) {
             )}
 
             {task.type === 'Progression' && task.totalProgress !== null && task.totalProgress !== undefined && (
-              <View style={styles.progressionContainer}>
+              <Pressable style={styles.progressionContainer} onPress={() => onOpenProgressLog && onOpenProgressLog(task)}
+              >
                 <Text style={styles.progressionLabel}>
-                  Progress: {task.currentProgress || 0} / {task.totalProgress} {task.progressUnit || ''}
+                  Progress: {displayedProgress} / {task.totalProgress} {task.progressUnit || ''}
                 </Text>
                 <View style={styles.progressBarBackground}>
                   <View 
@@ -134,7 +140,7 @@ export function TaskCard({ task, onToggle, onEdit, onDelete }: TaskCardProps) {
                     ]} 
                   />
                 </View>
-              </View>
+              </Pressable>
             )}
           </View>
 

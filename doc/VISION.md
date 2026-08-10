@@ -83,6 +83,17 @@ that way, so they get their own tables instead of being forced into the Task sha
   (3x/week) and a streak; Activity has neither — it's pure recall, no
   pressure, no target.
 
+**Worked example (2026-07-21):** gym tracking. "Push Day" (chest/tricep/
+shoulder) is a plain recurring **Task** — Mon/Thu, no subtasks. Each exercise
+(Bench, Incline DB Press, Shoulder Press) is its own **Activity**, logged
+whenever it's actually done, independent of which day it falls on — same
+weight/rep-history need as the original notes-folder example that motivated
+Activity in the first place. **Tags** (`push`/`pull`/`legs`) group Activities
+by workout type without hardcoding that grouping into the Task. This resolved
+a real dead end: building mixed-type Hybrid subtasks (checkbox + progression
+items inside one task) to solve this same problem — Task + Activity + Tags is
+simpler and needs no schema beyond what's already speced for Milestone 5.
+
 *Status: Not yet built. Schema sketch planned alongside Milestone 5 (Habits, Events, Tags).*
 
 ---
@@ -285,6 +296,11 @@ filtering. Toggle UI and per-task override intentionally not yet built.*
   real titled subtask rows (flagged after Milestone 2.5). A real `subtasks`
   table would need its own `type` per row, not just per parent task. Revisit
   once that table gets built — don't design it in isolation from that work.
+  *(2026-07-21: the gym example that motivated this got a better answer —
+  Task + Activity + Tags, see the "Worked example" under Activity above.
+  Doesn't need this. Leaving the idea parked in case a real case for mixed
+  subtask types shows up elsewhere later, but it's no longer blocking
+  anything.)*
 
 - **2026-07-07** — App/website usage tracking. Track how long spent in apps.
   correlate with task completion rates. Deferred to post-MVP.
@@ -392,3 +408,5 @@ Reshapes the `goals` table. Revisit before building the real Goals screen.*
 | 2026-07-18 | Activity is a new entity, not a Habit variant | Habit implies a cadence target and streak; Activity has neither — keeps Habit's semantics clean instead of overloading it with an optional-everything config. |
 | 2026-07-18 | No `status` field for rollover — `isCompleted` stays a 2-state boolean | "Skipped" isn't stored; a task that isn't rolled forward keeps its original `scheduledDate` and just stops appearing on Today once the day passes. Avoids a schema change; "skipped" is computed (past date + incomplete) rather than stored, if ever needed for History filtering. |
 | 2026-07-19 | Rollover eligibility depends only on `rolloverEnabled`, not priority | Gating rollover by priority would freeze Low priority tasks' `procrastinationCount`, which breaks the Evolving Priority System's premise (Low escalates to High *as* its count climbs — it needs to keep climbing). Priority's influence stays in sort order and future escalation, not rollover eligibility. |
+| 2026-07-21 | Hybrid subtasks are `parent_id`-linked Task rows, not a separate table | Reuses existing toggle/edit/delete infrastructure instead of building parallel machinery. Gets mixed-type subtasks (a Progression-type child under a Hybrid parent) for free, no extra schema needed. |
+| 2026-07-21 | `currentProgress` is computed live (`SUM` over `progress_logs`), not a stored/synced column | Same compute-don't-store pattern as skip, archive, and effective priority. A stored column would risk going stale if a log entry is later edited or deleted; a live sum can't drift because there's nothing separate to drift from. |

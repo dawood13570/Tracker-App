@@ -8,7 +8,9 @@ import { ActivityIndicator, AppState, Pressable, StatusBar, StyleSheet, Text, Vi
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import NewTaskModal from '../components/new-task';
+import ProgressLogSheet from '../components/ProgressLogSheet';
 import { Task, TaskCard } from '../components/TaskCard';
+import { getCurrentProgress } from '../db/queries';
 import { useTaskStore } from "../store/taskStore";
 import { useStore } from '../store/useStore';
 import { runRolloverNow } from '../tasks/rolloverTask';
@@ -37,8 +39,11 @@ export function DateHeader() {
 
 export default function AppDashboard() {
   const taskSheetRef = useRef<BottomSheet>(null);
+  const progressSheetRef = useRef<BottomSheet>(null);
   const flashListRef = useRef<FlashListRef<any>>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [loggingTask, setLoggingTask] = useState<Task | null>(null);
+  const [progressMap, setProgressMap] = useState<Record< number, number>>({});
   const insets = useSafeAreaInsets();
 
   const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
@@ -61,10 +66,29 @@ export default function AppDashboard() {
     return () => subscription.remove();
   }, []);
 
+  useEffect(() => {
+    const progressionTasks = tasks.filter((t) => t.type === 'Progression');
+    if (progressionTasks.length === 0) {
+      setProgressMap({});
+      return;
+    }
+
+    Promise.all(
+      progressionTasks.map((t) => getCurrentProgress(t.id).then((total) => [t.id, total] as const))
+    ).then((entries) => {
+      setProgressMap(Object.fromEntries(entries));
+    });
+  }, [tasks]);
+
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
     taskSheetRef.current?.expand();
   };
+
+  const handleOpenProgressLog = (task: Task) => {
+    setLoggingTask(task);
+    progressSheetRef.current?.expand();
+  }
 
   const handleToggleTask = async (id: number) => {
     const wasTopTask = visibleTasks[0]?.id === id;
@@ -188,7 +212,7 @@ export default function AppDashboard() {
                 data={visibleTasks}
                 keyExtractor={(item) => item.id.toString()}
                 contentContainerStyle={[ styles.listContent, {paddingBottom: 20 + insets.bottom} ]}
-                renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} onDelete={handleDeleteTask} onEdit={handleEditTask}/>}
+                renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} onDelete={handleDeleteTask} onEdit={handleEditTask} currentProgress={progressMap[item.id]} onOpenProgressLog={handleOpenProgressLog}/>}
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyStateText}>Nothing to do today.</Text>
@@ -212,6 +236,13 @@ export default function AppDashboard() {
                 </Pressable>
 
         <NewTaskModal sheetRef={taskSheetRef} onTaskCreated={() => loadTasks()} taskToEdit={editingTask} onClose={() => setEditingTask(null)} />
+          <ProgressLogSheet
+          sheetRef={progressSheetRef}
+          task={loggingTask}
+          currentProgress={loggingTask ? (progressMap[loggingTask.id] ?? 0) : 0}
+          onLogged={() => loadTasks()}
+          onClose={() => setLoggingTask(null)}
+           />
       </SafeAreaView> 
     </GestureHandlerRootView>
   );

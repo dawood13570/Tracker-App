@@ -225,7 +225,7 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 - [ ] 4.1.2 — Detail shows: title, target (e.g. "300 pages"), current total, deadline, and log history
 - [ ] 4.1.3 — A numeric input lets user enter today's amount ("I read 22 pages")
 - [ ] 4.1.4 — Submitting writes a row to `progress_logs` table
-- [ ] 4.1.5 — `current_value` on the task updates to the sum of all `progress_logs` for that task
+- [ ] 4.1.5 — Write `getCurrentProgress(taskId)` in `/db/queries.ts` — `SUM(amount)` over `progress_logs` for that task. Single source of truth for "how much progress exists" — used by the progress bar, pace calculator, and task detail. `tasks.currentProgress` stops being written to going forward (decided 2026-07-21 — same compute-don't-store pattern as skip/archive/effective priority; avoids the column ever going stale if a log entry is later edited or deleted)
 - [ ] 4.1.6 — Log history shows past entries: date, amount, optional note
 
 ---
@@ -275,13 +275,25 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ---
 
 ### 4.6 — Hybrid Tasks
-**Done when:** A hybrid task can have sub-tasks, completing all auto-completes the parent.
+**Done when:** A hybrid task's subtasks are real, individually completable Task rows, and completing all of them auto-completes the parent.
 
-- [ ] 4.6.1 — `parent_id` field already in schema — confirm it's there
-- [ ] 4.6.2 — On the task detail screen for hybrid tasks, show a sub-task checklist
-- [ ] 4.6.3 — "Add sub-task" button creates a new Simple task with `parent_id` set
-- [ ] 4.6.4 — Sub-task count badge on parent TaskCard: "3/5"
-- [ ] 4.6.5 — When all sub-tasks are marked done, auto-mark parent as done
+**Decided 2026-07-21:** subtasks are `parent_id`-linked rows in the `tasks`
+table itself, not a separate table. A subtask is just a Task — reuses
+`toggleTask`, edit, and delete as-is, and gets mixed-type subtasks for free
+(a subtask can be type `'Progression'` just like any other task, no extra
+schema needed). What currently exists (`new-task.tsx`'s subtask drafts,
+`subtasksTotal`/`subtasksCompleted` counts) is UI-only — drafted subtask
+titles are thrown away on submit, nothing gets written with `parent_id` set.
+This section replaces that with the real thing.
+
+- [ ] 4.6.1 — Write `insertSubtask(parentId, data)` in `/db/queries.ts` — wraps `insertTask` with `parentId` set
+- [ ] 4.6.2 — Write `getSubtasksByParent(parentId)` in `/db/queries.ts`
+- [ ] 4.6.3 — **Update `getTaskByDate` to exclude rows with a non-null `parent_id`** — subtasks must not appear as independent top-level tasks on Today
+- [ ] 4.6.4 — On the task detail screen for hybrid tasks, show a real sub-task checklist (pulled via `getSubtasksByParent`, not the old draft-only UI)
+- [ ] 4.6.5 — Rewire `new-task.tsx`'s Hybrid subtask drafts: on submit, actually call `insertSubtask` for each drafted item instead of just recording a count
+- [ ] 4.6.6 — Sub-task count badge on parent TaskCard: "3/5" — computed live from `getSubtasksByParent`, not from the `subtasksTotal`/`subtasksCompleted` columns (same compute-don't-store reasoning as 4.1.5)
+- [ ] 4.6.7 — When all sub-tasks are marked done, auto-mark parent as done
+- [ ] 4.6.8 — Extend recurrence (3.4.6): when a Hybrid parent recurs, also clone its subtasks under the new parent's id, fresh `isCompleted: false`
 
 ---
 
