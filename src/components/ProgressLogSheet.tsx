@@ -2,6 +2,7 @@ import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorho
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getProgressLogsByTask, insertProgressLog } from '../db/queries';
+import { useTaskStore } from '../store/taskStore';
 import { Task } from './TaskCard';
  
 interface ProgressLog {
@@ -20,6 +21,7 @@ interface ProgressLogSheetProps {
 }
  
 export default function ProgressLogSheet({ sheetRef, task, currentProgress, onLogged, onClose }: ProgressLogSheetProps) {
+  const { completeTask } = useTaskStore();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [history, setHistory] = useState<ProgressLog[]>([]);
@@ -114,6 +116,12 @@ export default function ProgressLogSheet({ sheetRef, task, currentProgress, onLo
                 amount: parsed,
                 notes: note.trim() || null,
               });
+
+              const newTotal = currentProgress + parsed;
+              if (!task.isCompleted && task.totalProgress != null && newTotal >= task.totalProgress) {
+                await completeTask(task.id);
+              }
+
               resetForm();
               onLogged();
               sheetRef.current?.close();
@@ -239,4 +247,3 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
- 

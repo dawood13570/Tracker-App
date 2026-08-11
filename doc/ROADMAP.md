@@ -221,12 +221,12 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 4.1 — Progress Logging UI
 **Done when:** Tapping a progression task opens a log input and saves a progress entry.
 
-- [ ] 4.1.1 — Tapping a progression TaskCard opens a detail screen or bottom sheet
-- [ ] 4.1.2 — Detail shows: title, target (e.g. "300 pages"), current total, deadline, and log history
-- [ ] 4.1.3 — A numeric input lets user enter today's amount ("I read 22 pages")
-- [ ] 4.1.4 — Submitting writes a row to `progress_logs` table
-- [ ] 4.1.5 — Write `getCurrentProgress(taskId)` in `/db/queries.ts` — `SUM(amount)` over `progress_logs` for that task. Single source of truth for "how much progress exists" — used by the progress bar, pace calculator, and task detail. `tasks.currentProgress` stops being written to going forward (decided 2026-07-21 — same compute-don't-store pattern as skip/archive/effective priority; avoids the column ever going stale if a log entry is later edited or deleted)
-- [ ] 4.1.6 — Log history shows past entries: date, amount, optional note
+- [x] 4.1.1 — Tapping a progression TaskCard opens a detail screen or bottom sheet
+- [x] 4.1.2 — Detail shows: title, target (e.g. "300 pages"), current total, deadline, and log history
+- [x] 4.1.3 — A numeric input lets user enter today's amount ("I read 22 pages")
+- [x] 4.1.4 — Submitting writes a row to `progress_logs` table
+- [x] 4.1.5 — Write `getCurrentProgress(taskId)` in `/db/queries.ts` — `SUM(amount)` over `progress_logs` for that task. Single source of truth for "how much progress exists" — used by the progress bar, pace calculator, and task detail. `tasks.currentProgress` stops being written to going forward (decided 2026-07-21 — same compute-don't-store pattern as skip/archive/effective priority; avoids the column ever going stale if a log entry is later edited or deleted)
+- [x] 4.1.6 — Log history shows past entries: date, amount, optional note
 
 ---
 

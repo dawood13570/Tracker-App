@@ -47,7 +47,7 @@ export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, on
     const displayedProgress = currentProgress ?? task.currentProgress ?? 0;
     
     const progressRatio = task.totalProgress && task.totalProgress > 0 
-      ? (task.currentProgress || 0) / task.totalProgress 
+      ? displayedProgress / task.totalProgress 
       : 0;
 
     let progressBarColor = '#4CAF50';
@@ -124,8 +124,7 @@ export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, on
             )}
 
             {task.type === 'Progression' && task.totalProgress !== null && task.totalProgress !== undefined && (
-              <Pressable style={styles.progressionContainer} onPress={() => onOpenProgressLog && onOpenProgressLog(task)}
-              >
+              <View style={styles.progressionContainer}>
                 <Text style={styles.progressionLabel}>
                   Progress: {displayedProgress} / {task.totalProgress} {task.progressUnit || ''}
                 </Text>
@@ -140,13 +139,22 @@ export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, on
                     ]} 
                   />
                 </View>
-              </Pressable>
+              </View>
             )}
           </View>
 
           {task.type === 'Hybrid' && (
             <TouchableOpacity style={styles.expandButton} onPress={() => {}}>
               <Text style={styles.arrowIcon}>▼</Text>
+            </TouchableOpacity>
+          )}
+
+          {task.type === 'Progression' && (
+            <TouchableOpacity
+              style={styles.expandButton}
+              onPress={() => onOpenProgressLog && onOpenProgressLog(task)}
+            >
+              <Text style={styles.arrowIcon}>✎</Text>
             </TouchableOpacity>
           )}
         </View>

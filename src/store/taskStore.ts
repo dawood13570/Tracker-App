@@ -1,6 +1,6 @@
 import { getNextOccurrence } from '@/engine/recurrence';
 import { InferSelectModel } from 'drizzle-orm';
-import { create } from 'zustand';
+import { create, type StoreApi } from 'zustand';
 import { deleteTask, getTaskByDate, insertTask, NewTask, toggleTaskStatus, updateTask, UpdateTask as UpdateTaskQuery } from '../db/queries';
 import { tasks as tasksTable } from '../db/schema';
 import { getLocalDateString } from '../utils/date';
@@ -17,9 +17,49 @@ interface TaskState {
 
     loadTasks: (date?: string) => Promise<void>;
     addTask: (newTask: NewTask) => Promise<Task | null>;
-    updateTask: (id: number, update: Partial<Task>) => Promise<void>;
+    updateTask: (id: number, update: UpdateTaskQuery) => Promise<void>;
     toggleTask: (id: number) => Promise<void>;
+    completeTask: (id: number) => Promise<void>;
     removeTask: (id: number) => Promise<void>;
+}
+
+// Shared by both toggleTask and completeTask — whenever a task lands on
+// isCompleted: true, this checks whether it recurs and, if so, spawns the
+// next occurrence. Kept as one function so completing a task via the
+// checkbox and completing it via hitting a Progression target both
+// correctly continue the recurrence chain, instead of one silently
+// skipping it. A plain function (not a store action) since it's an
+// internal implementation detail, not something a screen should ever
+// call directly.
+async function handleCompletionSideEffects(
+    get: StoreApi<TaskState>['getState'],
+    updated: Task
+) {
+    if (updated.isCompleted && updated.recurrenceType !== 'none') {
+        const nextDate = getNextOccurrence(
+            { ...updated, recurrenceType: updated.recurrenceType as 'daily' | 'every_n_days' | 'weekly' },
+            new Date()
+        );
+
+        if (nextDate) {
+            const {
+                id: _id,
+                createdAt: _createdAt,
+                updatedAt: _updatedAt,
+                ...taskData
+            } = updated;
+
+            const newTaskPayload: NewTask = {
+                ...(taskData as NewTask),
+                scheduledDate: getLocalDateString(nextDate),
+                isCompleted: false,
+                procrastinationCount: 0,
+                currentProgress: 0,
+                subtasksCompleted: 0,
+            };
+            await get().addTask(newTaskPayload);
+        }
+    }
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -38,7 +78,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
         try {
             const result = await getTaskByDate(targetDate);
-            
+
             set({ tasks: result });
         } catch (error) {
             console.error('Failed to load tasks', error);
@@ -50,8 +90,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     addTask: async (newTaskData: NewTask) => {
         try {
             const inserted = await insertTask(newTaskData);
-                
-            
+
+
             if (inserted && inserted.scheduledDate === get().selectedDate) {
                 set((state) => ({ tasks: [...state.tasks, inserted] }));
             }
@@ -67,7 +107,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         try {
             const updated = await updateTask(id, updates);
 
-            
+
             if (updated) {
                 set((state) => ({
                     tasks: state.tasks.map((task) =>
@@ -91,34 +131,33 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                     ),
                 }));
 
-                if (updated.isCompleted && updated.recurrenceType !== 'none') {
-                    const nextDate = getNextOccurrence({
-                        ...updated,
-                        recurrenceType:updated.recurrenceType as 'daily' | 'every_n_days' | 'weekly', }, new Date());
-
-                    if (nextDate) {
-                        const {
-                            id: _id,
-                            createdAt: _createdAt,
-                            updatedAt: _updatedAt,
-                            ...taskData
-                        } = updated;
-
-                        const newTaskPayload: NewTask = {
-                            ...(taskData as NewTask),
-                            scheduledDate: getLocalDateString(nextDate),
-                            isCompleted: false,
-                            procrastinationCount: 0,
-                            currentProgress: 0,
-                            subtasksCompleted: 0,
-                        };
-                        await get().addTask(newTaskPayload)
-                    }
-                }
+                await handleCompletionSideEffects(get, updated);
+            }
+        } catch (error) {
+            console.error(`Failed to toggle task ${id}`, error);
         }
-    } catch (error) {
-        console.error(`Failed to toggle task ${id}`, error);
-      }
+    },
+
+    // Explicitly sets isCompleted: true (not a flip) — used when completion
+    // is a side effect of something else, like hitting a Progression target,
+    // where we know for a fact the task should now be done rather than
+    // wanting to toggle whatever its current state happens to be.
+    completeTask: async (id: number) => {
+        try {
+            const updated = await updateTask(id, { isCompleted: true });
+
+            if (updated) {
+                set((state) => ({
+                    tasks: state.tasks.map((task) =>
+                        task.id === id ? updated : task
+                    ),
+                }));
+
+                await handleCompletionSideEffects(get, updated);
+            }
+        } catch (error) {
+            console.error(`Failed to complete task ${id}`, error);
+        }
     },
 
     removeTask: async (id: number) => {
@@ -131,5 +170,5 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         } catch (error) {
             console.error(`Failed to remove task ${id}:`, error);
         }
-    },   
+    },
 }));
