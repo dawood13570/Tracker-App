@@ -137,11 +137,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             console.error(`Failed to toggle task ${id}`, error);
         }
     },
-
-    // Explicitly sets isCompleted: true (not a flip) — used when completion
-    // is a side effect of something else, like hitting a Progression target,
-    // where we know for a fact the task should now be done rather than
-    // wanting to toggle whatever its current state happens to be.
+    
     completeTask: async (id: number) => {
         try {
             const updated = await updateTask(id, { isCompleted: true });

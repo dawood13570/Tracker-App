@@ -233,10 +233,10 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 4.2 — Progress Bar on TaskCard
 **Done when:** Progression tasks show a visual progress bar reflecting actual completion percentage.
 
-- [ ] 4.2.1 — `ProgressBar.tsx` takes `current` and `target` as props, renders a filled bar
-- [ ] 4.2.2 — TaskCard renders ProgressBar at the bottom for progression tasks
-- [ ] 4.2.3 — Show percentage or "X / Y unit" label next to bar
-- [ ] 4.2.4 — Bar turns green when at 100%
+- [x] 4.2.1 — `ProgressBar.tsx` takes `current` and `target` as props, renders a filled bar
+- [x] 4.2.2 — TaskCard renders ProgressBar at the bottom for progression tasks
+- [x] 4.2.3 — Show percentage or "X / Y unit" label next to bar
+- [x] 4.2.4 — Bar turns green when at 100%
 
 ---
 

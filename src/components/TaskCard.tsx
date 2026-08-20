@@ -3,6 +3,7 @@ import { getEffectivePriority } from '@/engine/priority';
 import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useStore } from '../store/useStore';
 import { ProcrastinationBadge } from './ProcrastinationBadge';
+import { ProgressBar } from './ProgressBar';
 
 export interface Task {
   id: number;
@@ -46,16 +47,6 @@ export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, on
 
     const displayedProgress = currentProgress ?? task.currentProgress ?? 0;
     
-    const progressRatio = task.totalProgress && task.totalProgress > 0 
-      ? displayedProgress / task.totalProgress 
-      : 0;
-
-    let progressBarColor = '#4CAF50';
-    if (progressRatio < 0.3) {
-      progressBarColor = '#F44336';
-    } else if (progressRatio < 0.8) {
-      progressBarColor = '#FFC107';
-    }
 
     const handleLongPress = () => {
       Alert.alert(
@@ -124,22 +115,11 @@ export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, on
             )}
 
             {task.type === 'Progression' && task.totalProgress !== null && task.totalProgress !== undefined && (
-              <View style={styles.progressionContainer}>
-                <Text style={styles.progressionLabel}>
-                  Progress: {displayedProgress} / {task.totalProgress} {task.progressUnit || ''}
-                </Text>
-                <View style={styles.progressBarBackground}>
-                  <View 
-                    style={[
-                      styles.progressBarFill, 
-                      { 
-                        width: `${Math.min(progressRatio * 100, 100)}%`,
-                        backgroundColor: progressBarColor 
-                      }
-                    ]} 
-                  />
-                </View>
-              </View>
+              <ProgressBar
+              current={displayedProgress}
+              target={task.totalProgress}
+              unit={task.progressUnit}
+              />
             )}
           </View>
 
@@ -235,23 +215,5 @@ export const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#0288D1',
-  },
-  progressionContainer: {
-    marginTop: 8,
-  },
-  progressionLabel: {
-    fontSize: 12,
-    color: '#444444',
-    fontWeight: '500',
-    marginBottom: 6,
-  },
-  progressBarBackground: {
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-  },
+  }
 });

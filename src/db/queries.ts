@@ -1,3 +1,4 @@
+// src/db/queries.ts
 import type { InferInsertModel } from 'drizzle-orm';
 import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { db } from './client';
