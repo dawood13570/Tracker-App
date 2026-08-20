@@ -17,13 +17,12 @@
         ]
       },
       "icon": "./assets/expo.icon"
-      
     },
     "android": {
-            "package": "com.yourname.yourapp",
+      "package": "com.yourname.yourapp",
       "permissions": [
-         "RECEIVE_BOOT_COMPLETED",
-         "WAKE_LOCK"
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -54,7 +53,8 @@
           "color": "#ffffff"
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

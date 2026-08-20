@@ -1,6 +1,6 @@
 // src/db/queries.ts
 import type { InferInsertModel } from 'drizzle-orm';
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, lt, sql } from 'drizzle-orm';
 import { db } from './client';
 import { progressLogs, tasks } from './schema';
 
@@ -24,6 +24,18 @@ export async function toggleTaskStatus(id: number) {
         .returning()
     return updated;
 
+}
+
+export async function getActiveProgressionTasks() {
+    return db.select()
+    .from(tasks)
+    .where(
+        and(
+            eq(tasks.isCompleted, false),
+            eq(tasks.type, 'Progression'),
+            isNotNull(tasks.deadline)
+        )
+    )
 }
 
 export type UpdateTask = Partial<NewTask>;

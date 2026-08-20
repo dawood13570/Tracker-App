@@ -1,5 +1,6 @@
 // app/today.tsx
 
+import { calculatePace, PaceResult } from '@/engine/pace';
 import { getEffectivePriority, shouldArchiveTask } from '@/engine/priority';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList, FlashListRef } from "@shopify/flash-list";
@@ -10,7 +11,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import NewTaskModal from '../components/new-task';
 import ProgressLogSheet from '../components/ProgressLogSheet';
 import { Task, TaskCard } from '../components/TaskCard';
-import { getCurrentProgress } from '../db/queries';
+import { getCurrentProgress, getProgressLogsByTask } from '../db/queries';
 import { useTaskStore } from "../store/taskStore";
 import { useStore } from '../store/useStore';
 import { runRolloverNow } from '../tasks/rolloverTask';
@@ -44,6 +45,7 @@ export default function AppDashboard() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [loggingTask, setLoggingTask] = useState<Task | null>(null);
   const [progressMap, setProgressMap] = useState<Record< number, number>>({});
+  const [paceMap, setPaceMap] = useState<Record<number, PaceResult>>({});
   const insets = useSafeAreaInsets();
 
   const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
@@ -70,13 +72,24 @@ export default function AppDashboard() {
     const progressionTasks = tasks.filter((t) => t.type === 'Progression');
     if (progressionTasks.length === 0) {
       setProgressMap({});
+      setPaceMap({});
       return;
     }
 
     Promise.all(
-      progressionTasks.map((t) => getCurrentProgress(t.id).then((total) => [t.id, total] as const))
+      progressionTasks.map(async (t) => {
+        const [currentProgress, logs] = await Promise.all([
+          getCurrentProgress(t.id),
+          getProgressLogsByTask(t.id),
+        ]);
+
+        const pace = calculatePace({ ...t, currentProgress }, logs);
+
+        return [t.id, currentProgress, pace] as const;
+      }) 
     ).then((entries) => {
-      setProgressMap(Object.fromEntries(entries));
+      setProgressMap(Object.fromEntries(entries.map(([id, cp]) => [id, cp])));
+      setPaceMap(Object.fromEntries(entries.map(([id, , pace]) => [id, pace])));
     });
   }, [tasks]);
 
@@ -212,7 +225,15 @@ export default function AppDashboard() {
                 data={visibleTasks}
                 keyExtractor={(item) => item.id.toString()}
                 contentContainerStyle={[ styles.listContent, {paddingBottom: 20 + insets.bottom} ]}
-                renderItem={({ item }) => <TaskCard task={item} onToggle={handleToggleTask} onDelete={handleDeleteTask} onEdit={handleEditTask} currentProgress={progressMap[item.id]} onOpenProgressLog={handleOpenProgressLog}/>}
+                renderItem={({ item }) => (
+                <TaskCard 
+                task={item} 
+                onToggle={handleToggleTask} 
+                onDelete={handleDeleteTask} 
+                onEdit={handleEditTask} 
+                currentProgress={progressMap[item.id]} 
+                pace={paceMap[item.id]} 
+                onOpenProgressLog={handleOpenProgressLog}/>)}
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyStateText}>Nothing to do today.</Text>
@@ -240,6 +261,7 @@ export default function AppDashboard() {
           sheetRef={progressSheetRef}
           task={loggingTask}
           currentProgress={loggingTask ? (progressMap[loggingTask.id] ?? 0) : 0}
+          pace={loggingTask ? paceMap[loggingTask.id] : undefined}
           onLogged={() => loadTasks()}
           onClose={() => setLoggingTask(null)}
            />

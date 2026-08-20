@@ -4,6 +4,7 @@ import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorho
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getProgressLogsByTask, insertProgressLog } from '../db/queries';
+import type { PaceResult } from '../engine/pace';
 import { useTaskStore } from '../store/taskStore';
 import { Task } from './TaskCard';
  
@@ -20,9 +21,10 @@ interface ProgressLogSheetProps {
   currentProgress: number;
   onLogged: () => void;
   onClose?: () => void;
+  pace?: PaceResult;
 }
  
-export default function ProgressLogSheet({ sheetRef, task, currentProgress, onLogged, onClose }: ProgressLogSheetProps) {
+export default function ProgressLogSheet({ sheetRef, task, currentProgress, onLogged, onClose, pace }: ProgressLogSheetProps) {
   const { completeTask } = useTaskStore();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -82,6 +84,11 @@ export default function ProgressLogSheet({ sheetRef, task, currentProgress, onLo
           )}
           {task.deadline && (
             <Text style={styles.summarySubline}>Deadline: {task.deadline}</Text>
+          )}
+          {pace && (
+            <Text style={styles.summarySubline}>
+              Need {pace.target_rate} {task.progressUnit ?? ''}/day · Averaging {pace.actual_rate} · {pace.status}
+            </Text>
           )}
         </View>
  

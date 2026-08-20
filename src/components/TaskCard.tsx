@@ -1,7 +1,9 @@
 // src/components/TaskCard.tsx
+import type { PaceResult } from '@/engine/pace';
 import { getEffectivePriority } from '@/engine/priority';
 import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useStore } from '../store/useStore';
+import { PaceIndicator } from './PaceIndicator';
 import { ProcrastinationBadge } from './ProcrastinationBadge';
 import { ProgressBar } from './ProgressBar';
 
@@ -33,9 +35,10 @@ interface TaskCardProps {
     onDelete: (id: number) => void;
     currentProgress?: number;
     onOpenProgressLog?: (task: Task) => void;
+    pace?: PaceResult;
 }
 
-export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, onOpenProgressLog }: TaskCardProps) {
+export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, onOpenProgressLog, pace }: TaskCardProps) {
     const { evolvingPriorityEnabled } = useStore();
 
     const effectivePriority = evolvingPriorityEnabled
@@ -121,6 +124,11 @@ export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, on
               unit={task.progressUnit}
               />
             )}
+
+            {task.type === 'Progression' && pace && (
+            <PaceIndicator status={pace.status} />
+            )}
+            
           </View>
 
           {task.type === 'Hybrid' && (

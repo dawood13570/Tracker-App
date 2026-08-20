@@ -1,9 +1,12 @@
 // src/components/new-task.tsx
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Keyboard, Platform, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useTaskStore } from '../store/taskStore';
+import { getLocalDateString } from '../utils/date';
 import { Task } from './TaskCard';
+
 
 interface SubTaskDraft {
   id: string;
@@ -41,6 +44,8 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const [recurrenceType, setRecurrenceType] = useState<'none' | 'daily' | 'every_n_days' | 'weekly'>('none');
   const [recurrenceInterval, setRecurrenceInterval] = useState('');
   const [recurrenceDaysOfWeek, setRecurrenceDaysOfWeek] = useState<string[]>([]);
+  const [deadline, setDeadline] = useState<Date | null>(null);
+  const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
   const { addTask, updateTask, selectedDate } = useTaskStore();
 
@@ -74,6 +79,13 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     );
   };
 
+  const handleDeadlineChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+  setShowDeadlinePicker(Platform.OS === 'ios'); // iOS picker stays inline; Android dialog closes itself
+  if (event.type === 'set' && selectedDate) {
+    setDeadline(selectedDate);
+  }
+  };
+
   // Reset all state variables
   const resetForm = () => {
     setTitle('');
@@ -81,6 +93,8 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     setPriority('Low');
     setTargetValue('');
     setUnit('');
+    setDeadline(null);
+    setShowDeadlinePicker(false);
     setallowRollover(false);
     setRecurrenceType('none');
     setRecurrenceInterval('');
@@ -98,6 +112,8 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
       setTargetValue(taskToEdit.totalProgress ? String(taskToEdit.totalProgress) : '');
       setUnit(taskToEdit.progressUnit ?? '');
+
+      setDeadline(taskToEdit.deadline ? new Date(`${taskToEdit.deadline}T00:00:00`) : null);
 
       setRecurrenceType((taskToEdit.recurrenceType as typeof recurrenceType) ?? 'none');
       setRecurrenceInterval(
@@ -273,6 +289,25 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                 placeholderTextColor="#999"
               />
             </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Deadline:</Text>
+              <Pressable onPress={() => setShowDeadlinePicker(true)} style={styles.deadlinePressable}>
+                <Text style={deadline ? styles.deadlineText : styles.deadlinePlaceholder}>
+                  {deadline ? getLocalDateString(deadline) : 'Select a date'}
+                </Text>
+              </Pressable>
+            </View>
+
+            {showDeadlinePicker && (
+              <DateTimePicker
+                value={deadline ?? new Date()}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                minimumDate={new Date()}
+                onChange={handleDeadlineChange}
+              />
+            )}
           </View>
         )}
 
@@ -322,6 +357,10 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                 Alert.alert('Title required', 'Please enter a task title before saving');
                 return;
               }
+              if (type === 'Progression' && !deadline) {
+                Alert.alert('Deadline required', 'Please select a deadline for this progression task.');
+                return;
+              }
               if (recurrenceType === 'every_n_days' && (!recurrenceInterval || Number(recurrenceInterval) <= 0)) {
                 Alert.alert('Interval required', 'Please enter how many days between repeats.');
                 return;
@@ -341,7 +380,8 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                 recurrenceDaysOfWeek: recurrenceType === 'weekly' ? JSON.stringify(recurrenceDaysOfWeek) : null,
                 ...(type === 'Progression' && {
                    totalProgress: Number(targetValue),
-                  progressUnit: unit 
+                  progressUnit: unit,
+                  deadline: deadline ? getLocalDateString(deadline) : null,
                 }),
                 ...(type === 'Hybrid' && { 
                   subtasksTotal: subtasks.length,
@@ -602,5 +642,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  }
+  },
+  deadlinePressable: {
+  flex: 1.5,
+  borderWidth: 1,
+  borderColor: '#ccc',
+  borderRadius: 6,
+  paddingHorizontal: 10,
+  paddingVertical: 8,
+  backgroundColor: '#fff',
+  marginLeft: 12,
+  },
+  deadlineText: {
+    fontSize: 16,
+    color: '#222',
+  },
+  deadlinePlaceholder: {
+    fontSize: 16,
+    color: '#999',
+  },
 });

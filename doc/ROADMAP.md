@@ -243,22 +243,22 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 4.3 — Pace Calculator
 **Done when:** `calculatePace(task, logs)` returns a status object you can display.
 
-- [ ] 4.3.1 — Write `calculatePace(task, logs)` in `/engine/pace.ts`
-- [ ] 4.3.2 — Compute `target_rate`: `(target - current) / days_remaining`
-- [ ] 4.3.3 — Compute `actual_rate`: average daily value from last 7 days of logs
-- [ ] 4.3.4 — Compute `status`: On Track / Slightly Behind / Behind / Critical / Ahead (define thresholds)
-- [ ] 4.3.5 — Return `{ target_rate, actual_rate, status, days_remaining, days_of_buffer }`
-- [ ] 4.3.6 — Write 5 test cases with different scenarios (behind, way ahead, deadline tomorrow, etc.)
+- [x] 4.3.1 — Write `calculatePace(task, logs)` in `/engine/pace.ts`
+- [x] 4.3.2 — Compute `target_rate`: `(target - current) / days_remaining`
+- [x] 4.3.3 — Compute `actual_rate`: average daily value from last 7 days of logs
+- [x] 4.3.4 — Compute `status`: On Track / Slightly Behind / Behind / Critical / Ahead (define thresholds)
+- [x] 4.3.5 — Return `{ target_rate, actual_rate, status, days_remaining, days_of_buffer }`
+- [x] 4.3.6 — Write 5 test cases with different scenarios (behind, way ahead, deadline tomorrow, etc.)
 
 ---
 
 ### 4.4 — Pace Display on TaskCard
 **Done when:** Progression tasks show human-readable pace status.
 
-- [ ] 4.4.1 — Call `calculatePace` when loading tasks for Today and Goals views
-- [ ] 4.4.2 — Display on task detail screen: "Need 8 pages/day · Averaging 5 · Behind"
-- [ ] 4.4.3 — Small status indicator on TaskCard itself (color dot or short label)
-- [ ] 4.4.4 — Critical status triggers a daily notification nudge
+- [x] 4.4.1 — Call `calculatePace` when loading tasks for Today and Goals views
+- [x] 4.4.2 — Display on task detail screen: "Need 8 pages/day · Averaging 5 · Behind"
+- [x] 4.4.3 — Small status indicator on TaskCard itself (color dot or short label)
+- [x] 4.4.4 — Critical status triggers a daily notification nudge
 
 ---
 

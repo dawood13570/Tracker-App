@@ -2,7 +2,8 @@
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
-import { applyRolloverMutations, getRolloverCandidates } from '../db/queries';
+import { applyRolloverMutations, getActiveProgressionTasks, getCurrentProgress, getProgressLogsByTask, getRolloverCandidates } from '../db/queries';
+import { calculatePace } from '../engine/pace';
 import { processRollover } from '../engine/rollover';
 import { getLocalDateString } from '../utils/date';
 
@@ -48,6 +49,34 @@ export async function runRolloverNow(){
 
 }
 
+export async function checkCriticalPace() {
+  const activeTasks = await getActiveProgressionTasks();
+  if (activeTasks.length === 0) return;
+
+  const results = await Promise.all(
+    activeTasks.map(async (t) => {
+      const [currentProgress, logs] = await Promise.all([
+        getCurrentProgress(t.id),
+        getProgressLogsByTask(t.id),
+      ]);
+      const pace = calculatePace({ ...t, currentProgress }, logs);
+      return { title: t.title, pace };
+    })
+  );
+
+  const critical = results.filter((r) => r.pace.status === 'Critical');
+  if (critical.length === 0) return;
+
+  const titles = critical.map((r) => r.title).join(', ');
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Falling behind ⚠️',
+      body: `${critical.length} task${critical.length > 1 ? 's are' : ' is'} behind pace: ${titles}`,
+    },
+    trigger: null,
+  });
+}
+
 export function defineRolloverTask() {
   if (TaskManager.isTaskDefined(BACKGROUND_ROLLOVER_TASK)) {
     return;
@@ -55,7 +84,9 @@ export function defineRolloverTask() {
 
   TaskManager.defineTask(BACKGROUND_ROLLOVER_TASK, async () => {
     try {
-      return await runRolloverNow()
+      const result = await runRolloverNow();
+      await checkCriticalPace();
+      return result;
     } catch (error) {
       console.error('[BackgroundFetch] Failed:', error);
       return BackgroundFetch.BackgroundFetchResult.Failed;
