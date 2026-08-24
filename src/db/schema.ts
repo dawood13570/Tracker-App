@@ -30,7 +30,8 @@ export const tasks= sqliteTable('tasks', {
   procrastinationCount: integer('procrastination_count').default(0),
   rolloverEnabled: integer('rollover_enabled', { mode: 'boolean' }).notNull().default(true),
 
-  surplusMode: text('surplus_mode').default('breathing_room'),
+  surplusMode: text('surplus_mode', {enum: ['breathing_room', 'raise_bar','bank_it', 'none' ]}),
+  bufferDays: integer('buffer_days').default(0),
   
   createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text('updated_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),

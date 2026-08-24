@@ -10,9 +10,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import NewTaskModal from '../components/new-task';
 import ProgressLogSheet from '../components/ProgressLogSheet';
-import { Task, TaskCard } from '../components/TaskCard';
+import { TaskCard } from '../components/TaskCard';
 import { getCurrentProgress, getProgressLogsByTask } from '../db/queries';
-import { useTaskStore } from "../store/taskStore";
+import { Task, useTaskStore } from "../store/taskStore";
 import { useStore } from '../store/useStore';
 import { runRolloverNow } from '../tasks/rolloverTask';
 
@@ -49,7 +49,7 @@ export default function AppDashboard() {
   const insets = useSafeAreaInsets();
 
   const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
-  const { evolvingPriorityEnabled } = useStore();
+  const { evolvingPriorityEnabled, autoArchiveEnabled } = useStore();
 
   useEffect(() => {
     const catchUpAndLoad = async () => {
@@ -162,7 +162,7 @@ export default function AppDashboard() {
   }, [tasks, evolvingPriorityEnabled]);
 
   const { visibleTasks, archivedCount } = useMemo(() => {
-    if (!evolvingPriorityEnabled) {
+    if (!autoArchiveEnabled) {
       return { visibleTasks: sortedTasks, archivedCount: 0 };
     }
 
@@ -173,7 +173,7 @@ export default function AppDashboard() {
     }));
 
     const visible = sortedTasks.filter((t) => {
-      if (t.isCompleted) return true; // never archive already-completed tasks
+      if (t.isCompleted) return true;
 
       const input = { id: t.id, priority: t.priority, procrastinationCount: t.procrastinationCount ?? 0 };
       return !shouldArchiveTask(input, archiveInputs);
@@ -183,7 +183,7 @@ export default function AppDashboard() {
       visibleTasks: visible,
       archivedCount: sortedTasks.length - visible.length,
     };
-  }, [sortedTasks, tasks, evolvingPriorityEnabled]);
+  }, [sortedTasks, tasks, autoArchiveEnabled]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -192,8 +192,6 @@ export default function AppDashboard() {
         
         <View style={styles.stickyHeader}>
           <DateHeader/>
-
-          
 
           <View style={styles.metricCard}>
             <Text style={{ fontWeight: "600", textAlign: "center", marginBottom: 4 }}>Task Metrics</Text>

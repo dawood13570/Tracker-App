@@ -1,12 +1,11 @@
 // src/components/new-task.tsx
+
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { useTaskStore } from '../store/taskStore';
+import { Task, useTaskStore } from '../store/taskStore';
 import { getLocalDateString } from '../utils/date';
-import { Task } from './TaskCard';
-
 
 interface SubTaskDraft {
   id: string;
@@ -22,24 +21,23 @@ interface NewTaskModalProps {
 }
 
 const RECURRENCE_OPTIONS = [
-  { value: 'none', label: 'None'},
-  { value: 'daily', label: 'Daily'},
-  { value: 'every_n_days', label: 'N Days'},
-  { value: 'weekly', label: 'Weekly'},
+  { value: 'none', label: 'None' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'every_n_days', label: 'N Days' },
+  { value: 'weekly', label: 'Weekly' },
 ] as const;
 
 const DAYS_OF_WEEK = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
-
 const TASK_TYPES = ['Simple', 'Progression', 'Hybrid'] as const;
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'] as const;
 
 export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onClose }: NewTaskModalProps) {
   const [title, setTitle] = useState('');
-  const [type, setType] = useState<'Simple' | "Progression" | "Hybrid">("Simple"); 
-  const [priority, setPriority] = useState<"Low" | "Medium" | "High">("Low");
+  const [type, setType] = useState<'Simple' | 'Progression' | 'Hybrid'>('Simple');
+  const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Low');
   const [targetValue, setTargetValue] = useState('');
   const [unit, setUnit] = useState('');
-  const [allowRollover, setallowRollover] = useState(false);
+  const [allowRollover, setAllowRollover] = useState(false);
 
   const [recurrenceType, setRecurrenceType] = useState<'none' | 'daily' | 'every_n_days' | 'weekly'>('none');
   const [recurrenceInterval, setRecurrenceInterval] = useState('');
@@ -49,28 +47,26 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
   const { addTask, updateTask, selectedDate } = useTaskStore();
 
-  // States for handling hybrid subtasks
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
 
-  const snapPoints = useMemo(() => ["80%",'35%'], []);
-  // Add subtask to our draft array
+  const snapPoints = useMemo(() => ['80%', '35%'], []);
+
   const handleAddSubtask = () => {
     if (subtaskInput.trim() === '') return;
-    
+
     const newSubtask: SubTaskDraft = {
-      id: Date.now().toString(), // Safe local ID generation
+      id: Date.now().toString(),
       title: subtaskInput.trim(),
       isCompleted: false,
     };
 
     setSubtasks((prev) => [...prev, newSubtask]);
-    setSubtaskInput(''); // Reset field
+    setSubtaskInput('');
   };
 
-  // Remove a subtask from our draft array
   const handleRemoveSubtask = (id: string) => {
-    setSubtasks((prev) => prev.filter(sub => sub.id !== id));
+    setSubtasks((prev) => prev.filter((sub) => sub.id !== id));
   };
 
   const toggleRecurrenceDay = (day: string) => {
@@ -79,14 +75,13 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     );
   };
 
-  const handleDeadlineChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-  setShowDeadlinePicker(Platform.OS === 'ios'); // iOS picker stays inline; Android dialog closes itself
-  if (event.type === 'set' && selectedDate) {
-    setDeadline(selectedDate);
-  }
+  const handleDeadlineChange = (event: DateTimePickerEvent, selected?: Date) => {
+    setShowDeadlinePicker(Platform.OS === 'ios');
+    if (event.type === 'set' && selected) {
+      setDeadline(selected);
+    }
   };
 
-  // Reset all state variables
   const resetForm = () => {
     setTitle('');
     setType('Simple');
@@ -95,7 +90,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     setUnit('');
     setDeadline(null);
     setShowDeadlinePicker(false);
-    setallowRollover(false);
+    setAllowRollover(false);
     setRecurrenceType('none');
     setRecurrenceInterval('');
     setRecurrenceDaysOfWeek([]);
@@ -106,13 +101,12 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   useEffect(() => {
     if (taskToEdit) {
       setTitle(taskToEdit.title ?? '');
-      setType(taskToEdit.type ?? '');
-      setPriority(taskToEdit.priority ?? '');
-      setallowRollover(Boolean(taskToEdit.rolloverEnabled));
+      setType(taskToEdit.type ?? 'Simple');
+      setPriority(taskToEdit.priority ?? 'Low');
+      setAllowRollover(Boolean(taskToEdit.rolloverEnabled));
 
       setTargetValue(taskToEdit.totalProgress ? String(taskToEdit.totalProgress) : '');
       setUnit(taskToEdit.progressUnit ?? '');
-
       setDeadline(taskToEdit.deadline ? new Date(`${taskToEdit.deadline}T00:00:00`) : null);
 
       setRecurrenceType((taskToEdit.recurrenceType as typeof recurrenceType) ?? 'none');
@@ -131,27 +125,26 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     }
   }, [taskToEdit]);
 
-
   return (
     <BottomSheet
       ref={sheetRef}
       index={-1}
       snapPoints={snapPoints}
       enablePanDownToClose={true}
-      backgroundStyle={{ backgroundColor: "#dedede" }}
+      backgroundStyle={{ backgroundColor: '#dedede' }}
       keyboardBehavior="fillParent"
       keyboardBlurBehavior="restore"
     >
       <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-        <Text style={styles.titleText}>New Task Input</Text>
+        <Text style={styles.titleText}>{taskToEdit ? 'Edit Task' : 'New Task Input'}</Text>
 
-        <BottomSheetTextInput 
-          style={styles.input} 
+        <BottomSheetTextInput
+          style={styles.input}
           placeholder="Enter Task Here"
-          placeholderTextColor={"#b0b0b0"}
+          placeholderTextColor="#b0b0b0"
           value={title}
-          onChangeText={setTitle}>
-        </BottomSheetTextInput>
+          onChangeText={setTitle}
+        />
 
         <View style={styles.row}>
           <Text style={styles.label}>Type:</Text>
@@ -159,9 +152,9 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
             {TASK_TYPES.map((t) => {
               const isSelected = type === t;
               return (
-                <Pressable 
-                  key={t} 
-                  style={[styles.selectorItem, isSelected && styles.selectedItem]} 
+                <Pressable
+                  key={t}
+                  style={[styles.selectorItem, isSelected && styles.selectedItem]}
                   onPress={() => setType(t)}
                 >
                   <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
@@ -179,15 +172,15 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
             {PRIORITY_OPTIONS.map((p) => {
               const isSelected = priority === p;
 
-              const priorityStyles: Record<string, {item: any; text:any }> = {
-                Low: {item: styles.selectedLow, text: styles.textLow},
-                Medium: {item: styles.selectedMedium, text: styles.textMedium},
-                High: {item: styles.selectedHigh, text: styles.textHigh},
+              const priorityStyles: Record<string, { item: any; text: any }> = {
+                Low: { item: styles.selectedLow, text: styles.textLow },
+                Medium: { item: styles.selectedMedium, text: styles.textMedium },
+                High: { item: styles.selectedHigh, text: styles.textHigh },
               };
               return (
-                <Pressable 
-                  key={p} 
-                  style={[styles.selectorItem, isSelected && priorityStyles[p].item]} 
+                <Pressable
+                  key={p}
+                  style={[styles.selectorItem, isSelected && priorityStyles[p].item]}
                   onPress={() => setPriority(p)}
                 >
                   <Text style={[isSelected ? priorityStyles[p].text : styles.unselectedText]}>
@@ -198,28 +191,28 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
             })}
           </View>
         </View>
-        
+
         <View style={styles.row}>
           <Text style={styles.label}>Rollover Task:</Text>
-          <Switch value={allowRollover} onValueChange={setallowRollover} />
+          <Switch value={allowRollover} onValueChange={setAllowRollover} />
         </View>
 
         <View style={styles.row}>
           <Text style={styles.label}>Repeats:</Text>
-          <View style={[styles.selectorGroup,styles.recurrenceSelectorGroup]}>
-            {RECURRENCE_OPTIONS.map(({ value, label}) => {
+          <View style={[styles.selectorGroup, styles.recurrenceSelectorGroup]}>
+            {RECURRENCE_OPTIONS.map(({ value, label }) => {
               const isSelected = recurrenceType === value;
               return (
                 <Pressable
-                key={value}
-                style={[styles.selectorItem, isSelected && styles.selectedItem]}
-                onPress={() => setRecurrenceType(value)}
+                  key={value}
+                  style={[styles.selectorItem, isSelected && styles.selectedItem]}
+                  onPress={() => setRecurrenceType(value)}
                 >
                   <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
                     {label}
-                    </Text>
+                  </Text>
                 </Pressable>
-              )
+              );
             })}
           </View>
         </View>
@@ -229,18 +222,17 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
             <View style={styles.row}>
               <Text style={styles.label}>Repeat every:</Text>
               <BottomSheetTextInput
-              style={styles.input}
-              value={recurrenceInterval}
-              onChangeText={setRecurrenceInterval}
-              placeholder='3'
-              keyboardType='numeric'
-              placeholderTextColor="#b0b0b0"
+                style={styles.inputs}
+                value={recurrenceInterval}
+                onChangeText={setRecurrenceInterval}
+                placeholder="3"
+                keyboardType="numeric"
+                placeholderTextColor="#b0b0b0"
               />
-              <Text style={styles.label}>days</Text>
+              <Text style={[styles.label, { marginLeft: 8 }]}>days</Text>
             </View>
           </View>
         )}
-
 
         {recurrenceType === 'weekly' && (
           <View style={styles.dynamicContainer}>
@@ -250,9 +242,9 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                 const isSelected = recurrenceDaysOfWeek.includes(day);
                 return (
                   <Pressable
-                   key={day}
-                   style={[styles.dayPill, isSelected && styles.selectedItem]}
-                   onPress={() => toggleRecurrenceDay(day)}
+                    key={day}
+                    style={[styles.dayPill, isSelected && styles.selectedItem]}
+                    onPress={() => toggleRecurrenceDay(day)}
                   >
                     <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
                       {day.charAt(0).toUpperCase() + day.slice(1)}
@@ -311,11 +303,11 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
           </View>
         )}
 
-        {/* HYBRID TASK INPUTS (SUBTASKS DRAWER) */}
+        {/* HYBRID TASK INPUTS */}
         {type === 'Hybrid' && (
           <View style={styles.dynamicContainer}>
             <Text style={styles.subSectionTitle}>Add Subtasks</Text>
-            
+
             <View style={styles.addSubtaskRow}>
               <BottomSheetTextInput
                 style={styles.subtaskTextInput}
@@ -330,13 +322,14 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
               </TouchableOpacity>
             </View>
 
-            {/* List of currently drafted subtasks */}
             {subtasks.length > 0 && (
               <View style={styles.subtaskListContainer}>
                 {subtasks.map((item, index) => (
                   <View key={item.id} style={styles.subtaskItemRow}>
                     <Text style={styles.subtaskIndex}>{index + 1}.</Text>
-                    <Text style={styles.subtaskTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.subtaskTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
                     <TouchableOpacity onPress={() => handleRemoveSubtask(item.id)} style={styles.removeSubtaskButton}>
                       <Text style={styles.removeSubtaskButtonText}>✕</Text>
                     </TouchableOpacity>
@@ -353,7 +346,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
             disabled={!title.trim()}
             onPress={async () => {
               Keyboard.dismiss();
-              if (!title.trim()){
+              if (!title.trim()) {
                 Alert.alert('Title required', 'Please enter a task title before saving');
                 return;
               }
@@ -369,52 +362,49 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                 Alert.alert('Days required', 'Please select at least one day of the week.');
                 return;
               }
-              try{
+              try {
                 const sharedFields = {
-                title,
-                type: type as "Simple" | "Hybrid" | "Progression" ,
-                priority: priority as "Low" | "Medium" | "High",
-                rolloverEnabled: allowRollover,
-                recurrenceType,
-                recurrenceInterval: recurrenceType === 'every_n_days' ? (Number(recurrenceInterval) || null) : null,
-                recurrenceDaysOfWeek: recurrenceType === 'weekly' ? JSON.stringify(recurrenceDaysOfWeek) : null,
-                ...(type === 'Progression' && {
-                   totalProgress: Number(targetValue),
-                  progressUnit: unit,
-                  deadline: deadline ? getLocalDateString(deadline) : null,
-                }),
-                ...(type === 'Hybrid' && { 
-                  subtasksTotal: subtasks.length,
-                }),
-              };
+                  title,
+                  type: type as 'Simple' | 'Hybrid' | 'Progression',
+                  priority: priority as 'Low' | 'Medium' | 'High',
+                  rolloverEnabled: allowRollover,
+                  recurrenceType,
+                  recurrenceInterval: recurrenceType === 'every_n_days' ? Number(recurrenceInterval) || null : null,
+                  recurrenceDaysOfWeek: recurrenceType === 'weekly' ? JSON.stringify(recurrenceDaysOfWeek) : null,
+                  ...(type === 'Progression' && {
+                    totalProgress: Number(targetValue),
+                    progressUnit: unit,
+                    deadline: deadline ? getLocalDateString(deadline) : null,
+                  }),
+                  ...(type === 'Hybrid' && {
+                    subtasksTotal: subtasks.length,
+                  }),
+                };
 
-              if (taskToEdit) {
-                await updateTask(taskToEdit.id, sharedFields);
-              } else {
-                await addTask({
-                  ...sharedFields,
-                  scheduledDate: selectedDate,
-                  ...(type === 'Hybrid' && { subtasksCompleted: 0 }),
-                });
+                if (taskToEdit) {
+                  await updateTask(taskToEdit.id, sharedFields);
+                } else {
+                  await addTask({
+                    ...sharedFields,
+                    scheduledDate: selectedDate,
+                    ...(type === 'Hybrid' && { subtasksCompleted: 0 }),
+                  });
+                }
+                resetForm();
+                onTaskCreated();
+                if (onClose) onClose();
+                sheetRef.current?.close();
+              } catch (err) {
+                console.error('Failed to save task:', err);
               }
-              resetForm();
-              onTaskCreated();
-              if (onClose) onClose();
-              sheetRef.current?.close();
-            } catch (err) {
-              console.error("Failed to save task:", err);
-            }
-          }
-        }
-        style={({ pressed }) => [
-          styles.submitButton,
-          !title.trim() && styles.submitButtonDisabled,
-          pressed && title.trim() ? { opacity: 0.85} : null,
-        ]}
-        > 
-        <Text style={styles.submitButtonText}>
-          {taskToEdit ? "Update Task" : "Submit Task"}
-            </Text>
+            }}
+            style={({ pressed }) => [
+              styles.submitButton,
+              !title.trim() && styles.submitButtonDisabled,
+              pressed && title.trim() ? { opacity: 0.85 } : null,
+            ]}
+          >
+            <Text style={styles.submitButtonText}>{taskToEdit ? 'Update Task' : 'Submit Task'}</Text>
           </Pressable>
         </View>
       </BottomSheetScrollView>
@@ -438,8 +428,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: "#fff",
-    color: "#222",
+    backgroundColor: '#fff',
+    color: '#222',
   },
   row: {
     flexDirection: 'row',
@@ -521,7 +511,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#fff',
     marginLeft: 12,
-    color: "#222",
+    color: '#222',
   },
   inputStyleNested: {
     flex: 1.5,
@@ -533,7 +523,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#fff',
     marginLeft: 12,
-    color: "#222",
+    color: '#222',
   },
   dynamicContainer: {
     marginTop: 10,
@@ -578,7 +568,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: '#fff',
     marginRight: 8,
-    color: "#222"
+    color: '#222',
   },
   addSubtaskButton: {
     backgroundColor: '#1c8db9',
@@ -636,7 +626,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonDisabled: {
-    backgroundColor: "#d0d0d0"
+    backgroundColor: '#d0d0d0',
   },
   submitButtonText: {
     color: '#fff',
@@ -644,14 +634,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   deadlinePressable: {
-  flex: 1.5,
-  borderWidth: 1,
-  borderColor: '#ccc',
-  borderRadius: 6,
-  paddingHorizontal: 10,
-  paddingVertical: 8,
-  backgroundColor: '#fff',
-  marginLeft: 12,
+    flex: 1.5,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    marginLeft: 12,
   },
   deadlineText: {
     fontSize: 16,

@@ -27,21 +27,6 @@ interface ArchiveCheckInput {
   procrastinationCount: number;
 }
 
-/**
- * A task gets archived (hidden from Today) only if:
- * 1. It is itself still effectively Low (hasn't evolved) — Medium/High tasks
- *    are never archived, they earned their own visibility.
- * 2. Some OTHER task in the list genuinely EVOLVED to High — started as
- *    Low or Medium and climbed there via procrastination. A task that was
- *    already High to begin with does NOT trigger archiving; only a
- *    low-turned-high task does (per VISION.md).
- *
- * This needs no "how long has it been archived" tracking — since it's
- * recomputed fresh every render from live procrastinationCount, it
- * naturally stays true every day until the evolved task is completed
- * (which resets its procrastinationCount to 0), and naturally stops being
- * true the moment that happens. Nothing to persist.
- */
 export function shouldArchiveTask(
   task: ArchiveCheckInput,
   allTasks: ArchiveCheckInput[]

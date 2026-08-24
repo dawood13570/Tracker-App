@@ -2,31 +2,11 @@
 import type { PaceResult } from '@/engine/pace';
 import { getEffectivePriority } from '@/engine/priority';
 import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import type { Task } from '../store/taskStore';
 import { useStore } from '../store/useStore';
 import { PaceIndicator } from './PaceIndicator';
 import { ProcrastinationBadge } from './ProcrastinationBadge';
 import { ProgressBar } from './ProgressBar';
-
-export interface Task {
-  id: number;
-  title: string;
-  type: 'Simple' | 'Progression' | 'Hybrid';
-  priority: 'Low' | 'Medium' | 'High';
-  isCompleted: boolean;
-
-  currentProgress?: number | null;
-  totalProgress?: number | null;
-  progressUnit?: string | null;
-  deadline?: string | null;
-
-  subtasksCompleted?: number | null;
-  subtasksTotal?: number | null;
-  procrastinationCount?: number | null;
-  rolloverEnabled?: boolean | null;
-  recurrenceType? : 'none' | 'daily' | 'every_n_days' | 'weekly' | string | null;
-  recurrenceInterval?: number | null;
-  recurrenceDaysOfWeek?: string | null;
-}
 
 interface TaskCardProps {
     task: Task;
@@ -118,16 +98,28 @@ export function TaskCard({ task, onToggle, onEdit, onDelete, currentProgress, on
             )}
 
             {task.type === 'Progression' && task.totalProgress !== null && task.totalProgress !== undefined && (
+              <> 
               <ProgressBar
-              current={displayedProgress}
-              target={task.totalProgress}
-              unit={task.progressUnit}
+                current={displayedProgress}
+                target={task.totalProgress}
+                unit={task.progressUnit}
               />
+
+              {task.surplusMode === 'bank_it' && (task.bufferDays ?? 0) > 0 && (
+                <View style={styles.bankedBadge}>
+                  <Text style={styles.bankedBadgeText}>
+                   {task.bufferDays} {task.bufferDays === 1 ? 'day' : 'days'} banked
+                   </Text>
+                </View>
+              )}
+              </>
             )}
 
             {task.type === 'Progression' && pace && (
             <PaceIndicator status={pace.status} />
             )}
+
+            
             
           </View>
 
@@ -223,5 +215,18 @@ export const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#0288D1',
-  }
+  },
+  bankedBadge: {
+    marginTop: 6,
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  bankedBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#2E7D32',
+  },
 });

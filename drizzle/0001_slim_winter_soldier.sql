@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `buffer_days` integer DEFAULT 0;

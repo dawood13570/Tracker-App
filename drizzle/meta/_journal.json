@@ -8,6 +8,13 @@
       "when": 1784475845337,
       "tag": "0000_shocking_baron_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787601606155,
+      "tag": "0001_slim_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

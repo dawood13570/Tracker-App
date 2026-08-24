@@ -6,12 +6,11 @@ interface AppState {
   userId: string | null;
   setUserId: (id: string | null) => void;
 
-  // Global switch for the Evolving Priority System (3.5.5).
-  // In-memory only for now — resets to `true` on every app restart.
-  // Persisting this (AsyncStorage) and giving it a real UI both belong
-  // to Milestone 7.4 (Global settings screen), not here.
   evolvingPriorityEnabled: boolean;
   setEvolvingPriorityEnabled: (enabled: boolean) => void;
+
+  autoArchiveEnabled: boolean;
+  setAutoArchiveEnabled: (enabled: boolean) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -22,4 +21,7 @@ export const useStore = create<AppState>((set) => ({
 
   evolvingPriorityEnabled: true,
   setEvolvingPriorityEnabled: (enabled) => set({ evolvingPriorityEnabled: enabled }),
+
+  autoArchiveEnabled: false,
+  setAutoArchiveEnabled: (enabled) => set({ autoArchiveEnabled: enabled})
 }));
