@@ -1,9 +1,19 @@
-// taskstore
-
+// src/store/taskStore.ts
 import { getNextOccurrence } from '@/engine/recurrence';
 import { InferSelectModel } from 'drizzle-orm';
 import { create, type StoreApi } from 'zustand';
-import { deleteTask, getTaskByDate, insertTask, NewTask, toggleTaskStatus, updateTask, UpdateTask as UpdateTaskQuery } from '../db/queries';
+import {
+    deleteTask,
+    getSubtasksByParent,
+    getTaskByDate,
+    insertSubtask,
+    insertTask,
+    NewTask,
+    setAllSubtasksStatus,
+    toggleTaskStatus,
+    updateTask,
+    UpdateTask as UpdateTaskQuery,
+} from '../db/queries';
 import { tasks as tasksTable } from '../db/schema';
 import { getLocalDateString } from '../utils/date';
 
@@ -11,162 +21,188 @@ export type Task = InferSelectModel<typeof tasksTable>;
 export type { NewTask };
 
 interface TaskState {
-    tasks: Task[];
-    isLoading: boolean;
-    selectedDate: string;
+  tasks: Task[];
+  isLoading: boolean;
+  selectedDate: string;
 
-    setSelectedDate: (date: string) => void;
-
-    loadTasks: (date?: string) => Promise<void>;
-    addTask: (newTask: NewTask) => Promise<Task | null>;
-    updateTask: (id: number, update: UpdateTaskQuery) => Promise<void>;
-    toggleTask: (id: number) => Promise<void>;
-    completeTask: (id: number) => Promise<void>;
-    removeTask: (id: number) => Promise<void>;
+  setSelectedDate: (date: string) => void;
+  loadTasks: (date?: string) => Promise<void>;
+  addTask: (newTask: NewTask) => Promise<Task | null>;
+  updateTask: (id: number, update: UpdateTaskQuery) => Promise<void>;
+  toggleTask: (id: number) => Promise<void>;
+  completeTask: (id: number) => Promise<void>;
+  uncompleteTask: (id: number) => Promise<void>;
+  removeTask: (id: number) => Promise<void>;
 }
 
-// Shared by both toggleTask and completeTask — whenever a task lands on
-// isCompleted: true, this checks whether it recurs and, if so, spawns the
-// next occurrence. Kept as one function so completing a task via the
-// checkbox and completing it via hitting a Progression target both
-// correctly continue the recurrence chain, instead of one silently
-// skipping it. A plain function (not a store action) since it's an
-// internal implementation detail, not something a screen should ever
-// call directly.
 async function handleCompletionSideEffects(
-    get: StoreApi<TaskState>['getState'],
-    updated: Task
+  get: StoreApi<TaskState>['getState'],
+  updated: Task
 ) {
-    if (updated.isCompleted && updated.recurrenceType !== 'none') {
-        const nextDate = getNextOccurrence(
-            { ...updated, recurrenceType: updated.recurrenceType as 'daily' | 'every_n_days' | 'weekly' },
-            new Date()
-        );
+  if (updated.isCompleted && updated.recurrenceType !== 'none') {
+    const nextDate = getNextOccurrence(
+      { ...updated, recurrenceType: updated.recurrenceType as 'daily' | 'every_n_days' | 'weekly' },
+      new Date()
+    );
 
-        if (nextDate) {
-            const {
-                id: _id,
-                createdAt: _createdAt,
-                updatedAt: _updatedAt,
-                ...taskData
-            } = updated;
+    if (nextDate) {
+      const { id: oldId, createdAt: _c, updatedAt: _u, ...taskData } = updated;
+      const scheduledDateStr = getLocalDateString(nextDate);
 
-            const newTaskPayload: NewTask = {
-                ...(taskData as NewTask),
-                scheduledDate: getLocalDateString(nextDate),
-                isCompleted: false,
-                procrastinationCount: 0,
-                currentProgress: 0,
-                subtasksCompleted: 0,
-            };
-            await get().addTask(newTaskPayload);
+      const newTaskPayload: NewTask = {
+        ...(taskData as NewTask),
+        scheduledDate: scheduledDateStr,
+        isCompleted: false,
+        procrastinationCount: 0,
+        currentProgress: 0,
+        subtasksCompleted: 0,
+      };
+
+      const newParent = await get().addTask(newTaskPayload);
+
+      if (newParent && updated.type === 'Hybrid') {
+        const existingSubtasks = await getSubtasksByParent(oldId);
+        for (const sub of existingSubtasks) {
+          await insertSubtask(newParent.id, {
+            title: sub.title,
+            type: sub.type,
+            priority: sub.priority,
+            scheduledDate: scheduledDateStr,
+            isCompleted: false,
+          });
         }
+      }
     }
+  }
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
-    tasks: [],
-    isLoading: false,
-    selectedDate: getLocalDateString(),
+  tasks: [],
+  isLoading: false,
+  selectedDate: getLocalDateString(),
 
-    setSelectedDate: (date: string) => {
-        set({ selectedDate: date });
-        get().loadTasks(date);
-    },
+  setSelectedDate: (date: string) => {
+    set({ selectedDate: date });
+    get().loadTasks(date);
+  },
 
-    loadTasks: async (date?: string) => {
-        const targetDate = date ?? get().selectedDate;
-        set({ isLoading: true });
+  loadTasks: async (date?: string) => {
+    const targetDate = date ?? get().selectedDate;
+    set({ isLoading: true });
 
-        try {
-            const result = await getTaskByDate(targetDate);
+    try {
+      const result = await getTaskByDate(targetDate);
+      set({ tasks: result });
+    } catch (error) {
+      console.error('Failed to load tasks', error);
+    } finally {
+      set({ isLoading: false });
+    }
+  },
 
-            set({ tasks: result });
-        } catch (error) {
-            console.error('Failed to load tasks', error);
-        } finally {
-            set({ isLoading: false });
+  addTask: async (newTaskData: NewTask) => {
+    try {
+      const inserted = await insertTask(newTaskData);
+
+      if (inserted && inserted.scheduledDate === get().selectedDate && !inserted.parentId) {
+        set((state) => ({ tasks: [...state.tasks, inserted] }));
+      }
+
+      return inserted ?? null;
+    } catch (error) {
+      console.error('Failed to add task:', error);
+      return null;
+    }
+  },
+
+  updateTask: async (id: number, updates: UpdateTaskQuery) => {
+    try {
+      const updated = await updateTask(id, updates);
+
+      if (updated) {
+        set((state) => ({
+          tasks: state.tasks.map((task) => (task.id === id ? updated : task)),
+        }));
+      }
+    } catch (error) {
+      console.error(`Failed to update task ${id}:`, error);
+    }
+  },
+
+  toggleTask: async (id: number) => {
+    try {
+      const updated = await toggleTaskStatus(id);
+
+      if (updated) {
+        set((state) => ({
+          tasks: state.tasks.map((task) => (task.id === id ? updated : task)),
+        }));
+
+        // Direction 1: Parent -> Subtasks
+        // If toggling a parent Hybrid task, cascade status to all child subtasks
+        if (updated.type === 'Hybrid' && updated.parentId == null) {
+          await setAllSubtasksStatus(updated.id, updated.isCompleted);
         }
-    },
 
-    addTask: async (newTaskData: NewTask) => {
-        try {
-            const inserted = await insertTask(newTaskData);
+        // Direction 2: Subtask -> Parent
+        // If toggling a subtask, re-evaluate parent status
+        if (updated.parentId != null) {
+          const siblings = await getSubtasksByParent(updated.parentId);
+          const allSiblingsCompleted = siblings.length > 0 && siblings.every((s) => s.isCompleted);
 
-
-            if (inserted && inserted.scheduledDate === get().selectedDate) {
-                set((state) => ({ tasks: [...state.tasks, inserted] }));
-            }
-
-            return inserted ?? null;
-        } catch (error) {
-            console.error('Failed to add task:', error);
-            return null;
+          if (allSiblingsCompleted) {
+            await get().completeTask(updated.parentId);
+          } else {
+            await get().uncompleteTask(updated.parentId);
+          }
         }
-    },
 
-    updateTask: async (id: number, updates: UpdateTaskQuery) => {
-        try {
-            const updated = await updateTask(id, updates);
+        await handleCompletionSideEffects(get, updated);
+      }
+    } catch (error) {
+      console.error(`Failed to toggle task ${id}`, error);
+    }
+  },
 
+  completeTask: async (id: number) => {
+    try {
+      const updated = await updateTask(id, { isCompleted: true });
 
-            if (updated) {
-                set((state) => ({
-                    tasks: state.tasks.map((task) =>
-                    task.id === id ? updated : task
-                ),
-                }));
-            }
-        } catch (error) {
-            console.error(`Failed to update task ${id}:`, error)
-        }
-    },
+      if (updated) {
+        set((state) => ({
+          tasks: state.tasks.map((task) => (task.id === id ? updated : task)),
+        }));
 
-    toggleTask: async (id: number) => {
-        try {
-            const updated = await toggleTaskStatus(id);
+        await handleCompletionSideEffects(get, updated);
+      }
+    } catch (error) {
+      console.error(`Failed to complete task ${id}`, error);
+    }
+  },
 
-            if (updated) {
-                set((state) => ({
-                    tasks: state.tasks.map((task) =>
-                        task.id === id ? updated : task
-                    ),
-                }));
+  uncompleteTask: async (id: number) => {
+    try {
+      const updated = await updateTask(id, { isCompleted: false });
 
-                await handleCompletionSideEffects(get, updated);
-            }
-        } catch (error) {
-            console.error(`Failed to toggle task ${id}`, error);
-        }
-    },
-    
-    completeTask: async (id: number) => {
-        try {
-            const updated = await updateTask(id, { isCompleted: true });
+      if (updated) {
+        set((state) => ({
+          tasks: state.tasks.map((task) => (task.id === id ? updated : task)),
+        }));
+      }
+    } catch (error) {
+      console.error(`Failed to uncomplete task ${id}`, error);
+    }
+  },
 
-            if (updated) {
-                set((state) => ({
-                    tasks: state.tasks.map((task) =>
-                        task.id === id ? updated : task
-                    ),
-                }));
+  removeTask: async (id: number) => {
+    try {
+      await deleteTask(id);
 
-                await handleCompletionSideEffects(get, updated);
-            }
-        } catch (error) {
-            console.error(`Failed to complete task ${id}`, error);
-        }
-    },
-
-    removeTask: async (id: number) => {
-        try {
-            await deleteTask(id);
-
-            set((state) => ({
-                tasks: state.tasks.filter((task) => task.id !== id),
-            }));
-        } catch (error) {
-            console.error(`Failed to remove task ${id}:`, error);
-        }
-    },
+      set((state) => ({
+        tasks: state.tasks.filter((task) => task.id !== id),
+      }));
+    } catch (error) {
+      console.error(`Failed to remove task ${id}:`, error);
+    }
+  },
 }));

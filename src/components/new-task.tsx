@@ -1,16 +1,17 @@
 // src/components/new-task.tsx
-
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { deleteTask, getSubtasksByParent, insertSubtask } from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
 import { getLocalDateString } from '../utils/date';
 
 interface SubTaskDraft {
-  id: string;
+  id: string; // Database numeric ID (as string) or temp timestamp for new items
   title: string;
   isCompleted: boolean;
+  isNew?: boolean;
 }
 
 interface NewTaskModalProps {
@@ -48,6 +49,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const { addTask, updateTask, selectedDate } = useTaskStore();
 
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);
+  const [deletedSubtaskIds, setDeletedSubtaskIds] = useState<number[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
 
   const snapPoints = useMemo(() => ['80%', '35%'], []);
@@ -56,9 +58,10 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     if (subtaskInput.trim() === '') return;
 
     const newSubtask: SubTaskDraft = {
-      id: Date.now().toString(),
+      id: `temp-${Date.now()}`,
       title: subtaskInput.trim(),
       isCompleted: false,
+      isNew: true,
     };
 
     setSubtasks((prev) => [...prev, newSubtask]);
@@ -66,6 +69,13 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   };
 
   const handleRemoveSubtask = (id: string) => {
+    // If it's an existing database subtask, mark it for deletion upon save
+    if (!id.startsWith('temp-')) {
+      const numId = Number(id);
+      if (!isNaN(numId)) {
+        setDeletedSubtaskIds((prev) => [...prev, numId]);
+      }
+    }
     setSubtasks((prev) => prev.filter((sub) => sub.id !== id));
   };
 
@@ -95,6 +105,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     setRecurrenceInterval('');
     setRecurrenceDaysOfWeek([]);
     setSubtasks([]);
+    setDeletedSubtaskIds([]);
     setSubtaskInput('');
   };
 
@@ -120,6 +131,21 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
       } catch {
         setRecurrenceDaysOfWeek([]);
       }
+
+      // Load existing real subtasks from SQLite
+      if (taskToEdit.type === 'Hybrid') {
+        getSubtasksByParent(taskToEdit.id).then((items) => {
+          setSubtasks(
+            items.map((sub) => ({
+              id: sub.id.toString(),
+              title: sub.title,
+              isCompleted: sub.isCompleted,
+              isNew: false,
+            }))
+          );
+        });
+      }
+      setDeletedSubtaskIds([]);
     } else {
       resetForm();
     }
@@ -306,14 +332,14 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
         {/* HYBRID TASK INPUTS */}
         {type === 'Hybrid' && (
           <View style={styles.dynamicContainer}>
-            <Text style={styles.subSectionTitle}>Add Subtasks</Text>
+            <Text style={styles.subSectionTitle}>Subtasks</Text>
 
             <View style={styles.addSubtaskRow}>
               <BottomSheetTextInput
                 style={styles.subtaskTextInput}
                 value={subtaskInput}
                 onChangeText={setSubtaskInput}
-                placeholder="Enter subtask details..."
+                placeholder="Enter subtask title..."
                 placeholderTextColor="#999"
                 onSubmitEditing={handleAddSubtask}
               />
@@ -327,7 +353,13 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                 {subtasks.map((item, index) => (
                   <View key={item.id} style={styles.subtaskItemRow}>
                     <Text style={styles.subtaskIndex}>{index + 1}.</Text>
-                    <Text style={styles.subtaskTitle} numberOfLines={1}>
+                    <Text
+                      style={[
+                        styles.subtaskTitle,
+                        item.isCompleted && { textDecorationLine: 'line-through', color: '#999' },
+                      ]}
+                      numberOfLines={1}
+                    >
                       {item.title}
                     </Text>
                     <TouchableOpacity onPress={() => handleRemoveSubtask(item.id)} style={styles.removeSubtaskButton}>
@@ -362,6 +394,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                 Alert.alert('Days required', 'Please select at least one day of the week.');
                 return;
               }
+
               try {
                 const sharedFields = {
                   title,
@@ -376,20 +409,44 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                     progressUnit: unit,
                     deadline: deadline ? getLocalDateString(deadline) : null,
                   }),
-                  ...(type === 'Hybrid' && {
-                    subtasksTotal: subtasks.length,
-                  }),
                 };
 
                 if (taskToEdit) {
                   await updateTask(taskToEdit.id, sharedFields);
+
+                  if (type === 'Hybrid') {
+                    // 1. Delete removed subtasks
+                    for (const delId of deletedSubtaskIds) {
+                      await deleteTask(delId);
+                    }
+                    // 2. Insert newly added subtasks
+                    for (const sub of subtasks) {
+                      if (sub.isNew) {
+                        await insertSubtask(taskToEdit.id, {
+                          title: sub.title,
+                          scheduledDate: taskToEdit.scheduledDate,
+                          priority: priority as 'Low' | 'Medium' | 'High',
+                        });
+                      }
+                    }
+                  }
                 } else {
-                  await addTask({
+                  const createdParent = await addTask({
                     ...sharedFields,
                     scheduledDate: selectedDate,
-                    ...(type === 'Hybrid' && { subtasksCompleted: 0 }),
                   });
+
+                  if (createdParent && type === 'Hybrid' && subtasks.length > 0) {
+                    for (const draft of subtasks) {
+                      await insertSubtask(createdParent.id, {
+                        title: draft.title,
+                        scheduledDate: selectedDate,
+                        priority: priority as 'Low' | 'Medium' | 'High',
+                      });
+                    }
+                  }
                 }
+
                 resetForm();
                 onTaskCreated();
                 if (onClose) onClose();

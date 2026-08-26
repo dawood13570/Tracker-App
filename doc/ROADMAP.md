@@ -265,12 +265,12 @@ form works, pressing a task toggles its visual state. Zero real data yet.
 ### 4.5 — Above-Average Progress Modes
 *See VISION.md for full spec of Modes A, B, C.*
 
-- [ ] 4.5.1 — Add `surplus_mode` field to tasks table: 'breathing_room' | 'raise_bar' | 'bank_it' | 'none'
-- [ ] 4.5.2 — Add surplus mode selector to New Task form (only shown for Progression type)
-- [ ] 4.5.3 — Implement Mode A (Breathing Room): after logging, recompute target_rate with surplus applied, capped at 50% reduction
-- [ ] 4.5.4 — Implement Mode C (Bank It): calculate buffer_days and store on task, show "2 days banked"
-- [ ] 4.5.5 — Implement Mode B (Raise the Bar): detect 3 consecutive days at 200%+ pace, surface a suggestion card ("You're consistently doing more — want to raise your goal?"), require explicit confirmation before changing target
-- [ ] 4.5.6 — Surplus threshold: triggered when logged value > 130% of that day's target_rate
+- [x] 4.5.1 — Add `surplus_mode` field to tasks table: 'breathing_room' | 'raise_bar' | 'bank_it' | 'none'
+- [x] 4.5.2 — Add surplus mode selector to New Task form (only shown for Progression type)
+- [x] 4.5.3 — Implement Mode A (Breathing Room): after logging, recompute target_rate with surplus applied, capped at 50% reduction
+- [x] 4.5.4 — Implement Mode C (Bank It): calculate buffer_days and store on task, show "2 days banked"
+- [x] 4.5.5 — Implement Mode B (Raise the Bar): detect 3 consecutive days at 200%+ pace, surface a suggestion card ("You're consistently doing more — want to raise your goal?"), require explicit confirmation before changing target
+- [x] 4.5.6 — Surplus threshold: triggered when logged value > 130% of that day's target_rate
 
 ---
 
@@ -286,14 +286,14 @@ schema needed). What currently exists (`new-task.tsx`'s subtask drafts,
 titles are thrown away on submit, nothing gets written with `parent_id` set.
 This section replaces that with the real thing.
 
-- [ ] 4.6.1 — Write `insertSubtask(parentId, data)` in `/db/queries.ts` — wraps `insertTask` with `parentId` set
-- [ ] 4.6.2 — Write `getSubtasksByParent(parentId)` in `/db/queries.ts`
-- [ ] 4.6.3 — **Update `getTaskByDate` to exclude rows with a non-null `parent_id`** — subtasks must not appear as independent top-level tasks on Today
-- [ ] 4.6.4 — On the task detail screen for hybrid tasks, show a real sub-task checklist (pulled via `getSubtasksByParent`, not the old draft-only UI)
-- [ ] 4.6.5 — Rewire `new-task.tsx`'s Hybrid subtask drafts: on submit, actually call `insertSubtask` for each drafted item instead of just recording a count
-- [ ] 4.6.6 — Sub-task count badge on parent TaskCard: "3/5" — computed live from `getSubtasksByParent`, not from the `subtasksTotal`/`subtasksCompleted` columns (same compute-don't-store reasoning as 4.1.5)
-- [ ] 4.6.7 — When all sub-tasks are marked done, auto-mark parent as done
-- [ ] 4.6.8 — Extend recurrence (3.4.6): when a Hybrid parent recurs, also clone its subtasks under the new parent's id, fresh `isCompleted: false`
+- [x] 4.6.1 — Write `insertSubtask(parentId, data)` in `/db/queries.ts` — wraps `insertTask` with `parentId` set
+- [x] 4.6.2 — Write `getSubtasksByParent(parentId)` in `/db/queries.ts`
+- [x] 4.6.3 — **Update `getTaskByDate` to exclude rows with a non-null `parent_id`** — subtasks must not appear as independent top-level tasks on Today
+- [x] 4.6.4 — On the task detail screen for hybrid tasks, show a real sub-task checklist (pulled via `getSubtasksByParent`, not the old draft-only UI)
+- [x] 4.6.5 — Rewire `new-task.tsx`'s Hybrid subtask drafts: on submit, actually call `insertSubtask` for each drafted item instead of just recording a count
+- [x] 4.6.6 — Sub-task count badge on parent TaskCard: "3/5" — computed live from `getSubtasksByParent`, not from the `subtasksTotal`/`subtasksCompleted` columns (same compute-don't-store reasoning as 4.1.5)
+- [x] 4.6.7 — When all sub-tasks are marked done, auto-mark parent as done
+- [x] 4.6.8 — Extend recurrence (3.4.6): when a Hybrid parent recurs, also clone its subtasks under the new parent's id, fresh `isCompleted: false`
 
 ---
 
@@ -400,3 +400,4 @@ Added: 2026-07-18
 - [x] Milestone 1 — Learn the Tools While Building Real UI
 - [x] Milestone 2 — Real Data with SQLite
 - [x] Milestone 3 — Task Intelligence
+- [x] Milestone 4 — Progression Tasks and Goals

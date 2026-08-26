@@ -1,6 +1,6 @@
 // src/db/queries.ts
 import type { InferInsertModel } from 'drizzle-orm';
-import { and, desc, eq, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { db } from './client';
 import { progressLogs, tasks } from './schema';
 
@@ -8,12 +8,41 @@ export type NewTask = InferInsertModel<typeof tasks>;
 export type NewProgressLog = InferInsertModel<typeof progressLogs>;
 
 export async function getTaskByDate(date: string) {
-    return db.select().from(tasks).where(eq(tasks.scheduledDate, date));
+    return db.select().from(tasks).where(and(eq(tasks.scheduledDate, date), isNull(tasks.parentId)));
 }
 
 export async function insertTask(data: NewTask) {
     const [inserted] = await db.insert(tasks).values(data).returning();
     return inserted;
+}
+
+export async function insertSubtask(parentId: number, data: Partial<NewTask>) {
+    const payload: NewTask = {
+        title: data.title ?? '',
+        type: data.type ?? 'Simple',
+        priority: data.priority ?? 'Low',
+        scheduledDate: data.scheduledDate ?? '',
+        isCompleted: false,
+        parentId,
+        ...data,  
+    };
+    const [inserted] = await db.insert(tasks).values(payload).returning();
+    return inserted;
+}
+
+export async function getSubtasksByParent(parentId: number) {
+    return db
+    .select()
+    .from(tasks)
+    .where(eq(tasks.parentId, parentId))
+    .orderBy(tasks.id)
+}
+
+export async function getSubtaskCounts(parentId: number) {
+    const subtasksList = await getSubtasksByParent(parentId);
+    const total = subtasksList.length;
+    const completed = subtasksList.filter((s) => s.isCompleted).length;
+    return { completed, total};
 }
 
 export async function toggleTaskStatus(id: number) {
@@ -101,4 +130,12 @@ export async function getProgressLogsByTask(taskId: number) {
     .from(progressLogs)
     .where(eq(progressLogs.taskId, taskId))
     .orderBy(desc(progressLogs.loggedAt));
+}
+
+export async function setAllSubtasksStatus(parentId: number, isCompleted: boolean) {
+  return db
+    .update(tasks)
+    .set({ isCompleted })
+    .where(eq(tasks.parentId, parentId))
+    .returning();
 }
