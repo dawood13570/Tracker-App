@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { deleteTask, getSubtasksByParent, insertSubtask } from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
+import { colors } from '../theme/colors';
 import { getLocalDateString } from '../utils/date';
 
 interface SubTaskDraft {
@@ -157,7 +158,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
       index={-1}
       snapPoints={snapPoints}
       enablePanDownToClose={true}
-      backgroundStyle={{ backgroundColor: '#dedede' }}
+      backgroundStyle={{ backgroundColor: colors.surface }}
       keyboardBehavior="fillParent"
       keyboardBlurBehavior="restore"
     >
@@ -167,7 +168,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
         <BottomSheetTextInput
           style={styles.input}
           placeholder="Enter Task Here"
-          placeholderTextColor="#b0b0b0"
+          placeholderTextColor={colors.textPlaceholder}
           value={title}
           onChangeText={setTitle}
         />
@@ -356,7 +357,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                     <Text
                       style={[
                         styles.subtaskTitle,
-                        item.isCompleted && { textDecorationLine: 'line-through', color: '#999' },
+                        item.isCompleted && { textDecorationLine: 'line-through', color: colors.textMuted },
                       ]}
                       numberOfLines={1}
                     >
@@ -470,242 +471,43 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 }
 
 const styles = StyleSheet.create({
-  contentContainer: {
-    padding: 24,
-  },
-  titleText: {
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#fff',
-    color: '#222',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginVertical: 10,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  selectorGroup: {
-    flexDirection: 'row',
-  },
-  recurrenceSelectorGroup: {
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-    flex: 1,
-  },
-  selectorItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
-    marginLeft: 6,
-  },
-  selectedItem: {
-    borderColor: '#23ff61',
-    backgroundColor: '#e2fee3',
-  },
-  unselectedText: {
-    color: '#333',
-    fontSize: 13,
-  },
-  selectedText: {
-    color: '#56db4a',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  selectedLow: {
-    backgroundColor: '#e6f0ff',
-    borderColor: '#0070f3',
-    borderWidth: 1.5,
-  },
-  textLow: {
-    color: '#0070f3',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  selectedMedium: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#f5d60b',
-    borderWidth: 1.5,
-  },
-  textMedium: {
-    color: '#897700',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  selectedHigh: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#ef4444',
-    borderWidth: 1.5,
-  },
-  textHigh: {
-    color: '#ef4444',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  inputs: {
-    flex: 1.5,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 16,
-    backgroundColor: '#fff',
-    marginLeft: 12,
-    color: '#222',
-  },
-  inputStyleNested: {
-    flex: 1.5,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 16,
-    backgroundColor: '#fff',
-    marginLeft: 12,
-    color: '#222',
-  },
-  dynamicContainer: {
-    marginTop: 10,
-    padding: 12,
-    backgroundColor: '#ececec',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#dbdbdb',
-  },
-  dayOfWeekRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 16,
-    backgroundColor: '#f5f5f5',
-    marginRight: 6,
-    marginBottom: 6,
-  },
-  subSectionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  addSubtaskRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  subtaskTextInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
-    backgroundColor: '#fff',
-    marginRight: 8,
-    color: '#222',
-  },
-  addSubtaskButton: {
-    backgroundColor: '#1c8db9',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addSubtaskButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  subtaskListContainer: {
-    marginTop: 8,
-    backgroundColor: '#fbfbfb',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#e2e2e2',
-  },
-  subtaskItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  subtaskIndex: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#888',
-    marginRight: 6,
-  },
-  subtaskTitle: {
-    flex: 1,
-    fontSize: 13,
-    color: '#444444',
-  },
-  removeSubtaskButton: {
-    padding: 4,
-    marginLeft: 8,
-  },
-  removeSubtaskButtonText: {
-    fontSize: 12,
-    color: '#c40000',
-    fontWeight: '600',
-  },
-  submitButton: {
-    backgroundColor: '#0070f3',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#d0d0d0',
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  deadlinePressable: {
-    flex: 1.5,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: '#fff',
-    marginLeft: 12,
-  },
-  deadlineText: {
-    fontSize: 16,
-    color: '#222',
-  },
-  deadlinePlaceholder: {
-    fontSize: 16,
-    color: '#999',
-  },
+  contentContainer: { padding: 24 },
+  titleText: { fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 20, color: colors.textPrimary },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 10 },
+  label: { fontSize: 16, fontWeight: '500', color: colors.textPrimary },
+  selectorGroup: { flexDirection: 'row' },
+  recurrenceSelectorGroup: { flexWrap: 'wrap', justifyContent: 'flex-end', flex: 1 },
+  selectorItem: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 20, backgroundColor: colors.surfaceSubtle, marginLeft: 6 },
+  selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
+  unselectedText: { color: colors.textSecondary, fontSize: 13 },
+  selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 13 },
+  selectedLow: { backgroundColor: colors.priorityLowBg, borderColor: colors.priorityLowBorder, borderWidth: 1.5 },
+  textLow: { color: colors.priorityLowText, fontWeight: '600', fontSize: 13 },
+  selectedMedium: { backgroundColor: colors.priorityMediumBg, borderColor: colors.priorityMediumBorder, borderWidth: 1.5 },
+  textMedium: { color: colors.priorityMediumText, fontWeight: '600', fontSize: 13 },
+  selectedHigh: { backgroundColor: colors.priorityHighBg, borderColor: colors.priorityHighBorder, borderWidth: 1.5 },
+  textHigh: { color: colors.priorityHighText, fontWeight: '600', fontSize: 13 },
+  inputs: { flex: 1.5, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 16, backgroundColor: colors.surfaceSubtle, marginLeft: 12, color: colors.textPrimary },
+  inputStyleNested: { flex: 1.5, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 16, backgroundColor: colors.surfaceSubtle, marginLeft: 12, color: colors.textPrimary },
+  dynamicContainer: { marginTop: 10, padding: 12, backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  dayOfWeekRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  dayPill: { paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 16, backgroundColor: colors.surfaceSubtle, marginRight: 6, marginBottom: 6 },
+  subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
+  addSubtaskRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  subtaskTextInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, backgroundColor: colors.surfaceSubtle, marginRight: 8, color: colors.textPrimary },
+  addSubtaskButton: { backgroundColor: colors.accent, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  addSubtaskButtonText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 14 },
+  subtaskListContainer: { marginTop: 8, backgroundColor: colors.surfaceSubtle, borderRadius: 6, borderWidth: 1, borderColor: colors.borderSubtle },
+  subtaskItemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+  subtaskIndex: { fontSize: 12, fontWeight: '500', color: colors.textMuted, marginRight: 6 },
+  subtaskTitle: { flex: 1, fontSize: 13, color: colors.textPrimary },
+  removeSubtaskButton: { padding: 4, marginLeft: 8 },
+  removeSubtaskButtonText: { fontSize: 12, color: colors.danger, fontWeight: '600' },
+  submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
+  submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
+  submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
+  deadlinePressable: { flex: 1.5, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.surfaceSubtle, marginLeft: 12 },
+  deadlineText: { fontSize: 16, color: colors.textPrimary },
+  deadlinePlaceholder: { fontSize: 16, color: colors.textPlaceholder },
 });

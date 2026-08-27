@@ -1,4 +1,5 @@
 // app/today.tsx
+import NewHabitModal from '@/components/NewHabitModal';
 import { calculatePace, PaceResult } from '@/engine/pace';
 import { getEffectivePriority, shouldArchiveTask } from '@/engine/priority';
 import BottomSheet from '@gorhom/bottom-sheet';
@@ -15,13 +16,16 @@ import {
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HabitCard } from '../components/HabitCard';
 import NewTaskModal from '../components/new-task';
 import ProgressLogSheet from '../components/ProgressLogSheet';
 import { TaskCard } from '../components/TaskCard';
 import { getCurrentProgress, getProgressLogsByTask, getSubtaskCounts } from '../db/queries';
+import { HabitWithStatus, useHabitStore } from '../store/habitStore';
 import { Task, useTaskStore } from '../store/taskStore';
 import { useStore } from '../store/useStore';
 import { runRolloverNow } from '../tasks/rolloverTask';
+import { colors } from '../theme/colors';
 
 const PRIORITY_WEIGHT: Record<string, number> = {
   High: 3,
@@ -48,6 +52,7 @@ export default function AppDashboard() {
   const taskSheetRef = useRef<BottomSheet>(null);
   const progressSheetRef = useRef<BottomSheet>(null);
   const flashListRef = useRef<FlashListRef<any>>(null);
+  const habitSheetRef = useRef<BottomSheet>(null);
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [loggingTask, setLoggingTask] = useState<Task | null>(null);
@@ -55,16 +60,29 @@ export default function AppDashboard() {
   const [paceMap, setPaceMap] = useState<Record<number, PaceResult>>({});
   const [subtaskMap, setSubtaskMap] = useState<Record<number, { completed: number; total: number }>>({});
   const [expandedTaskIds, setExpandedTaskIds] = useState<Record<number, boolean>>({});
+  const [editingHabit, setEditingHabit] = useState<HabitWithStatus | null>(null);
 
   const insets = useSafeAreaInsets();
 
   const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
   const { evolvingPriorityEnabled, autoArchiveEnabled } = useStore();
+  const { habits, loadHabits, logHabit, removeHabit, updateHabit } = useHabitStore();
+
+
+     const handleEditHabit = (habit: HabitWithStatus) => {
+    setEditingHabit(habit);
+    habitSheetRef.current?.expand();
+    };
+
+    const handleDeleteHabit = (id: number) => {
+      removeHabit(id);
+    };
 
   useEffect(() => {
     const catchUpAndLoad = async () => {
       await runRolloverNow();
       await loadTasks();
+      await loadHabits();
     };
 
     catchUpAndLoad();
@@ -72,6 +90,7 @@ export default function AppDashboard() {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         loadTasks();
+        loadHabits();
       }
     });
 
@@ -238,18 +257,18 @@ export default function AppDashboard() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
 
         <View style={styles.stickyHeader}>
           <DateHeader />
 
-          <View style={styles.metricCard}>
-            <Text style={{ fontWeight: '600', textAlign: 'center', marginBottom: 4 }}>
+          {/* <View style={styles.metricCard}>
+            <Text style={{ fontWeight: '600', textAlign: 'center', marginBottom: 4, color: '#ffffff' }}>
               Task Metrics
             </Text>
             <Text style={styles.metricLine}>
               Total: {summary.total} | Completed:
-              <Text style={{ color: '#40af69' }}> {summary.completed}</Text> | Pending:{' '}
+              <Text style={{ color: colors.success }}> {summary.completed}</Text> | Pending:{' '}
               {summary.incomplete}
             </Text>
             <Text style={styles.metricLine}>
@@ -257,10 +276,10 @@ export default function AppDashboard() {
               Progression: {summary.types['Progression'] || 0}
             </Text>
             <Text style={styles.metricLine}>
-              <Text style={{ color: '#c40000' }}>High: {summary.priorities['High'] || 0} </Text>|
+              <Text style={{ color: colors.danger }}>High: {summary.priorities['High'] || 0} </Text>|
               Medium: {summary.priorities['Medium'] || 0} | Low: {summary.priorities['Low'] || 0}
             </Text>
-          </View>
+          </View> */}
         </View>
 
         <View style={{ flex: 1 }}>
@@ -306,6 +325,15 @@ export default function AppDashboard() {
                     <Text style={styles.emptyStateSubtext}>Tap + to add task.</Text>
                   </View>
                 }
+                ListHeaderComponent={
+                  habits.length > 0 ? (
+                    <View style={{ marginBottom: 8}}>
+                      {habits.map((habit) => (
+                        <HabitCard key={habit.id} habit={habit} onLogToday={logHabit} onEdit={handleEditHabit} onDelete={handleDeleteHabit}/>
+                      ))}
+                    </View>
+                  ) : null
+                }
               />
             </>
           )}
@@ -326,6 +354,26 @@ export default function AppDashboard() {
         >
           <Text style={styles.buttonText}>+</Text>
         </Pressable>
+
+        <Pressable
+          onPress={() => {setEditingHabit(null); habitSheetRef.current?.expand()}}
+          style={({ pressed }) => [
+            styles.habitButtonStuff,
+            {
+              backgroundColor: pressed ? colors.habitAccentPressed : colors.habitAccent,
+              bottom: 110 + insets.bottom,
+            },
+          ]}
+        >
+          <Text style={styles.buttonText}>+</Text>
+        </Pressable>
+
+        <NewHabitModal
+          sheetRef={habitSheetRef}
+          onHabitCreated={() => loadHabits()}
+          habitToEdit={editingHabit}
+          onClose={()=> setEditingHabit(null)}
+        />
 
         <NewTaskModal
           sheetRef={taskSheetRef}
@@ -348,93 +396,18 @@ export default function AppDashboard() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fafafa',
-  },
-  dateHeaderText: {
-    fontSize: 22,
-    color: '#1A1A1A',
-    fontWeight: '800',
-    paddingLeft: 25,
-    paddingTop: 20,
-  },
-  stickyHeader: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderColor: '#EAEAEA',
-    elevation: 2,
-  },
-  metricCard: {
-    paddingHorizontal: 20,
-    marginHorizontal: 25,
-    marginVertical: 20,
-    backgroundColor: '#ededed',
-    borderRadius: 12,
-    paddingVertical: 12,
-    elevation: 2,
-  },
-  metricLine: {
-    fontSize: 13,
-    color: '#333',
-    marginVertical: 1,
-    textAlign: 'center',
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  buttonStuff: {
-    width: 65,
-    height: 65,
-    position: 'absolute',
-    bottom: 35,
-    right: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 32.5,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 32,
-    fontWeight: '300',
-    textAlign: 'center',
-    marginTop: -4,
-  },
-  emptyState: {
-    marginTop: 60,
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#444',
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#888',
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  archiveBanner: {
-    marginHorizontal: 20,
-    marginBottom: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#fef2f2',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#fca5a5',
-  },
-  archiveBannerText: {
-    fontSize: 12,
-    color: '#991b1b',
-    textAlign: 'center',
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  dateHeaderText: { fontSize: 22, color: colors.textPrimary, fontWeight: '800', paddingLeft: 25, paddingTop: 20 },
+  stickyHeader: { backgroundColor: colors.surface, borderBottomWidth: 1, borderColor: colors.border, elevation: 2, paddingBottom: 25 },
+  metricCard: { paddingHorizontal: 20, marginHorizontal: 25, marginVertical: 20, backgroundColor: colors.surfaceElevated, borderRadius: 12, paddingVertical: 12, elevation: 2 },
+  metricLine: { fontSize: 13, color: colors.textSecondary, marginVertical: 1, textAlign: 'center' },
+  listContent: { paddingHorizontal: 20, paddingTop: 16 },
+  buttonStuff: { width: 65, height: 65, position: 'absolute', bottom: 35, right: 25, justifyContent: 'center', alignItems: 'center', borderRadius: 32.5, elevation: 5, shadowColor: colors.shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 3 },
+  buttonText: { color: colors.textOnAccent, fontSize: 32, fontWeight: '300', textAlign: 'center', marginTop: -4 },
+  emptyState: { marginTop: 60, alignItems: 'center', paddingHorizontal: 32 },
+  emptyStateText: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
+  emptyStateSubtext: { fontSize: 14, color: colors.textMuted, marginTop: 6, textAlign: 'center' },
+  archiveBanner: { marginHorizontal: 20, marginBottom: 10, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.dangerBg, borderRadius: 8, borderWidth: 1, borderColor: colors.dangerBorder },
+  archiveBannerText: { fontSize: 12, color: colors.danger, textAlign: 'center' },
+  habitButtonStuff: { position: 'absolute', width: 50, height: 50, borderRadius: 25, bottom: 110, right: 30, justifyContent: 'center' },
 });

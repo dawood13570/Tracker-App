@@ -1,6 +1,6 @@
 // src/db/schema.ts
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const tasks= sqliteTable('tasks', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -64,7 +64,9 @@ export const habitLogs = sqliteTable('habit_logs', {
   habitId: integer('habit_id').notNull().references(() => habits.id, { onDelete: 'cascade' }),
   date: text('date').notNull(),
   createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
-});
+}, (table) => ({
+  habitDateUnique: uniqueIndex('habit_logs_habit_id_date_unique').on(table.habitId, table.date),
+}));
 
 export const events = sqliteTable('events', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -93,4 +95,20 @@ export const tags = sqliteTable('tags', {
 export const taskTags = sqliteTable('task_tags', {
   taskId: integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.taskId, table.tagId] }),
+}));
+
+export const activities = sqliteTable('activities', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+export const activityLogs = sqliteTable('activity_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  activityId: integer('activity_id').notNull().references(() => activities.id, { onDelete: 'cascade' }),
+  date: text('date').notNull(),
+  note: text('note'),
+  createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });

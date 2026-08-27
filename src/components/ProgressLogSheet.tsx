@@ -6,6 +6,7 @@ import { Alert, Keyboard, Pressable, StyleSheet, Switch, Text, TouchableOpacity,
 import { getProgressLogsByTask, insertProgressLog } from '../db/queries';
 import { getSurplusChoices, PaceResult, SurplusOptions } from '../engine/pace';
 import { Task, useTaskStore } from '../store/taskStore';
+import { colors } from '../theme/colors';
 
 interface ProgressLog {
   id: number;
@@ -158,7 +159,7 @@ export default function ProgressLogSheet({
       index={-1}
       snapPoints={snapPoints}
       enablePanDownToClose
-      backgroundStyle={{ backgroundColor: '#dedede' }}
+      backgroundStyle={{ backgroundColor: colors.surface }}
       keyboardBehavior="fillParent"
       keyboardBlurBehavior="restore"
       onClose={() => {
@@ -244,7 +245,7 @@ export default function ProgressLogSheet({
               value={amount}
               onChangeText={setAmount}
               placeholder={`e.g., 22 ${task.progressUnit ?? ''}`}
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textPlaceholder}
               keyboardType="numeric"
             />
 
@@ -290,156 +291,30 @@ export default function ProgressLogSheet({
 }
 
 const styles = StyleSheet.create({
-  contentContainer: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  titleText: {
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  summaryCard: {
-    backgroundColor: '#ececec',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#dbdbdb',
-    padding: 12,
-    marginBottom: 16,
-  },
-  summaryLine: {
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: '#222',
-  },
-  summarySubline: {
-    fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#fff',
-    color: '#222',
-    marginBottom: 12,
-  },
-  submitButton: {
-    backgroundColor: '#0070f3',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#d0d0d0',
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  subSectionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  emptyHistoryText: {
-    fontSize: 13,
-    color: '#888',
-  },
-  historyRow: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e2e2',
-    paddingVertical: 8,
-  },
-  historyAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-  },
-  historyDate: {
-    fontSize: 12,
-    color: '#888',
-  },
-  historyNote: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
-  surplusContainer: {
-    marginTop: 6,
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#d6d6d6',
-    marginBottom: 20,
-  },
-  surplusHeading: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    textAlign: 'center',
-  },
-  surplusSubtext: {
-    fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 14,
-  },
-  surplusOptionBtn: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-  },
-  surplusBtnTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#0f172a',
-  },
-  surplusBtnDesc: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  saveChoiceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    marginVertical: 6,
-  },
-  saveChoiceLabel: {
-    fontSize: 13,
-    color: '#475569',
-    fontWeight: '500',
-  },
-  surplusSkipBtn: {
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  surplusSkipText: {
-    fontSize: 13,
-    color: '#888',
-    fontWeight: '500',
-  },
+  contentContainer: { padding: 24, paddingBottom: 40 },
+  titleText: { fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 16, color: colors.textPrimary },
+  summaryCard: { backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border, padding: 12, marginBottom: 16 },
+  summaryLine: { fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.textPrimary },
+  summarySubline: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginTop: 4 },
+  label: { fontSize: 14, fontWeight: '500', marginBottom: 6, color: colors.textPrimary },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary, marginBottom: 12 },
+  submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center', marginBottom: 24 },
+  submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
+  submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
+  subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
+  emptyHistoryText: { fontSize: 13, color: colors.textMuted },
+  historyRow: { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, paddingVertical: 8 },
+  historyAmount: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+  historyDate: { fontSize: 12, color: colors.textMuted },
+  historyNote: { fontSize: 12, color: colors.textSecondary, marginTop: 2, fontStyle: 'italic' },
+  surplusContainer: { marginTop: 6, padding: 16, backgroundColor: colors.surfaceElevated, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 20 },
+  surplusHeading: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+  surplusSubtext: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginTop: 4, marginBottom: 14 },
+  surplusOptionBtn: { backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, marginBottom: 10 },
+  surplusBtnTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+  surplusBtnDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  saveChoiceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 4, marginVertical: 6 },
+  saveChoiceLabel: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+  surplusSkipBtn: { paddingVertical: 8, alignItems: 'center' },
+  surplusSkipText: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
 });

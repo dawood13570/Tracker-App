@@ -1,8 +1,11 @@
 // src/db/queries.ts
+import { calculateHabitStreak } from '@/engine/streaks';
+import { endOfWeek, format, startOfWeek } from 'date-fns';
 import type { InferInsertModel } from 'drizzle-orm';
 import { and, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { db } from './client';
-import { progressLogs, tasks } from './schema';
+import { habitLogs, habits, progressLogs, tasks } from './schema';
+
 
 export type NewTask = InferInsertModel<typeof tasks>;
 export type NewProgressLog = InferInsertModel<typeof progressLogs>;
@@ -139,3 +142,95 @@ export async function setAllSubtasksStatus(parentId: number, isCompleted: boolea
     .where(eq(tasks.parentId, parentId))
     .returning();
 }
+
+export async function insertHabit(data: {
+    title: string;
+    cadenceType: 'daily' | 'weekly_n_times';
+    cadenceTarget?: number;
+}) {
+    return db.insert(habits).values(data).returning();
+}
+
+export async function logHabitCompletion(habitId:number, date: string) {
+    return db
+    .insert(habitLogs)
+    .values({ habitId, date })
+    .onConflictDoNothing()
+    .returning();
+}
+
+// Add near the top of queries.ts, exported so habitStore.ts can import it directly
+export type HabitWithStatus = {
+  id: number;
+  title: string;
+  cadenceType: 'daily' | 'weekly_n_times';
+  cadenceTarget: number | null;
+  createdAt: string;
+  isCompletedToday: boolean;
+  streak: number;
+  weeklyProgress?: { current: number; target: number };
+};
+
+export async function getHabitsByDate(date: string): Promise<HabitWithStatus[]> {
+    const allHabits = await db.select().from(habits);
+    const targetDate = new Date(date);
+
+    const weekStart = format(startOfWeek(targetDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    const weekEnd = format(endOfWeek(targetDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+
+    const habitsWithStatus = await Promise.all(
+        allHabits.map(async (habit): Promise<HabitWithStatus> => {
+            const allLogs = await db
+                .select({ date: habitLogs.date })
+                .from(habitLogs)
+                .where(eq(habitLogs.habitId, habit.id));
+
+            const logDates = allLogs.map((l) => l.date);
+            const isCompletedToday = logDates.includes(date);
+            const streak = calculateHabitStreak(habit, logDates, date);
+
+            if (habit.cadenceType === 'daily') {
+                return { ...habit, isCompletedToday, streak };
+            }
+
+            const weekLogs = logDates.filter((d) => d >= weekStart && d <= weekEnd);
+
+            return {
+                ...habit,
+                isCompletedToday,
+                streak,
+                weeklyProgress: {
+                    current: weekLogs.length,
+                    target: habit.cadenceTarget ?? 0,
+                },
+            };
+        })
+    );
+    return habitsWithStatus;
+}
+
+export async function getHabitStreak(habitId: number, today: string): Promise<number> {
+    const habitRow = await db.select().from(habits).where(eq(habits.id, habitId)).limit(1);
+    if (!habitRow.length) return 0;
+
+    const logs = await db
+        .select({ date: habitLogs.date})
+        .from(habitLogs)
+        .where(eq(habitLogs.habitId, habitId));
+
+    return calculateHabitStreak(habitRow[0], logs.map((l) => l.date), today);
+}
+
+export async function updateHabit(
+    id: number,
+    data: Partial<{ title: string; cadenceType: 'daily' | 'weekly_n_times'; cadenceTarget: number | null}>
+) {
+    const [updated] = await db.update(habits).set(data).where(eq(habits.id, id)).returning();
+    return updated;
+}
+
+export async function deleteHabit(id: number) {
+    const [deleted] = await db.delete(habits).where(eq(habits.id, id)).returning();
+    return deleted;
+}
+

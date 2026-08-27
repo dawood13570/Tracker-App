@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { colors } from '../theme/colors';
 
 interface ProcrastinationBadgeProps {
     count: number;
@@ -26,35 +27,15 @@ export function ProcrastinationBadge({ count }: ProcrastinationBadgeProps) {
 }
 
 const styles = StyleSheet.create({
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
+  badgeText: { fontSize: 12, fontWeight: '600' },
 
-  subtle: {
-    backgroundColor: '#F3F4F6',
-  },
-  subtleText: {
-    color: '#4B5563',
-  },
+  subtle: { backgroundColor: colors.surfaceElevated },
+  subtleText: { color: colors.textSecondary },
 
-  moderate: {
-    backgroundColor: '#FEF3C7',
-  },
-  moderateText: {
-    color: '#D97706',
-  },
+  moderate: { backgroundColor: colors.paceBehindBg },
+  moderateText: { color: colors.paceBehindText },
 
-  alarming: {
-    backgroundColor: '#FEE2E2',
-  },
-  alarmingText: {
-    color: '#DC2626',
-  },
+  alarming: { backgroundColor: colors.dangerBg },
+  alarmingText: { color: colors.danger },
 });

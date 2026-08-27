@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { PaceStatus } from '../engine/pace';
+import { colors } from '../theme/colors';
 
 interface PaceIndicatorProps {
     status: PaceStatus;
@@ -17,29 +18,21 @@ export function PaceIndicator({ status }: PaceIndicatorProps) {
 
 
 const styles = StyleSheet.create({
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
+  badgeText: { fontSize: 12, fontWeight: '600' },
 
-  Critical: { backgroundColor: '#FEE2E2' },
-  CriticalText: { color: '#DC2626' },
+  Critical: { backgroundColor: colors.paceCriticalBg },
+  CriticalText: { color: colors.paceCriticalText },
 
-  Behind: { backgroundColor: '#FEF3C7' },
-  BehindText: { color: '#D97706' },
+  Behind: { backgroundColor: colors.paceBehindBg },
+  BehindText: { color: colors.paceBehindText },
 
-  'Slightly Behind': { backgroundColor: '#FEF3C7' },
-  'Slightly BehindText': { color: '#B45309' },
+  'Slightly Behind': { backgroundColor: colors.paceSlightlyBehindBg },
+  'Slightly BehindText': { color: colors.paceSlightlyBehindText },
 
-  'On Track': { backgroundColor: '#DBEAFE' },
-  'On TrackText': { color: '#2563EB' },
+  'On Track': { backgroundColor: colors.paceOnTrackBg },
+  'On TrackText': { color: colors.paceOnTrackText },
 
-  Ahead: { backgroundColor: '#DCFCE7' },
-  AheadText: { color: '#16A34A' },
+  Ahead: { backgroundColor: colors.paceAheadBg },
+  AheadText: { color: colors.paceAheadText },
 });
