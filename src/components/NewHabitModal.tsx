@@ -3,12 +3,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { HabitWithStatus, useHabitStore } from '../store/habitStore';
 import { colors } from '../theme/colors';
+import { AddType, AddTypeSwitcher } from './AddTypeSwitcher';
 
 interface NewHabitModalProps {
   sheetRef: React.RefObject<BottomSheet | null>;
   onHabitCreated: () => void;
   habitToEdit?: HabitWithStatus | null;
   onClose?: () => void;
+  onSwitchType?: (type: AddType) => void;
 }
 
 const CADENCE_OPTIONS = [
@@ -16,14 +18,14 @@ const CADENCE_OPTIONS = [
   { value: 'weekly_n_times', label: 'N times/week' },
 ] as const;
 
-export default function NewHabitModal({ sheetRef, onHabitCreated, habitToEdit, onClose }: NewHabitModalProps) {
+export default function NewHabitModal({ sheetRef, onHabitCreated, habitToEdit, onClose, onSwitchType }: NewHabitModalProps) {
   const [title, setTitle] = useState('');
   const [cadenceType, setCadenceType] = useState<'daily' | 'weekly_n_times'>('daily');
   const [cadenceTarget, setCadenceTarget] = useState('');
 
   const { addHabit, updateHabit } = useHabitStore();
 
-  const snapPoints = useMemo(() => ['50%', '35%'], []);
+  const snapPoints = useMemo(() => ['60%', '35%'], []);
 
   const resetForm = () => {
     setTitle('');
@@ -92,11 +94,12 @@ export default function NewHabitModal({ sheetRef, onHabitCreated, habitToEdit, o
       }}
     >
       <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+        {!habitToEdit && onSwitchType && <AddTypeSwitcher active="Habit" onSelect={onSwitchType} />}
         <Text style={styles.titleText}>{habitToEdit ? 'Edit Habit' : 'New Habit'}</Text>
 
         <BottomSheetTextInput
           style={styles.input}
-          placeholder="Enter habit title"
+          placeholder="Enter Habit Here"
           placeholderTextColor={colors.textPlaceholder}
           value={title}
           onChangeText={setTitle}

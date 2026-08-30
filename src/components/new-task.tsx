@@ -7,6 +7,7 @@ import { deleteTask, getSubtasksByParent, insertSubtask } from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
 import { colors } from '../theme/colors';
 import { getLocalDateString } from '../utils/date';
+import { AddType, AddTypeSwitcher } from './AddTypeSwitcher';
 
 interface SubTaskDraft {
   id: string; // Database numeric ID (as string) or temp timestamp for new items
@@ -20,6 +21,7 @@ interface NewTaskModalProps {
   onTaskCreated: () => void;
   taskToEdit?: Task | null;
   onClose?: () => void;
+  onSwitchType?: (type: AddType) => void;
 }
 
 const RECURRENCE_OPTIONS = [
@@ -33,7 +35,7 @@ const DAYS_OF_WEEK = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 const TASK_TYPES = ['Simple', 'Progression', 'Hybrid'] as const;
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'] as const;
 
-export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onClose }: NewTaskModalProps) {
+export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onClose, onSwitchType }: NewTaskModalProps) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'Simple' | 'Progression' | 'Hybrid'>('Simple');
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Low');
@@ -53,7 +55,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const [deletedSubtaskIds, setDeletedSubtaskIds] = useState<number[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
 
-  const snapPoints = useMemo(() => ['80%', '35%'], []);
+  const snapPoints = useMemo(() => ['60%', '35%'], []);
 
   const handleAddSubtask = () => {
     if (subtaskInput.trim() === '') return;
@@ -163,7 +165,9 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
       keyboardBlurBehavior="restore"
     >
       <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+        {!taskToEdit && onSwitchType && <AddTypeSwitcher active="Task" onSelect={onSwitchType} />}
         <Text style={styles.titleText}>{taskToEdit ? 'Edit Task' : 'New Task Input'}</Text>
+        
 
         <BottomSheetTextInput
           style={styles.input}

@@ -62,4 +62,7 @@ export const colors = {
   shadowColor: '#000000',
 
   habitAccentPressed: '#7a5ce0',
+
+  eventAccent: '#e0a840',
+  eventAccentPressed: '#b88733',
 };

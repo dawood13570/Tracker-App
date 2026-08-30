@@ -4,7 +4,7 @@ import { endOfWeek, format, startOfWeek } from 'date-fns';
 import type { InferInsertModel } from 'drizzle-orm';
 import { and, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { db } from './client';
-import { habitLogs, habits, progressLogs, tasks } from './schema';
+import { events, habitLogs, habits, progressLogs, tasks } from './schema';
 
 
 export type NewTask = InferInsertModel<typeof tasks>;
@@ -234,3 +234,33 @@ export async function deleteHabit(id: number) {
     return deleted;
 }
 
+export async function insertEvent(data: {
+    title: string;
+    startTime: string;
+    endTime?: string | null;
+    location?: string | null;
+}) {
+    const [inserted] = await db.insert(events).values(data).returning();
+    return inserted;
+}
+
+export async function getEventsByDate(date: string) {
+    return db
+      .select()
+      .from(events)
+      .where(sql`${events.startTime} LIKE ${date + '%'}`)
+      .orderBy(events.startTime);
+}
+
+export async function updateEvent(
+    id: number,
+    data: Partial<{ title: string; startTime: string; endTime: string | null; location: string | null}>
+) {
+    const [updated] = await db.update(events).set(data).where(eq(events.id, id)).returning();
+    return updated;
+}
+
+export async function deleteEvent(id: number) {
+    const [deleted] = await db.delete(events).where(eq(events.id, id)).returning();
+    return deleted;
+}

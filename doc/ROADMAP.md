@@ -304,34 +304,36 @@ This section replaces that with the real thing.
 created and applied to tasks.
 
 ### 5.1 — Habits
-- [ ] 5.1.1 — Write `habits` and `habit_logs` schema in `/db/schema.ts` (if not already sketched in 2.1.7)
-- [ ] 5.1.2 — `insertHabit`, `logHabitCompletion`, `getHabitsByDate` in `/db/queries.ts`
-- [ ] 5.1.3 — Habit card UI: distinct from TaskCard, shows current streak
-- [ ] 5.1.4 — Streak calculation: consecutive days/weeks logged, resets on a missed one
-- [ ] 5.1.5 — Habits appear on Today screen alongside tasks, visually distinct
+- [x] 5.1.1 — Write `habits` and `habit_logs` schema in `/db/schema.ts` (if not already sketched in 2.1.7)
+- [x] 5.1.2 — `insertHabit`, `logHabitCompletion`, `getHabitsByDate` in `/db/queries.ts`
+- [x] 5.1.3 — Habit card UI: distinct from TaskCard, shows current streak
+- [x] 5.1.4 — Streak calculation: consecutive days/weeks logged, resets on a missed one
+- [x] 5.1.5 — Habits appear on Today screen alongside tasks, visually distinct
 
 ### 5.2 — Events
-- [ ] 5.2.1 — Write `events` schema (title, start_time, end_time, location?)
-- [ ] 5.2.2 — `insertEvent`, `getEventsByDate` in `/db/queries.ts`
-- [ ] 5.2.3 — Event card UI: time-based, no checkbox/completion state
-- [ ] 5.2.4 — Events appear on Today, Week, and Month views
+- [x] 5.2.1 — Write `events` schema (title, start_time, end_time, location?) — already sketched in 2.1.7
+- [ ] 5.2.2 — `insertEvent`, `getEventsByDate`, `updateEvent`, `deleteEvent` in `/db/queries.ts`
+- [x] 5.2.2b — Event creation/edit form (own bottom sheet, following the Habit pattern: own FAB, own store)
+- [x] 5.2.3 — Event card UI: time-based, no checkbox/completion state
+- [x] 5.2.3b — Long-press edit/delete on Event card
+- [x] 5.2.4 — Events appear on Today, Week, and Month views
 
 ### 5.3 — Tags
-- [ ] 5.3.1 — Write `tags` and `task_tags` schema (many-to-many)
-- [ ] 5.3.2 — `createTag`, `assignTag`, `removeTag`, `getTasksByTag` in `/db/queries.ts`
-- [ ] 5.3.3 — Tag picker/creator in New Task form — multi-select, create-new-on-the-fly
-- [ ] 5.3.4 — Small tag chips rendered on TaskCard
-- [ ] 5.3.5 — Filter Today/Week/Month views by tag
+- [x] 5.3.1 — Write `tags` and `task_tags` schema (many-to-many) — already sketched in 2.1.7, composite PK on task_tags fixed 2026-08-28
+- [ ] 5.3.2 — `createTag`, `assignTag`, `removeTag`, `renameTag`, `deleteTag`, `getTasksByTag` in `/db/queries.ts`
+ - [ ] 5.3.3 — Tag picker/creator in New Task form — multi-select, create-new-on-the-fly
+ - [ ] 5.3.4 — Small tag chips rendered on TaskCard
+ - [ ] 5.3.5 — Filter Today/Week/Month views by tag
 
 ### 5.4 — Activities
 
 Added: 2026-07-18
 
-- [ ] 5.4.1 — Write activities and activity_logs schema in /db/schema.ts
-- [ ] 5.4.2 — insertActivity, logActivity, getLastActivityLog(activityId) in /db/queries.ts
-- [ ] 5.4.3 — Activity card UI: name + "last done: [date]" + optional note, no checkbox, no streak
-- [ ] 5.4.4 — Activity history view: full log list for one activity, most recent first
-- [ ] 5.4.5 — Quick-log entry point (log now, optionally with a note) from Activity card
+- [x] 5.4.1 — Write activities and activity_logs schema in /db/schema.ts — done 2026-08-28
+ - [ ] 5.4.2 — insertActivity, logActivity, getLastActivityLog(activityId) in /db/queries.ts
+ - [ ] 5.4.3 — Activity card UI: name + "last done: [date]" + optional note, no checkbox, no streak
+ - [ ] 5.4.4 — Activity history view: full log list for one activity, most recent first
+ - [ ] 5.4.5 — Quick-log entry point (log now, optionally with a note) from Activity card
 
 ---
 

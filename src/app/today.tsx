@@ -1,4 +1,7 @@
 // app/today.tsx
+import { AddType } from '@/components/AddTypeSwitcher';
+import { EventCard } from '@/components/EventCard';
+import NewEventModal from '@/components/NewEventModal';
 import NewHabitModal from '@/components/NewHabitModal';
 import { calculatePace, PaceResult } from '@/engine/pace';
 import { getEffectivePriority, shouldArchiveTask } from '@/engine/priority';
@@ -12,7 +15,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  View,
+  View
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,11 +24,13 @@ import NewTaskModal from '../components/new-task';
 import ProgressLogSheet from '../components/ProgressLogSheet';
 import { TaskCard } from '../components/TaskCard';
 import { getCurrentProgress, getProgressLogsByTask, getSubtaskCounts } from '../db/queries';
+import { EventRow, useEventStore } from '../store/eventStore';
 import { HabitWithStatus, useHabitStore } from '../store/habitStore';
 import { Task, useTaskStore } from '../store/taskStore';
 import { useStore } from '../store/useStore';
 import { runRolloverNow } from '../tasks/rolloverTask';
 import { colors } from '../theme/colors';
+
 
 const PRIORITY_WEIGHT: Record<string, number> = {
   High: 3,
@@ -53,6 +58,7 @@ export default function AppDashboard() {
   const progressSheetRef = useRef<BottomSheet>(null);
   const flashListRef = useRef<FlashListRef<any>>(null);
   const habitSheetRef = useRef<BottomSheet>(null);
+  const eventSheetRef = useRef<BottomSheet>(null);
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [loggingTask, setLoggingTask] = useState<Task | null>(null);
@@ -61,12 +67,14 @@ export default function AppDashboard() {
   const [subtaskMap, setSubtaskMap] = useState<Record<number, { completed: number; total: number }>>({});
   const [expandedTaskIds, setExpandedTaskIds] = useState<Record<number, boolean>>({});
   const [editingHabit, setEditingHabit] = useState<HabitWithStatus | null>(null);
+  const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
 
   const insets = useSafeAreaInsets();
 
   const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
   const { evolvingPriorityEnabled, autoArchiveEnabled } = useStore();
   const { habits, loadHabits, logHabit, removeHabit, updateHabit } = useHabitStore();
+  const { events, loadEvents, removeEvent, updateEvent: updateEventStore } = useEventStore();
 
 
      const handleEditHabit = (habit: HabitWithStatus) => {
@@ -78,11 +86,36 @@ export default function AppDashboard() {
       removeHabit(id);
     };
 
+    const handleEditEvent = (event: EventRow) => {
+      setEditingEvent(event);
+      eventSheetRef.current?.expand();
+    };
+
+    const handleDeleteEvent = (id: number) => {
+      removeEvent(id);
+    };
+
+    const handleSwitchAddType = (type: AddType) => {
+      taskSheetRef.current?.close();
+      habitSheetRef.current?.close();
+      eventSheetRef.current?.close();
+      setEditingTask(null);
+      setEditingHabit(null);
+      setEditingEvent(null);
+
+      setTimeout(() => {
+        if (type === 'Task') taskSheetRef.current?.expand();
+        if (type === 'Habit') habitSheetRef.current?.expand();
+        if (type === 'Event') eventSheetRef.current?.expand();
+      }, 150);
+    };
+
   useEffect(() => {
     const catchUpAndLoad = async () => {
       await runRolloverNow();
       await loadTasks();
       await loadHabits();
+      await loadEvents();
     };
 
     catchUpAndLoad();
@@ -91,6 +124,7 @@ export default function AppDashboard() {
       if (nextState === 'active') {
         loadTasks();
         loadHabits();
+        loadEvents();
       }
     });
 
@@ -326,8 +360,11 @@ export default function AppDashboard() {
                   </View>
                 }
                 ListHeaderComponent={
-                  habits.length > 0 ? (
+                  (events.length > 0 || habits.length > 0) ? (
                     <View style={{ marginBottom: 8}}>
+                      {events.map((event) => (
+                        <EventCard key={event.id} event={event} onEdit={handleEditEvent} onDelete={handleDeleteEvent} />
+                      ))}
                       {habits.map((habit) => (
                         <HabitCard key={habit.id} habit={habit} onLogToday={logHabit} onEdit={handleEditHabit} onDelete={handleDeleteHabit}/>
                       ))}
@@ -347,21 +384,8 @@ export default function AppDashboard() {
           style={({ pressed }) => [
             styles.buttonStuff,
             {
-              backgroundColor: pressed ? '#155b76' : '#1c8db9',
+              backgroundColor: pressed ? colors.accentPressed : colors.accent,
               bottom: 35 + insets.bottom,
-            },
-          ]}
-        >
-          <Text style={styles.buttonText}>+</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => {setEditingHabit(null); habitSheetRef.current?.expand()}}
-          style={({ pressed }) => [
-            styles.habitButtonStuff,
-            {
-              backgroundColor: pressed ? colors.habitAccentPressed : colors.habitAccent,
-              bottom: 110 + insets.bottom,
             },
           ]}
         >
@@ -373,6 +397,7 @@ export default function AppDashboard() {
           onHabitCreated={() => loadHabits()}
           habitToEdit={editingHabit}
           onClose={()=> setEditingHabit(null)}
+          onSwitchType={handleSwitchAddType}
         />
 
         <NewTaskModal
@@ -380,6 +405,15 @@ export default function AppDashboard() {
           onTaskCreated={() => loadTasks()}
           taskToEdit={editingTask}
           onClose={() => setEditingTask(null)}
+          onSwitchType={handleSwitchAddType}
+        />
+
+        <NewEventModal 
+          sheetRef={eventSheetRef}
+          onEventCreated={() => loadEvents()}
+          eventToEdit={editingEvent}
+          onClose={() => setEditingEvent(null)}
+          onSwitchType={handleSwitchAddType}
         />
 
         <ProgressLogSheet
@@ -409,5 +443,4 @@ const styles = StyleSheet.create({
   emptyStateSubtext: { fontSize: 14, color: colors.textMuted, marginTop: 6, textAlign: 'center' },
   archiveBanner: { marginHorizontal: 20, marginBottom: 10, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.dangerBg, borderRadius: 8, borderWidth: 1, borderColor: colors.dangerBorder },
   archiveBannerText: { fontSize: 12, color: colors.danger, textAlign: 'center' },
-  habitButtonStuff: { position: 'absolute', width: 50, height: 50, borderRadius: 25, bottom: 110, right: 30, justifyContent: 'center' },
 });

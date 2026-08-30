@@ -46,8 +46,7 @@ Eventually: public, cross-platform (iOS, desktop), multi-user with accounts.
 ## Other Entity Types
 *Added: 2026-07-18 — these are separate entities, not Task variants.*
 
-Tasks are procrastination-tracked and rollover-aware. Habits and Events don't behave
-that way, so they get their own tables instead of being forced into the Task shape.
+Tasks are procrastination-tracked and rollover-aware. Habits and Events don't behave that way, so they get their own tables instead of being forced into the Task shape.
 
 ### Habit
 - Cadence-based, not deadline-based: "do X daily" or "do X N times a week."
@@ -410,3 +409,9 @@ Reshapes the `goals` table. Revisit before building the real Goals screen.*
 | 2026-07-19 | Rollover eligibility depends only on `rolloverEnabled`, not priority | Gating rollover by priority would freeze Low priority tasks' `procrastinationCount`, which breaks the Evolving Priority System's premise (Low escalates to High *as* its count climbs — it needs to keep climbing). Priority's influence stays in sort order and future escalation, not rollover eligibility. |
 | 2026-07-21 | Hybrid subtasks are `parent_id`-linked Task rows, not a separate table | Reuses existing toggle/edit/delete infrastructure instead of building parallel machinery. Gets mixed-type subtasks (a Progression-type child under a Hybrid parent) for free, no extra schema needed. |
 | 2026-07-21 | `currentProgress` is computed live (`SUM` over `progress_logs`), not a stored/synced column | Same compute-don't-store pattern as skip, archive, and effective priority. A stored column would risk going stale if a log entry is later edited or deleted; a live sum can't drift because there's nothing separate to drift from. |
+| 2026-08-28 | Single unified "+" button on Today, opening the Task sheet
+by default with a switcher inside to jump to Habit or (once built) Activity
+sheets, instead of separate FABs stacking up per entity type. Motivated by
+the FAB count growing one-per-entity (Task, then Habit, next would've been
+Activity) — doesn't scale visually. Revisit once Activities (5.4) exist,
+since that's the point a third FAB would actually force the issue.
