@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getSubtasksByParent } from '../db/queries';
+import { getSubtasksByParent, getTagsForTask } from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
 import { useStore } from '../store/useStore';
 import { colors } from '../theme/colors';
@@ -60,6 +60,12 @@ export function TaskCard({
   const { toggleTask } = useTaskStore();
 
   const [subtasks, setSubtasks] = useState<Task[]>([]);
+
+  const [taskTags, setTaskTags] = useState<{ id: number; name: string; color: string | null }[]>([]);
+
+  useEffect(() => {
+    getTagsForTask(task.id).then(setTaskTags);
+  }, [task.id]);
 
   const loadSubtasks = async () => {
     if (task.type === 'Hybrid') {
@@ -143,18 +149,32 @@ export function TaskCard({
           >
             <View style={styles.cardRow}>
               <View style={styles.cardContent}>
-                <Text style={[styles.taskTitle, task.isCompleted && styles.completedText]}>
-                  {task.title}
-                </Text>
+          {/* Checkbox + Title Row */}
+          <View style={styles.checkboxRow}>
+            <View style={[styles.checkbox, task.isCompleted && styles.checkboxChecked]}>
+              {task.isCompleted && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={[styles.taskTitle, task.isCompleted && styles.completedText]}>
+              {task.title}
+            </Text>
+          </View>
 
-                <View style={styles.metaRow}>
-                  {task.isCompleted && <Text style={styles.taskMeta}>✅ DONE</Text>}
-
-                  {task.procrastinationCount && task.procrastinationCount > 0 ? (
-                    <ProcrastinationBadge count={task.procrastinationCount} />
-                  ) : null}
+          {taskTags.length > 0 && (
+            <View style={styles.tagRow}>
+              {taskTags.map((tag) => (
+                <View key={tag.id} style={[styles.tagChip, { backgroundColor: tag.color ?? colors.surfaceElevated }]}>
+                  <Text style={styles.tagChipText}>{tag.name}</Text>
                 </View>
+              ))}
+            </View>
+          )}
 
+          <View style={styles.metaRow}>
+            {/* "✅ DONE" removed */}
+            {task.procrastinationCount && task.procrastinationCount > 0 ? (
+              <ProcrastinationBadge count={task.procrastinationCount} />
+            ) : null}
+          </View>
                 {task.type === 'Hybrid' && subtaskCount && (
                   <View style={styles.hybridBadge}>
                     <Text style={styles.hybridBadgeText}>
@@ -310,7 +330,7 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
-    marginBottom: 4,
+    flex: 1,
   },
   metaRow: {
     flexDirection: 'row',
@@ -406,4 +426,40 @@ export const styles = StyleSheet.create({
   cardPressed: {
   opacity: 0.7,
   },
+  tagRow: { 
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 4,
+  marginTop: 4 
+  },
+  tagChip: { 
+  paddingHorizontal: 8, 
+  paddingVertical: 2, 
+  borderRadius: 10 
+  },
+  tagChipText: { 
+  fontSize: 10, 
+  fontWeight: '600', 
+  color: colors.textPrimary 
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    backgroundColor: colors.surface,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.accent,
+  },
+  
 });

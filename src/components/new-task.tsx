@@ -1,16 +1,18 @@
 // src/components/new-task.tsx
+import { useTagStore } from '@/store/tagStore';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { deleteTask, getSubtasksByParent, insertSubtask } from '../db/queries';
+import { assignTag, deleteTask, getSubtasksByParent, getTagsForTask, insertSubtask, removeTag as removeTagFromTask } from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
 import { colors } from '../theme/colors';
 import { getLocalDateString } from '../utils/date';
 import { AddType, AddTypeSwitcher } from './AddTypeSwitcher';
+import { TagPicker } from './TagPicker';
 
 interface SubTaskDraft {
-  id: string; // Database numeric ID (as string) or temp timestamp for new items
+  id: string;
   title: string;
   isCompleted: boolean;
   isNew?: boolean;
@@ -50,6 +52,8 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
   const { addTask, updateTask, selectedDate } = useTaskStore();
+  const { tags: allTags, loadTags, addTag, removeTag } = useTagStore();
+  const [ selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);
   const [deletedSubtaskIds, setDeletedSubtaskIds] = useState<number[]>([]);
@@ -154,6 +158,44 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     }
   }, [taskToEdit]);
 
+  useEffect(() => {
+    loadTags();
+  }, []);
+
+  useEffect(() => {
+    if (taskToEdit) {
+      getTagsForTask(taskToEdit.id).then((rows) => setSelectedTagIds(rows.map((r) => r.id)));
+    } else {
+      setSelectedTagIds([]);
+    }
+  }, [taskToEdit]);
+
+  // Uncheck or check a tag for this specific task
+const handleToggleTag = async (tagId: number) => {
+  const isSelected = selectedTagIds.includes(tagId);
+
+  if (taskToEdit) {
+    if (isSelected) {
+      await removeTagFromTask(taskToEdit.id, tagId);
+    } else {
+      await assignTag(taskToEdit.id, tagId);
+    }
+  }
+  setSelectedTagIds((prev) =>
+    isSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+  );
+};
+
+    
+    const handleDeleteTag = async (tagId: number) => {
+      if (taskToEdit && selectedTagIds.includes(tagId)) {
+        await removeTagFromTask(taskToEdit.id, tagId);
+      }
+      setSelectedTagIds((prev) => prev.filter((id) => id !== tagId));
+      await removeTag(tagId);
+    };
+
+
   return (
     <BottomSheet
       ref={sheetRef}
@@ -221,6 +263,17 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
               );
             })}
           </View>
+        </View>
+
+        <View style={styles.dynamicContainer}>
+          <Text style={styles.subSectionTitle}>Tags</Text>
+          <TagPicker
+            allTags={allTags}
+            selectedTagIds={selectedTagIds}
+            onToggleTag={handleToggleTag}
+            onCreateTag={(name) => addTag({ name })}
+            onDeleteTag={handleDeleteTag}
+          />
         </View>
 
         <View style={styles.row}>

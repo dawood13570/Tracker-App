@@ -2,10 +2,9 @@
 import { calculateHabitStreak } from '@/engine/streaks';
 import { endOfWeek, format, startOfWeek } from 'date-fns';
 import type { InferInsertModel } from 'drizzle-orm';
-import { and, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { db } from './client';
-import { events, habitLogs, habits, progressLogs, tasks } from './schema';
-
+import { events, habitLogs, habits, progressLogs, tags, tasks, taskTags } from './schema';
 
 export type NewTask = InferInsertModel<typeof tasks>;
 export type NewProgressLog = InferInsertModel<typeof progressLogs>;
@@ -96,7 +95,8 @@ export async function getRolloverCandidates(todayStr: string) {
         and(
             eq(tasks.isCompleted, false),
             eq(tasks.rolloverEnabled, true),
-            lt(tasks.scheduledDate, todayStr)
+            lt(tasks.scheduledDate, todayStr),
+            isNull(tasks.parentId)
         )
     )
 }
@@ -262,5 +262,50 @@ export async function updateEvent(
 
 export async function deleteEvent(id: number) {
     const [deleted] = await db.delete(events).where(eq(events.id, id)).returning();
+    return deleted;
+}
+
+export async function createTag(data: { name: string; color?: string | null }) {
+    const [inserted] = await db.insert(tags).values(data).returning();
+    return inserted;
+}
+
+export async function getAllTags() {
+    return db.select().from(tags).orderBy(tags.name);
+}
+
+export async function assignTag(taskId: number, tagId: number) {
+    return db.insert(taskTags).values({ taskId, tagId }).onConflictDoNothing().returning();
+}
+
+export async function removeTag(taskId: number, tagId: number) {
+    return db
+    .delete(taskTags)
+    .where(and(eq(taskTags.taskId, taskId), eq(taskTags.tagId, tagId)))
+    .returning();
+}
+
+export async function getTagsForTask(taskId: number) {
+    return db
+    .select({id: tags.id, name: tags.name, color: tags.color})
+    .from(taskTags)
+    .innerJoin(tags, eq(taskTags.tagId, tags.id))
+    .where(eq(taskTags.taskId, taskId));
+}
+
+export async function getTasksByTag(tagId: number) {
+    const rows = await db.select({ taskId: taskTags.taskId}).from(taskTags).where(eq(taskTags.tagId, tagId));
+    const taskIds = rows.map((r) => r.taskId);
+    if (taskIds.length === 0) return [];
+    return db.select().from(tasks).where(inArray(tasks.id, taskIds));
+}
+
+export async function renameTag(id: number, data: { name?: string; color?: string | null}) {
+    const [updated] = await db.update(tags).set(data).where(eq(tags.id, id)).returning();
+    return updated;
+}
+
+export async function deleteTag(id: number) {
+    const [deleted] = await db.delete(tags).where(eq(tags.id, id)).returning();
     return deleted;
 }

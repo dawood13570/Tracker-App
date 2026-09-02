@@ -312,7 +312,7 @@ created and applied to tasks.
 
 ### 5.2 — Events
 - [x] 5.2.1 — Write `events` schema (title, start_time, end_time, location?) — already sketched in 2.1.7
-- [ ] 5.2.2 — `insertEvent`, `getEventsByDate`, `updateEvent`, `deleteEvent` in `/db/queries.ts`
+- [x] 5.2.2 — `insertEvent`, `getEventsByDate`, `updateEvent`, `deleteEvent` in `/db/queries.ts`
 - [x] 5.2.2b — Event creation/edit form (own bottom sheet, following the Habit pattern: own FAB, own store)
 - [x] 5.2.3 — Event card UI: time-based, no checkbox/completion state
 - [x] 5.2.3b — Long-press edit/delete on Event card
@@ -320,9 +320,9 @@ created and applied to tasks.
 
 ### 5.3 — Tags
 - [x] 5.3.1 — Write `tags` and `task_tags` schema (many-to-many) — already sketched in 2.1.7, composite PK on task_tags fixed 2026-08-28
-- [ ] 5.3.2 — `createTag`, `assignTag`, `removeTag`, `renameTag`, `deleteTag`, `getTasksByTag` in `/db/queries.ts`
- - [ ] 5.3.3 — Tag picker/creator in New Task form — multi-select, create-new-on-the-fly
- - [ ] 5.3.4 — Small tag chips rendered on TaskCard
+- [x] 5.3.2 — `createTag`, `assignTag`, `removeTag`, `renameTag`, `deleteTag`, `getTasksByTag` in `/db/queries.ts`
+ - [x] 5.3.3 — Tag picker/creator in New Task form — multi-select, create-new-on-the-fly
+ - [x] 5.3.4 — Small tag chips rendered on TaskCard
  - [ ] 5.3.5 — Filter Today/Week/Month views by tag
 
 ### 5.4 — Activities
