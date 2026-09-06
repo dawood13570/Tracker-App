@@ -1,15 +1,9 @@
-// src/components/TaskCard.tsx
+//TaskCard.tsx
 import type { PaceResult } from '@/engine/pace';
 import { getEffectivePriority } from '@/engine/priority';
+import { useTagStore } from '@/store/tagStore';
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getSubtasksByParent, getTagsForTask } from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
 import { useStore } from '../store/useStore';
@@ -17,12 +11,11 @@ import { colors } from '../theme/colors';
 import { PaceIndicator } from './PaceIndicator';
 import { ProcrastinationBadge } from './ProcrastinationBadge';
 import { ProgressBar } from './ProgressBar';
+import { SelectionIndicator } from './SelectionIndicator';
 
 interface TaskCardProps {
   task: Task;
   onToggle: (id: number, currentStatus: boolean) => void;
-  onEdit: (task: Task) => void;
-  onDelete: (id: number) => void;
   currentProgress?: number;
   onOpenProgressLog?: (task: Task) => void;
   subtaskCount?: { completed: number; total: number };
@@ -30,24 +23,26 @@ interface TaskCardProps {
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   onSubtasksCountUpdate?: (taskId: number, completed: number, total: number) => void;
+  selectionMode: boolean;
+  isSelected: boolean;
+  onLongPressCard: () => void;
+  onToggleSelect: () => void;
 }
 
 function getPriorityAccentColor(priority: 'Low' | 'Medium' | 'High') {
   switch (priority) {
     case 'High':
-      return colors.priorityHighBorder;
+      return colors.priorityHighBorder ?? '#e53935';
     case 'Medium':
-      return colors.priorityMediumBorder;
+      return colors.priorityMediumBorder ?? '#fb8c00';
     default:
-      return colors.priorityLowBorder;
+      return colors.priorityLowBorder ?? '#43a047';
   }
 }
 
 export function TaskCard({
   task,
   onToggle,
-  onEdit,
-  onDelete,
   currentProgress,
   onOpenProgressLog,
   subtaskCount,
@@ -55,43 +50,47 @@ export function TaskCard({
   isExpanded = false,
   onToggleExpand,
   onSubtasksCountUpdate,
+  selectionMode,
+  isSelected,
+  onLongPressCard,
+  onToggleSelect,
 }: TaskCardProps) {
   const { evolvingPriorityEnabled } = useStore();
   const { toggleTask } = useTaskStore();
+  const tagVersion = useTagStore((state) => state.tagVersion);
 
   const [subtasks, setSubtasks] = useState<Task[]>([]);
-
   const [taskTags, setTaskTags] = useState<{ id: number; name: string; color: string | null }[]>([]);
 
   useEffect(() => {
-    getTagsForTask(task.id).then(setTaskTags);
-  }, [task.id]);
-
-  const loadSubtasks = async () => {
-    if (task.type === 'Hybrid') {
-      const items = await getSubtasksByParent(task.id);
-      setSubtasks(items);
-    }
-  };
+    let active = true;
+    getTagsForTask(task.id).then((tags) => {
+      if (active) setTaskTags(tags ?? []);
+    });
+    return () => {
+      active = false;
+    };
+  }, [task.id, tagVersion]);
 
   useEffect(() => {
+    let active = true;
     if (task.type === 'Hybrid' && isExpanded) {
-      loadSubtasks();
+      getSubtasksByParent(task.id).then((items) => {
+        if (active) setSubtasks(items ?? []);
+      });
     }
-  }, [task.id, task.isCompleted, isExpanded]);
+    return () => {
+      active = false;
+    };
+  }, [task.id, task.isCompleted, isExpanded, task.type]);
 
   const handleToggleSubtask = async (subtaskId: number) => {
-    const updatedSubtasks = subtasks.map((s) =>
-      s.id === subtaskId ? { ...s, isCompleted: !s.isCompleted } : s
-    );
-    setSubtasks(updatedSubtasks);
-
-    const completed = updatedSubtasks.filter((s) => s.isCompleted).length;
-    const total = updatedSubtasks.length;
+    const updated = subtasks.map((s) => (s.id === subtaskId ? { ...s, isCompleted: !s.isCompleted } : s));
+    setSubtasks(updated);
+    const completed = updated.filter((s) => s.isCompleted).length;
     if (onSubtasksCountUpdate) {
-      onSubtasksCountUpdate(task.id, completed, total);
+      onSubtasksCountUpdate(task.id, completed, updated.length);
     }
-
     await toggleTask(subtaskId);
   };
 
@@ -104,34 +103,30 @@ export function TaskCard({
 
   const displayedProgress = currentProgress ?? task.currentProgress ?? 0;
 
-  const handleLongPress = () => {
-    Alert.alert(
-      'Task Options',
-      'Choose an action for this task',
-      [
-        { text: 'Edit', onPress: () => onEdit(task) },
-        { text: 'Delete', style: 'destructive', onPress: () => confirmDelete() },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
+  const handlePress = () => {
+    if (selectionMode) {
+      onToggleSelect();
+    } else {
+      onToggle(task.id, task.isCompleted);
+    }
   };
 
-  const confirmDelete = () => {
-    Alert.alert(
-      'Are you sure?',
-      'This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => onDelete(task.id) },
-      ],
-      { cancelable: true }
-    );
+  const handleLongPress = () => {
+    if (!selectionMode) {
+      onLongPressCard();
+    }
   };
 
   return (
-    <View style={[styles.taskCard, task.isCompleted && styles.completedCard]}>
-      <View style={styles.cardInner}>
+    <View
+      style={[
+        styles.taskCard,
+        task.isCompleted && styles.completedCard,
+        isSelected && styles.taskCard,
+      ]}
+      collapsable={false}
+    >
+      <View style={styles.cardInner} collapsable={false}>
         <View
           style={[
             styles.priorityAccent,
@@ -140,45 +135,63 @@ export function TaskCard({
           ]}
         />
 
-        <View style={{ flex: 1 }}>
+        <View style={styles.mainContainer}>
           <Pressable
-            onPress={() => onToggle(task.id, task.isCompleted)}
+            onPress={handlePress}
             onLongPress={handleLongPress}
-            style={({ pressed }) => [pressed && styles.cardPressed]}
-
+            style={({ pressed }) => [styles.pressableRow, pressed && styles.cardPressed]}
           >
             <View style={styles.cardRow}>
-              <View style={styles.cardContent}>
-          {/* Checkbox + Title Row */}
-          <View style={styles.checkboxRow}>
-            <View style={[styles.checkbox, task.isCompleted && styles.checkboxChecked]}>
-              {task.isCompleted && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={[styles.taskTitle, task.isCompleted && styles.completedText]}>
-              {task.title}
-            </Text>
-          </View>
-
-          {taskTags.length > 0 && (
-            <View style={styles.tagRow}>
-              {taskTags.map((tag) => (
-                <View key={tag.id} style={[styles.tagChip, { backgroundColor: tag.color ?? colors.surfaceElevated }]}>
-                  <Text style={styles.tagChipText}>{tag.name}</Text>
+              {/* Both lead views remain permanently mounted to prevent native layout unmount glitches */}
+              <View style={styles.leadSlot}>
+                <View
+                  style={[styles.leadOverlay, { opacity: selectionMode ? 1 : 0 }]}
+                  pointerEvents={selectionMode ? 'auto' : 'none'}
+                >
+                  <SelectionIndicator isSelected={isSelected} />
                 </View>
-              ))}
-            </View>
-          )}
 
-          <View style={styles.metaRow}>
-            {/* "✅ DONE" removed */}
-            {task.procrastinationCount && task.procrastinationCount > 0 ? (
-              <ProcrastinationBadge count={task.procrastinationCount} />
-            ) : null}
-          </View>
-                {task.type === 'Hybrid' && subtaskCount && (
+                <View
+                  style={[styles.leadOverlay, { opacity: selectionMode ? 0 : 1 }]}
+                  pointerEvents={selectionMode ? 'none' : 'auto'}
+                >
+                  <View style={[styles.checkbox, task.isCompleted && styles.checkboxChecked]}>
+                    {task.isCompleted && <Text style={styles.checkmark}>✓</Text>}
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.cardContent}>
+                <Text
+                  style={[styles.taskTitle, task.isCompleted && styles.completedText]}
+                  numberOfLines={2}
+                >
+                  {task.title || 'Untitled Task'}
+                </Text>
+
+                {taskTags.length > 0 && (
+                  <View style={styles.tagRow}>
+                    {taskTags.map((tag) => (
+                      <View
+                        key={tag.id}
+                        style={[styles.tagChip, { backgroundColor: tag.color ?? colors.surfaceElevated }]}
+                      >
+                        <Text style={styles.tagChipText}>{tag.name}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {Boolean(task.procrastinationCount && task.procrastinationCount > 0) && (
+                  <View style={styles.metaRow}>
+                    <ProcrastinationBadge count={task.procrastinationCount!} />
+                  </View>
+                )}
+
+                {task.type === 'Hybrid' && Boolean(subtaskCount) && (
                   <View style={styles.hybridBadge}>
                     <Text style={styles.hybridBadgeText}>
-                      {subtaskCount.completed}/{subtaskCount.total} done
+                      {subtaskCount?.completed ?? 0}/{subtaskCount?.total ?? 0} done
                     </Text>
                   </View>
                 )}
@@ -186,13 +199,12 @@ export function TaskCard({
                 {task.type === 'Progression' &&
                   task.totalProgress !== null &&
                   task.totalProgress !== undefined && (
-                    <>
+                    <View style={{ marginTop: 6, width: '100%' }}>
                       <ProgressBar
                         current={displayedProgress}
                         target={task.totalProgress}
                         unit={task.progressUnit}
                       />
-
                       {task.surplusMode === 'bank_it' && (task.bufferDays ?? 0) > 0 && (
                         <View style={styles.bankedBadge}>
                           <Text style={styles.bankedBadgeText}>
@@ -200,39 +212,49 @@ export function TaskCard({
                           </Text>
                         </View>
                       )}
-                    </>
+                    </View>
                   )}
 
-                {task.type === 'Progression' && pace && <PaceIndicator status={pace.status} />}
+                {task.type === 'Progression' && Boolean(pace) && (
+                  <View style={{ marginTop: 4 }}>
+                    <PaceIndicator status={pace!.status} />
+                  </View>
+                )}
               </View>
 
-              {task.type === 'Hybrid' && (
-                <TouchableOpacity
-                  style={styles.expandButton}
-                  onPress={onToggleExpand}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Text style={[styles.arrowIcon, isExpanded && styles.arrowIconExpanded]}>
-                    {isExpanded ? '▲' : '▼'}
-                  </Text>
-                </TouchableOpacity>
-              )}
+              {(task.type === 'Hybrid' || task.type === 'Progression') && (
+              <View
+                style={{ opacity: selectionMode ? 0 : 1 }}
+                pointerEvents={selectionMode ? 'none' : 'auto'}
+              >
+                {task.type === 'Hybrid' && (
+                  <TouchableOpacity
+                    style={styles.expandButton}
+                    onPress={onToggleExpand}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={[styles.arrowIcon, isExpanded && styles.arrowIconExpanded]}>
+                      {isExpanded ? '▲' : '▼'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-              {task.type === 'Progression' && (
-                <TouchableOpacity
-                  style={styles.expandButton}
-                  onPress={() => onOpenProgressLog && onOpenProgressLog(task)}
-                >
-                  <Text style={styles.arrowIcon}>✎</Text>
-                </TouchableOpacity>
-              )}
+                {task.type === 'Progression' && (
+                  <TouchableOpacity
+                    style={styles.expandButton}
+                    onPress={() => onOpenProgressLog && onOpenProgressLog(task)}
+                  >
+                    <Text style={styles.arrowIcon}>✎</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
             </View>
           </Pressable>
 
-          {task.type === 'Hybrid' && isExpanded && (
+          {!selectionMode && task.type === 'Hybrid' && isExpanded && (
             <View style={styles.inlineSubtaskContainer}>
               <View style={styles.inlineDivider} />
-
               {subtasks.length === 0 ? (
                 <Text style={styles.emptySubtasksText}>
                   No subtasks. Hold and edit task to add subtasks.
@@ -278,174 +300,45 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: colors.shadowColor,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.4,
-    shadowRadius: 1.41,
     elevation: 2,
+    minHeight: 60,
+    width: '100%',
     overflow: 'hidden',
+    borderWidth: 1.5,
+  },
+  selectedCard: {
+    borderColor: colors.accent,
+    backgroundColor: colors.selectedBg ?? colors.surface,
   },
   cardInner: {
     flexDirection: 'row',
     alignItems: 'stretch',
+    minHeight: 60,
+    width: '100%',
   },
-  priorityAccent: {
-    width: 4,
+  priorityAccent: { width: 4 },
+  priorityAccentHighGlow: { width: 5 },
+  mainContainer: {
+    flex: 1,
+    minWidth: 0,
   },
-  priorityAccentHighGlow: {
-    width: 5,
+  pressableRow: {
+    //flex: 1,
+    width: '100%',
   },
   cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     padding: 16,
+    width: '100%',
   },
-  cardContent: {
-    flex: 1,
-  },
-  expandButton: {
-    paddingLeft: 12,
-    paddingVertical: 8,
+  leadSlot: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  arrowIcon: {
-    fontSize: 14,
-    color: colors.textMuted,
-  },
-  arrowIconExpanded: {
-    color: colors.accent,
-  },
-  completedCard: {
-    backgroundColor: colors.completedBg,
-    shadowOpacity: 0.05,
-    elevation: 0.5,
-  },
-  completedText: {
-    textDecorationLine: 'line-through',
-    color: colors.completedText,
-  },
-  taskTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  taskMeta: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  hybridBadge: {
-    marginTop: 8,
-    backgroundColor: colors.hybridBadgeBg,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  hybridBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.hybridBadgeText,
-  },
-  bankedBadge: {
-    marginTop: 6,
-    backgroundColor: colors.bankedBadgeBg,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  bankedBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.bankedBadgeText,
-  },
-  inlineSubtaskContainer: {
-    marginTop: 10,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  inlineDivider: {
-    height: 1,
-    backgroundColor: colors.borderSubtle,
-    marginBottom: 8,
-  },
-  emptySubtasksText: {
-    fontSize: 12,
-    color: colors.textMuted,
-    fontStyle: 'italic',
-    paddingVertical: 4,
-  },
-  subtaskItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-  },
-  subtaskCheckRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  subtaskCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    backgroundColor: colors.surface,
-  },
-  subtaskCheckboxChecked: {
-    backgroundColor: colors.accent,
-  },
-  checkmark: {
-    color: colors.textOnAccent,
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  subtaskTitleText: {
-    fontSize: 13,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  subtaskCompletedText: {
-    textDecorationLine: 'line-through',
-    color: colors.textMuted,
-  },
-  cardPressed: {
-  opacity: 0.7,
-  },
-  tagRow: { 
-  flexDirection: 'row',
-  flexWrap: 'wrap',
-  gap: 4,
-  marginTop: 4 
-  },
-  tagChip: { 
-  paddingHorizontal: 8, 
-  paddingVertical: 2, 
-  borderRadius: 10 
-  },
-  tagChipText: { 
-  fontSize: 10, 
-  fontWeight: '600', 
-  color: colors.textPrimary 
-  },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
+    marginRight: 12,
+    position: 'relative',
   },
   checkbox: {
     width: 20,
@@ -455,11 +348,54 @@ export const styles = StyleSheet.create({
     borderColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
     backgroundColor: colors.surface,
   },
   checkboxChecked: {
     backgroundColor: colors.accent,
   },
-  
+  checkmark: {
+    color: colors.textOnAccent ?? '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  cardContent: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+  expandButton: { paddingLeft: 12, paddingVertical: 8, justifyContent: 'center', alignItems: 'center' },
+  arrowIcon: { fontSize: 14, color: colors.textMuted },
+  arrowIconExpanded: { color: colors.accent },
+  completedCard: { backgroundColor: colors.completedBg },
+  completedText: { textDecorationLine: 'line-through', color: colors.completedText },
+  taskTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  hybridBadge: { marginTop: 8, backgroundColor: colors.hybridBadgeBg, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  hybridBadgeText: { fontSize: 11, fontWeight: '600', color: colors.hybridBadgeText },
+  bankedBadge: { marginTop: 6, backgroundColor: colors.bankedBadgeBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
+  bankedBadgeText: { fontSize: 11, fontWeight: '600', color: colors.bankedBadgeText },
+  inlineSubtaskContainer: { marginTop: 10, paddingHorizontal: 16, paddingBottom: 12 },
+  inlineDivider: { height: 1, backgroundColor: colors.borderSubtle, marginBottom: 8 },
+  emptySubtasksText: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', paddingVertical: 4 },
+  subtaskItemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  subtaskCheckRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  subtaskCheckbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: colors.accent, justifyContent: 'center', alignItems: 'center', marginRight: 8, backgroundColor: colors.surface },
+  subtaskCheckboxChecked: { backgroundColor: colors.accent },
+  subtaskTitleText: { fontSize: 13, color: colors.textPrimary, flex: 1 },
+  subtaskCompletedText: { textDecorationLine: 'line-through', color: colors.textMuted },
+  cardPressed: { opacity: 0.7 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  tagChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  tagChipText: { fontSize: 10, fontWeight: '600', color: colors.textPrimary },
+  leadOverlay: {
+  position: 'absolute',
+  width: '100%',
+  height: '100%',
+  alignItems: 'center',
+  justifyContent: 'center',
+},
 });

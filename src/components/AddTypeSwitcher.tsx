@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme/colors';
 
-export type AddType = 'Task' | 'Habit' | 'Event';
+export type AddType = 'Task' | 'Habit' | 'Event' | 'Activity';
 
 interface AddTypeSwitcherProps {
   active: AddType;
@@ -12,9 +12,10 @@ const TYPE_COLORS: Record<AddType, string> = {
   Task: colors.accent,
   Habit: colors.habitAccent,
   Event: colors.eventAccent,
+  Activity: colors.selectedBorder ?? '#4ade80',
 };
 
-const TYPES: AddType[] = ['Task', 'Habit', 'Event'];
+const TYPES: AddType[] = ['Task', 'Habit', 'Event', 'Activity'];
 
 export function AddTypeSwitcher({ active, onSelect }: AddTypeSwitcherProps) {
   return (
@@ -47,7 +48,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     marginBottom: 16,
-    gap: 8,
+    gap: 6,
   },
   tab: {
     flex: 1,
@@ -59,7 +60,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
     color: colors.textPrimary,

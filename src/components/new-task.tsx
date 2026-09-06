@@ -52,7 +52,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
   const { addTask, updateTask, selectedDate } = useTaskStore();
-  const { tags: allTags, loadTags, addTag, removeTag } = useTagStore();
+  const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
   const [ selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);
@@ -114,6 +114,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     setSubtasks([]);
     setDeletedSubtaskIds([]);
     setSubtaskInput('');
+    setSelectedTagIds([]);
   };
 
   useEffect(() => {
@@ -160,6 +161,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
   useEffect(() => {
     loadTags();
+    loadMostUsedTags();
   }, []);
 
   useEffect(() => {
@@ -269,6 +271,7 @@ const handleToggleTag = async (tagId: number) => {
           <Text style={styles.subSectionTitle}>Tags</Text>
           <TagPicker
             allTags={allTags}
+            mostUsedTags={mostUsedTags}
             selectedTagIds={selectedTagIds}
             onToggleTag={handleToggleTag}
             onCreateTag={(name) => addTag({ name })}
@@ -501,6 +504,12 @@ const handleToggleTag = async (tagId: number) => {
                         scheduledDate: selectedDate,
                         priority: priority as 'Low' | 'Medium' | 'High',
                       });
+                    }
+                  }
+
+                  if (createdParent && selectedTagIds.length > 0) {
+                    for (const tagId of selectedTagIds) {
+                      await assignTag(createdParent.id, tagId);
                     }
                   }
                 }

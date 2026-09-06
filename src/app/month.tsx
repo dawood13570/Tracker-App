@@ -1,13 +1,30 @@
-import { Text, View } from 'react-native';
+import { colors } from '@/theme/colors';
+import { StyleSheet, Text, View } from 'react-native';
 
-// 1. Define your component
-function MonthScreen() {
+export default function MonthScreen() {
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <Text>Goals Screen</Text>
+    <View style={styles.container}>
+      <Text style={styles.title}>Monthly Overview</Text>
+      <Text style={styles.subtitle}>Scheduled for Milestone 6.2</Text>
     </View>
   );
 }
 
-// 2. CRITICAL: This is what Expo Router is looking for!
-export default MonthScreen;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: colors.textMuted,
+    marginTop: 6,
+  },
+});

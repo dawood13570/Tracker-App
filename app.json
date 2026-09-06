@@ -1,34 +1,31 @@
 {
   "expo": {
-    "name": "NewApp",
-    "slug": "NewApp",
+    "name": "Reckon",
+    "slug": "reckon",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "newapp",
-    "userInterfaceStyle": "automatic",
+    "scheme": "reckon",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourname.yourapp",
+      "bundleIdentifier": "com.dawood.reckon",
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch",
           "remote-notification"
         ]
-      },
-      "icon": "./assets/expo.icon"
+      }
     },
     "android": {
-      "package": "com.yourname.yourapp",
+      "package": "com.dawood.reckon",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "WAKE_LOCK"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#121215",
+        "foregroundImage": "./assets/images/icon.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -41,16 +38,16 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#121215",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 120
         }
       ],
       [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#ffffff"
+          "color": "#d4af37"
         }
       ],
       "expo-sqlite",

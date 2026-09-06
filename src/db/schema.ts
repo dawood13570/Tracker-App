@@ -1,14 +1,17 @@
-// src/db/schema.ts
 import { sql } from 'drizzle-orm';
 import { integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-export const tasks= sqliteTable('tasks', {
+export const tasks = sqliteTable('tasks', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   title: text('title').notNull(),
-  type: text('type', { enum: ["Simple", "Hybrid", "Progression"] }).notNull(),
+  type: text('type', { enum: ['Simple', 'Hybrid', 'Progression'] }).notNull(),
   priority: text('priority', { enum: ['Low', 'Medium', 'High'] }).notNull(),
   isCompleted: integer('is_completed', { mode: 'boolean' }).default(false).notNull(),
-  scheduledDate: text('scheduled_date').notNull(), 
+  scheduledDate: text('scheduled_date').notNull(),
+
+  // Scope & Decomposition
+  scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly'] }).default('daily').notNull(),
+  sourceTaskId: integer('source_task_id'),
 
   // Progression fields
   currentProgress: integer('current_progress').default(0),
@@ -20,9 +23,9 @@ export const tasks= sqliteTable('tasks', {
   subtasksCompleted: integer('subtasks_completed').default(0),
   subtasksTotal: integer('subtasks_total').default(0),
 
-  recurrenceType: text('recurrence_type').notNull().default('none'), // none|daily|every_n_days|weekly
-  recurrenceInterval: integer('recurrence_interval'),      // used by every_n_days
-  recurrenceDaysOfWeek: text('recurrence_days_of_week'), 
+  recurrenceType: text('recurrence_type').notNull().default('none'),
+  recurrenceInterval: integer('recurrence_interval'),
+  recurrenceDaysOfWeek: text('recurrence_days_of_week'),
 
   parentId: integer('parent_id').references((): any => tasks.id, { onDelete: 'cascade' }),
 
@@ -30,9 +33,9 @@ export const tasks= sqliteTable('tasks', {
   procrastinationCount: integer('procrastination_count').default(0),
   rolloverEnabled: integer('rollover_enabled', { mode: 'boolean' }).notNull().default(true),
 
-  surplusMode: text('surplus_mode', {enum: ['breathing_room', 'raise_bar','bank_it', 'none' ]}),
+  surplusMode: text('surplus_mode', { enum: ['breathing_room', 'raise_bar', 'bank_it', 'none'] }),
   bufferDays: integer('buffer_days').default(0),
-  
+
   createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text('updated_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
@@ -99,6 +102,20 @@ export const taskTags = sqliteTable('task_tags', {
   pk: primaryKey({ columns: [table.taskId, table.tagId] }),
 }));
 
+export const habitTags = sqliteTable('habit_tags', {
+  habitId: integer('habit_id').notNull().references(() => habits.id, { onDelete: 'cascade' }),
+  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.habitId, table.tagId] }),
+}));
+
+export const eventTags = sqliteTable('event_tags', {
+  eventId: integer('event_id').notNull().references(() => events.id, { onDelete: 'cascade' }),
+  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.eventId, table.tagId] }),
+}));
+
 export const activities = sqliteTable('activities', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   title: text('title').notNull(),
@@ -112,3 +129,10 @@ export const activityLogs = sqliteTable('activity_logs', {
   note: text('note'),
   createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
+
+export const activityTags = sqliteTable('activity_tags', {
+  activityId: integer('activity_id').notNull().references(() => activities.id, { onDelete: 'cascade' }),
+  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.activityId, table.tagId] }),
+}));

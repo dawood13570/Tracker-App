@@ -323,17 +323,17 @@ created and applied to tasks.
 - [x] 5.3.2 — `createTag`, `assignTag`, `removeTag`, `renameTag`, `deleteTag`, `getTasksByTag` in `/db/queries.ts`
  - [x] 5.3.3 — Tag picker/creator in New Task form — multi-select, create-new-on-the-fly
  - [x] 5.3.4 — Small tag chips rendered on TaskCard
- - [ ] 5.3.5 — Filter Today/Week/Month views by tag
+ - [x] 5.3.5 — Filter Today/Week/Month views by tag
 
 ### 5.4 — Activities
 
 Added: 2026-07-18
 
 - [x] 5.4.1 — Write activities and activity_logs schema in /db/schema.ts — done 2026-08-28
- - [ ] 5.4.2 — insertActivity, logActivity, getLastActivityLog(activityId) in /db/queries.ts
- - [ ] 5.4.3 — Activity card UI: name + "last done: [date]" + optional note, no checkbox, no streak
- - [ ] 5.4.4 — Activity history view: full log list for one activity, most recent first
- - [ ] 5.4.5 — Quick-log entry point (log now, optionally with a note) from Activity card
+ - [x] 5.4.2 — insertActivity, logActivity, getLastActivityLog(activityId) in /db/queries.ts
+ - [x] 5.4.3 — Activity card UI: name + "last done: [date]" + optional note, no checkbox, no streak
+ - [x] 5.4.4 — Activity history view: full log list for one activity, most recent first
+ - [x] 5.4.5 — Quick-log entry point (log now, optionally with a note) from Activity card
 
 ---
 
@@ -341,10 +341,10 @@ Added: 2026-07-18
 **Target: ~1-2 weeks**
 
 ### 6.1 — Weekly View
-- [ ] 6.1.1 — Week screen shows 7 columns or 7 grouped sections for current week
-- [ ] 6.1.2 — Each day shows tasks (and events) with status (done/todo/skipped/moved)
-- [ ] 6.1.3 — Navigate to previous/next weeks
-- [ ] 6.1.4 — Tapping a task opens its detail
+- [x] 6.1.1 — Week screen shows 7 columns or 7 grouped sections for current week
+- [x] 6.1.2 — Each day shows tasks (and events) with status (done/todo/skipped/moved)
+- [x] 6.1.3 — Navigate to previous/next weeks
+- [x] 6.1.4 — Tapping a task opens its detail
 
 ### 6.2 — Monthly View
 - [ ] 6.2.1 — Calendar grid showing each day of month
@@ -403,3 +403,4 @@ Added: 2026-07-18
 - [x] Milestone 2 — Real Data with SQLite
 - [x] Milestone 3 — Task Intelligence
 - [x] Milestone 4 — Progression Tasks and Goals
+- [x] Milestone 5 — Habits, Events, Tags

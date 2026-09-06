@@ -1,51 +1,108 @@
-import { format } from 'date-fns';
 import { create } from 'zustand';
-import { deleteHabit, getHabitsByDate, HabitWithStatus, insertHabit, logHabitCompletion, updateHabit } from '../db/queries';
+import {
+    deleteHabit,
+    getHabitsByDate,
+    HabitWithStatus,
+    insertHabit,
+    logHabitCompletion,
+    updateHabit,
+} from '../db/queries';
+import { getLocalDateString } from '../utils/date';
 
 export type { HabitWithStatus };
 
-type HabitStore = {
-    habits: HabitWithStatus[];
-    isLoading: boolean;
-    selectedDate: string;
-    loadHabits: (date?: string) => Promise<void>;
-    logHabit: (habitId: number) => Promise<void>;
-    addHabit: (data: { title: string; cadenceType: 'daily' | 'weekly_n_times'; cadenceTarget?: number}) => Promise<void>;
-    updateHabit: (id: number, data: Partial<{title: string; cadenceType: 'daily' | 'weekly_n_times'; cadenceTarget: number | null }>) => Promise<void>;
-    removeHabit: (id: number) => Promise<void>;
-};
+export interface NewHabitPayload {
+  title: string;
+  cadenceType: 'daily' | 'weekly_n_times';
+  cadenceTarget?: number;
+}
 
-export const useHabitStore = create<HabitStore>((set, get) => ({
-    habits: [],
-    isLoading: false,
-    selectedDate: format(new Date(), 'yyyy-MM-dd'),
+interface HabitState {
+  habits: HabitWithStatus[];
+  isLoading: boolean;
+  selectedDate: string;
 
-    loadHabits: async (date) => {
-        const targetDate = date ?? get().selectedDate;
-        set({ isLoading: true, selectedDate: targetDate });
-        const habits = await getHabitsByDate(targetDate);
-        set({ habits, isLoading: false });
-    },
+  setSelectedDate: (date: string) => void;
+  loadHabits: (date?: string) => Promise<void>;
+  addHabit: (data: NewHabitPayload) => Promise<HabitWithStatus | null>;
+  updateHabit: (
+    id: number,
+    data: Partial<{
+      title: string;
+      cadenceType: 'daily' | 'weekly_n_times';
+      cadenceTarget: number | null;
+    }>
+  ) => Promise<void>;
+  logHabit: (id: number) => Promise<void>;
+  removeHabit: (id: number) => Promise<void>;
+}
 
-    logHabit: async (habitId) => {
-        const { selectedDate } = get();
-        await logHabitCompletion(habitId, selectedDate);
+export const useHabitStore = create<HabitState>((set, get) => ({
+  habits: [],
+  isLoading: false,
+  selectedDate: getLocalDateString(),
 
-        await get().loadHabits(selectedDate);
-    },
+  setSelectedDate: (date: string) => {
+    set({ selectedDate: date });
+    get().loadHabits(date);
+  },
 
-    addHabit: async (data: { title: string, cadenceType: 'daily' | 'weekly_n_times'; cadenceTarget?: number}) => {
-        await insertHabit(data);
-        await get().loadHabits();
-    },
-
-    updateHabit: async (id, data) => {
-        await updateHabit(id, data);
-        await get().loadHabits();
-    },
-
-    removeHabit: async (id) => {
-        await deleteHabit(id);
-        await get().loadHabits();
+  loadHabits: async (date?: string) => {
+    const targetDate = date ?? get().selectedDate;
+    set({ isLoading: true });
+    try {
+      const data = await getHabitsByDate(targetDate);
+      set({ habits: data });
+    } catch (error) {
+      console.error('Failed to load habits:', error);
+    } finally {
+      set({ isLoading: false });
     }
+  },
+
+  addHabit: async (data: NewHabitPayload) => {
+    try {
+      const [inserted] = await insertHabit(data);
+      if (inserted) {
+        await get().loadHabits();
+        const freshList = get().habits;
+        const matching = freshList.find((h) => h.id === inserted.id);
+        return matching ?? (inserted as unknown as HabitWithStatus);
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to add habit:', error);
+      return null;
+    }
+  },
+
+  updateHabit: async (id: number, data) => {
+    try {
+      await updateHabit(id, data);
+      await get().loadHabits();
+    } catch (error) {
+      console.error(`Failed to update habit ${id}:`, error);
+    }
+  },
+
+  logHabit: async (id: number) => {
+    try {
+      const today = get().selectedDate;
+      await logHabitCompletion(id, today);
+      await get().loadHabits();
+    } catch (error) {
+      console.error(`Failed to log habit ${id}:`, error);
+    }
+  },
+
+  removeHabit: async (id: number) => {
+    try {
+      await deleteHabit(id);
+      set((state) => ({
+        habits: state.habits.filter((h) => h.id !== id),
+      }));
+    } catch (error) {
+      console.error(`Failed to remove habit ${id}:`, error);
+    }
+  },
 }));

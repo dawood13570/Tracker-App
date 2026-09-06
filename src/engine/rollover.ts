@@ -1,26 +1,57 @@
-interface RolloverInput {
-    id: number;
-    isCompleted: boolean;
-    rolloverEnabled: boolean;
-    scheduledDate: string;
-    procrastinationCount: number | null;
+// src/engine/rollover.ts
+export interface RolloverSnapshotInput {
+  id: number;
+  title: string;
+  type: 'Simple' | 'Progression' | 'Hybrid';
+  priority: 'Low' | 'Medium' | 'High';
+  isCompleted: boolean;
+  rolloverEnabled: boolean;
+  scheduledDate: string;
+  procrastinationCount: number | null;
+  scope: 'daily' | 'weekly' | 'monthly' | 'yearly'; // <-- updated to include monthly & yearly
+  totalProgress: number | null;
+  progressUnit: string | null;
 }
 
-interface RolloverMutation {
-    id: number;
+export interface RolloverAction {
+  sourceId: number;
+  newCard: {
+    title: string;
+    type: 'Simple' | 'Progression' | 'Hybrid';
+    priority: 'Low' | 'Medium' | 'High';
     scheduledDate: string;
     procrastinationCount: number;
+    rolloverEnabled: boolean;
+    scope: 'daily' | 'weekly' | 'monthly' | 'yearly'; // <-- updated here too
+    totalProgress: number | null;
+    progressUnit: string | null;
+    sourceTaskId: number;
+  };
 }
 
-export function processRollover(tasks: RolloverInput[], today: string): RolloverMutation[] {
-    const mutations: RolloverMutation[] = [];
+export function processRollover(tasks: RolloverSnapshotInput[], today: string): RolloverAction[] {
+  const actions: RolloverAction[] = [];
 
-    for (const task of tasks) {
-        if (!task.isCompleted && task.rolloverEnabled && task.scheduledDate < today) {
-            mutations.push({id: task.id, scheduledDate: today, procrastinationCount: (task.procrastinationCount ?? 0) + 1});
-        }
+  for (const task of tasks) {
+    if (!task.isCompleted && task.rolloverEnabled && task.scheduledDate < today) {
+      const nextCount = (task.procrastinationCount ?? 0) + 1;
+      actions.push({
+        sourceId: task.id,
+        newCard: {
+          title: task.title,
+          type: task.type,
+          priority: task.priority,
+          scheduledDate: today,
+          procrastinationCount: nextCount,
+          rolloverEnabled: true,
+          scope: task.scope,
+          totalProgress: task.totalProgress,
+          progressUnit: task.progressUnit,
+          sourceTaskId: task.id,
+        },
+      });
     }
+  }
 
-    return mutations;
-
+  return actions;
 }

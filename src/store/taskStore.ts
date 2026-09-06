@@ -3,16 +3,16 @@ import { getNextOccurrence } from '@/engine/recurrence';
 import { InferSelectModel } from 'drizzle-orm';
 import { create, type StoreApi } from 'zustand';
 import {
-    deleteTask,
-    getSubtasksByParent,
-    getTaskByDate,
-    insertSubtask,
-    insertTask,
-    NewTask,
-    setAllSubtasksStatus,
-    toggleTaskStatus,
-    updateTask,
-    UpdateTask as UpdateTaskQuery,
+  deleteTask,
+  getSubtasksByParent,
+  getTaskByDate,
+  insertSubtask,
+  insertTask,
+  NewTask,
+  setAllSubtasksStatus,
+  toggleTaskStatus,
+  updateTask,
+  UpdateTask as UpdateTaskQuery,
 } from '../db/queries';
 import { tasks as tasksTable } from '../db/schema';
 import { getLocalDateString } from '../utils/date';
@@ -138,14 +138,10 @@ export const useTaskStore = create<TaskState>((set, get) => ({
           tasks: state.tasks.map((task) => (task.id === id ? updated : task)),
         }));
 
-        // Direction 1: Parent -> Subtasks
-        // If toggling a parent Hybrid task, cascade status to all child subtasks
         if (updated.type === 'Hybrid' && updated.parentId == null) {
           await setAllSubtasksStatus(updated.id, updated.isCompleted);
         }
 
-        // Direction 2: Subtask -> Parent
-        // If toggling a subtask, re-evaluate parent status
         if (updated.parentId != null) {
           const siblings = await getSubtasksByParent(updated.parentId);
           const allSiblingsCompleted = siblings.length > 0 && siblings.every((s) => s.isCompleted);

@@ -415,4 +415,4 @@ sheets, instead of separate FABs stacking up per entity type. Motivated by
 the FAB count growing one-per-entity (Task, then Habit, next would've been
 Activity) — doesn't scale visually. Revisit once Activities (5.4) exist,
 since that's the point a third FAB would actually force the issue.
-| 2026-08-31 | Goal Decomposition Engine rounds daily targets up (ceiling), never down | Rounding down risks the total target being unreachable by the deadline even if every day's rounded target is hit exactly. Ceiling guarantees the sum of daily targets always meets or exceeds the original goal. |
+| 2026-08-31 | Goal Decomposition Engine rounds daily targets up (ceiling), never down | Rounding down risks the total target being unreachable by the deadline even if every day's rounded target is hit exactly. Ceiling guarantees the sum of daily targets always meets or exceeds the original goal.

@@ -1,52 +1,78 @@
-// src/tasks/rolloverTask.ts
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
-import { applyRolloverMutations, getActiveProgressionTasks, getCurrentProgress, getProgressLogsByTask, getRolloverCandidates } from '../db/queries';
+import {
+  applyRolloverSnapshots,
+  deleteTask,
+  getActiveProgressionTasks,
+  getCurrentProgress,
+  getProgressLogsByTask,
+  getRolloverCandidates,
+  getTaskByDate,
+} from '../db/queries';
 import { calculatePace } from '../engine/pace';
 import { processRollover } from '../engine/rollover';
 import { getLocalDateString } from '../utils/date';
 
 export const BACKGROUND_ROLLOVER_TASK = 'MIDNIGHT_ROLLOVER';
 
-export async function runRolloverNow(){
+export async function runRolloverNow(): Promise<BackgroundFetch.BackgroundFetchResult> {
   const todayStr = getLocalDateString();
-  //console.log('--- [ROLLOVER RUNNING] --- Local Today:', todayStr);
-
   const candidates = await getRolloverCandidates(todayStr);
-  //console.log('Candidates in DB:', candidates.length);
 
   if (candidates.length === 0) {
     return BackgroundFetch.BackgroundFetchResult.NoData;
   }
 
+  const todayTasks = await getTaskByDate(todayStr);
+
   const inputs = candidates.map((t) => ({
-        id: t.id,
-        isCompleted: Boolean(t.isCompleted),
-        rolloverEnabled: Boolean(t.rolloverEnabled),
-        scheduledDate: t.scheduledDate,
-        procrastinationCount: t.procrastinationCount,
-      }));
+    id: t.id,
+    title: t.title,
+    type: t.type,
+    priority: t.priority,
+    isCompleted: Boolean(t.isCompleted),
+    rolloverEnabled: Boolean(t.rolloverEnabled),
+    scheduledDate: t.scheduledDate,
+    procrastinationCount: t.procrastinationCount,
+    scope: t.scope ?? 'daily',
+    totalProgress: t.totalProgress,
+    progressUnit: t.progressUnit,
+  }));
 
-  const mutations = processRollover(inputs, todayStr);
-      console.log('Mutations to apply:', mutations.length);
+  const actions = processRollover(inputs, todayStr);
 
-      if (mutations.length > 0) {
-        await applyRolloverMutations(mutations);
+  if (actions.length > 0) {
+    for (const action of actions) {
+      const sourceTask = candidates.find((c) => c.id === action.sourceId);
+      if (!sourceTask) continue;
 
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Good Morning ☀️',
-            body: `Good morning. ${mutations.length} task${mutations.length > 1 ? 's' : ''} carried over.`,
-          },
-          trigger: null,
-        });
+      const duplicateTodayTask = todayTasks.find(
+        (t) =>
+          !t.isCompleted &&
+          t.title.trim().toLowerCase() === sourceTask.title.trim().toLowerCase() &&
+          t.type === sourceTask.type
+      );
 
-        return BackgroundFetch.BackgroundFetchResult.NewData;
+      if (duplicateTodayTask) {
+        await deleteTask(duplicateTodayTask.id);
       }
+    }
 
-    return BackgroundFetch.BackgroundFetchResult.NoData;
+    await applyRolloverSnapshots(actions);
 
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Good Morning ☀️',
+        body: `Good morning. ${actions.length} task snapshot${actions.length > 1 ? 's' : ''} created.`,
+      },
+      trigger: null,
+    });
+
+    return BackgroundFetch.BackgroundFetchResult.NewData;
+  }
+
+  return BackgroundFetch.BackgroundFetchResult.NoData;
 }
 
 export async function checkCriticalPace() {
@@ -94,13 +120,11 @@ export function defineRolloverTask() {
   });
 }
 
-// Guarantee execution on import
 defineRolloverTask();
 
 export async function registerRolloverTask(intervalInSeconds: number = 24 * 60 * 60) {
   try {
     defineRolloverTask();
-
     const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_ROLLOVER_TASK);
 
     if (!isRegistered) {
