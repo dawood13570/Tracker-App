@@ -3,21 +3,21 @@ import type { PaceResult } from '@/engine/pace';
 import { getEffectivePriority } from '@/engine/priority';
 import { useTagStore } from '@/store/tagStore';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getSubtasksByParent, getTagsForTask } from '../db/queries';
+import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getSubtasksByParent, getTagsForTask, setAbsoluteProgress } from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
 import { useStore } from '../store/useStore';
 import { colors } from '../theme/colors';
 import { PaceIndicator } from './PaceIndicator';
 import { ProcrastinationBadge } from './ProcrastinationBadge';
-import { ProgressBar } from './ProgressBar';
+import { ProgressionSlider } from './ProgressionSlider';
 import { SelectionIndicator } from './SelectionIndicator';
 
 interface TaskCardProps {
   task: Task;
   onToggle: (id: number, currentStatus: boolean) => void;
+  onProgressChanged?: () => void;
   currentProgress?: number;
-  onOpenProgressLog?: (task: Task) => void;
   subtaskCount?: { completed: number; total: number };
   pace?: PaceResult;
   isExpanded?: boolean;
@@ -27,24 +27,25 @@ interface TaskCardProps {
   isSelected: boolean;
   onLongPressCard: () => void;
   onToggleSelect: () => void;
+
 }
 
 function getPriorityAccentColor(priority: 'Low' | 'Medium' | 'High') {
   switch (priority) {
     case 'High':
-      return colors.priorityHighBorder ?? '#e53935';
+      return colors.priorityHighBorder ?? '#ef4444';
     case 'Medium':
-      return colors.priorityMediumBorder ?? '#fb8c00';
+      return colors.priorityMediumBorder ?? '#eab308';
     default:
-      return colors.priorityLowBorder ?? '#43a047';
+      return colors.priorityLowBorder ?? '#22c55e';
   }
 }
 
 export function TaskCard({
   task,
   onToggle,
+  onProgressChanged,
   currentProgress,
-  onOpenProgressLog,
   subtaskCount,
   pace,
   isExpanded = false,
@@ -103,13 +104,63 @@ export function TaskCard({
 
   const displayedProgress = currentProgress ?? task.currentProgress ?? 0;
 
-  const handlePress = () => {
-    if (selectionMode) {
-      onToggleSelect();
-    } else {
-      onToggle(task.id, task.isCompleted);
-    }
-  };
+  const handleProgressionToggle = () => {
+  if (!task.isCompleted) {
+    Alert.alert(
+      'Mark as done?',
+      `This sets progress to ${task.totalProgress}/${task.totalProgress} ${task.progressUnit ?? ''}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark Done',
+          onPress: async () => {
+            if (task.totalProgress != null) {
+              await setAbsoluteProgress(task.id, task.totalProgress);
+            }
+            onToggle(task.id, task.isCompleted);
+            onProgressChanged?.();
+          },
+        },
+      ]
+    );
+  } else {
+    Alert.alert('Undo completion?', 'This will mark the task as not done.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Undo', style: 'destructive', onPress: () => onToggle(task.id, task.isCompleted) },
+    ]);
+  }
+};
+
+const handleSliderUpdate = async (taskId: number, val: number) => {
+  const total = task.totalProgress ?? 0;
+  if (task.isCompleted && val < total) {
+    Alert.alert('Undo completion?', 'Reducing progress will mark this task as not done.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Continue',
+        style: 'destructive',
+        onPress: async () => {
+          await setAbsoluteProgress(taskId, val);
+          onToggle(taskId, task.isCompleted);
+          onProgressChanged?.();
+        },
+      },
+    ]);
+  } else {
+    await setAbsoluteProgress(taskId, val);
+    onProgressChanged?.();
+  }
+};
+
+const handlePress = () => {
+  if (selectionMode) {
+    onToggleSelect();
+  } else if (task.type === 'Progression' && task.totalProgress != null) {
+    handleProgressionToggle();
+  } else {
+    onToggle(task.id, task.isCompleted);
+  }
+};
 
   const handleLongPress = () => {
     if (!selectionMode) {
@@ -142,7 +193,6 @@ export function TaskCard({
             style={({ pressed }) => [styles.pressableRow, pressed && styles.cardPressed]}
           >
             <View style={styles.cardRow}>
-              {/* Both lead views remain permanently mounted to prevent native layout unmount glitches */}
               <View style={styles.leadSlot}>
                 <View
                   style={[styles.leadOverlay, { opacity: selectionMode ? 1 : 0 }]}
@@ -197,23 +247,25 @@ export function TaskCard({
                 )}
 
                 {task.type === 'Progression' &&
-                  task.totalProgress !== null &&
-                  task.totalProgress !== undefined && (
-                    <View style={{ marginTop: 6, width: '100%' }}>
-                      <ProgressBar
-                        current={displayedProgress}
-                        target={task.totalProgress}
-                        unit={task.progressUnit}
-                      />
-                      {task.surplusMode === 'bank_it' && (task.bufferDays ?? 0) > 0 && (
-                        <View style={styles.bankedBadge}>
-                          <Text style={styles.bankedBadgeText}>
-                            {task.bufferDays} {task.bufferDays === 1 ? 'day' : 'days'} banked
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
+  task.totalProgress !== null &&
+  task.totalProgress !== undefined && (
+    <View style={{ marginTop: 6, width: '100%' }}>
+      <ProgressionSlider
+        taskId={task.id}
+        current={displayedProgress}
+        total={task.totalProgress}
+        unit={task.progressUnit}
+        onUpdate={handleSliderUpdate}
+      />
+      {task.surplusMode === 'bank_it' && (task.bufferDays ?? 0) > 0 && (
+        <View style={styles.bankedBadge}>
+          <Text style={styles.bankedBadgeText}>
+            {task.bufferDays} {task.bufferDays === 1 ? 'day' : 'days'} banked
+          </Text>
+        </View>
+      )}
+    </View>
+  )}
 
                 {task.type === 'Progression' && Boolean(pace) && (
                   <View style={{ marginTop: 4 }}>
@@ -222,12 +274,11 @@ export function TaskCard({
                 )}
               </View>
 
-              {(task.type === 'Hybrid' || task.type === 'Progression') && (
-              <View
-                style={{ opacity: selectionMode ? 0 : 1 }}
-                pointerEvents={selectionMode ? 'none' : 'auto'}
-              >
-                {task.type === 'Hybrid' && (
+              {task.type === 'Hybrid' && (
+                <View
+                  style={{ opacity: selectionMode ? 0 : 1 }}
+                  pointerEvents={selectionMode ? 'none' : 'auto'}
+                >
                   <TouchableOpacity
                     style={styles.expandButton}
                     onPress={onToggleExpand}
@@ -237,18 +288,8 @@ export function TaskCard({
                       {isExpanded ? '▲' : '▼'}
                     </Text>
                   </TouchableOpacity>
-                )}
-
-                {task.type === 'Progression' && (
-                  <TouchableOpacity
-                    style={styles.expandButton}
-                    onPress={() => onOpenProgressLog && onOpenProgressLog(task)}
-                  >
-                    <Text style={styles.arrowIcon}>✎</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
+                </View>
+              )}
             </View>
           </Pressable>
 
@@ -323,7 +364,6 @@ export const styles = StyleSheet.create({
     minWidth: 0,
   },
   pressableRow: {
-    //flex: 1,
     width: '100%',
   },
   cardRow: {
@@ -392,10 +432,10 @@ export const styles = StyleSheet.create({
   tagChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   tagChipText: { fontSize: 10, fontWeight: '600', color: colors.textPrimary },
   leadOverlay: {
-  position: 'absolute',
-  width: '100%',
-  height: '100%',
-  alignItems: 'center',
-  justifyContent: 'center',
-},
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

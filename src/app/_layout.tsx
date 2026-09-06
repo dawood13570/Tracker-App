@@ -1,3 +1,4 @@
+// src/app/_layout.tsx
 import { colors } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
@@ -5,7 +6,8 @@ import * as Notifications from 'expo-notifications';
 import { Tabs } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import migrations from '../../drizzle/migrations';
 import { registerRolloverTask, runRolloverNow } from '../../src/tasks/rolloverTask';
 import { db } from '../db/client';
@@ -25,14 +27,14 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export default function RootLayout() {
+function MainTabs() {
   const { success, error } = useMigrations(db, migrations);
   const insets = useSafeAreaInsets();
 
   const { loadTasks, setSelectedDate } = useTaskStore();
   const { loadHabits } = useHabitStore();
   const { loadEvents } = useEventStore();
-  const { loadActivities } = useActivityStore();
+  const { loadActivitiesForDate } = useActivityStore();
 
   useEffect(() => {
     async function initBackgroundJobs() {
@@ -47,21 +49,20 @@ export default function RootLayout() {
     }
   }, [success]);
 
-  // Midnight Auto-Refresh & AppState Sync (Cross-platform timer type)
   useEffect(() => {
     let timerId: ReturnType<typeof setTimeout>;
 
     const scheduleMidnightRefresh = () => {
       const now = new Date();
       const nextMidnight = new Date(now);
-      nextMidnight.setHours(24, 0, 1, 0); // 1 second past midnight
+      nextMidnight.setHours(24, 0, 1, 0);
       const msUntilMidnight = nextMidnight.getTime() - now.getTime();
 
       timerId = setTimeout(async () => {
         const todayStr = getLocalDateString(new Date());
         setSelectedDate(todayStr);
         await runRolloverNow();
-        await Promise.all([loadTasks(), loadHabits(), loadEvents(), loadActivities()]);
+        await Promise.all([loadTasks(), loadHabits(), loadEvents(), loadActivitiesForDate(todayStr)]);
         scheduleMidnightRefresh();
       }, msUntilMidnight);
     };
@@ -76,7 +77,7 @@ export default function RootLayout() {
           lastKnownDate = currentDate;
           setSelectedDate(currentDate);
           await runRolloverNow();
-          await Promise.all([loadTasks(), loadHabits(), loadEvents(), loadActivities()]);
+          await Promise.all([loadTasks(), loadHabits(), loadEvents(), loadActivitiesForDate(currentDate)]);
         }
       }
     });
@@ -158,6 +159,16 @@ export default function RootLayout() {
         }}
       />
     </Tabs>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <MainTabs />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

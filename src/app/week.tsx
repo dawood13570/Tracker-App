@@ -1,5 +1,6 @@
 import { ActivityCard } from '@/components/ActivityCard';
 import { EventCard } from '@/components/EventCard';
+import { GoalCard } from '@/components/GoalCard';
 import { HabitCard } from '@/components/HabitCard';
 import NewTaskModal from '@/components/new-task';
 import NewActivityModal from '@/components/NewActivityModal';
@@ -11,22 +12,22 @@ import { TagFilterBar } from '@/components/TagFilterBar';
 import { TaskCard } from '@/components/TaskCard';
 import {
   EventRow,
-  getAllActivities,
+  getActivityLogsForDateRange,
   getAllTagAssociations,
   getCurrentProgress,
+  getEffectiveProgress,
   getEventsForDateRange,
   getHabitsByDate,
-  getLastActivityLog,
   getProgressLogsByTask,
   getSubtaskCounts,
   getTasksForDateRange,
   getWeeklyTasks,
   HabitWithStatus,
   TaskRow,
-  updateTask,
+  updateTask
 } from '@/db/queries';
 import { calculatePace, PaceResult } from '@/engine/pace';
-import { ActivityWithLastLog, useActivityStore } from '@/store/activityStore';
+import { ActivityLogWithDetails, useActivityStore } from '@/store/activityStore';
 import { useEventStore } from '@/store/eventStore';
 import { useHabitStore } from '@/store/habitStore';
 import { useTagStore } from '@/store/tagStore';
@@ -35,8 +36,8 @@ import { colors } from '@/theme/colors';
 import { getLocalDateString } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
-import { addDays, endOfWeek, format, isSameDay, startOfWeek, subDays } from 'date-fns';
-import { router, useFocusEffect } from 'expo-router';
+import { addDays, endOfWeek, format, isSameDay, parseISO, startOfWeek, subDays } from 'date-fns';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -63,7 +64,7 @@ export default function WeekScreen() {
   const [dailyTasks, setDailyTasks] = useState<TaskRow[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [habits, setHabits] = useState<HabitWithStatus[]>([]);
-  const [activities, setActivities] = useState<ActivityWithLastLog[]>([]);
+  const [activities, setActivities] = useState<ActivityLogWithDetails[]>([]);
 
   // Progression & Hybrid maps for cards
   const [progressMap, setProgressMap] = useState<Record<number, number>>({});
@@ -82,7 +83,7 @@ export default function WeekScreen() {
     activities: Record<number, number[]>;
   }>({ tasks: {}, habits: {}, events: {}, activities: {} });
 
-  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -91,7 +92,9 @@ export default function WeekScreen() {
   const [loggingTask, setLoggingTask] = useState<TaskRow | null>(null);
   const [editingHabit, setEditingHabit] = useState<HabitWithStatus | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
-  const [selectedActivity, setSelectedActivity] = useState<ActivityWithLastLog | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityLogWithDetails | null>(null);
+  const [activeDayStr, setActiveDayStr] = useState<string>(getLocalDateString(new Date()));
+  const [editingWeeklyGoal, setEditingWeeklyGoal] = useState<TaskRow | null>(null);
 
   // BottomSheet Refs
   const taskEditSheetRef = useRef<BottomSheet>(null);
@@ -105,8 +108,8 @@ export default function WeekScreen() {
   const { toggleTask, removeTask } = useTaskStore();
   const { removeHabit, logHabit } = useHabitStore();
   const { removeEvent } = useEventStore();
-  const { removeActivity, quickLog } = useActivityStore();
-  const { loadTags, loadMostUsedTags, tagVersion } = useTagStore();
+  const { removeActivityEntry } = useActivityStore();
+  const { tags: allTags, loadTags, loadMostUsedTags, tagVersion } = useTagStore();
 
   const weekStart = useMemo(() => startOfWeek(currentPivotDate, { weekStartsOn: 1 }), [currentPivotDate]);
   const weekEnd = useMemo(() => endOfWeek(currentPivotDate, { weekStartsOn: 1 }), [currentPivotDate]);
@@ -126,31 +129,23 @@ export default function WeekScreen() {
   const loadWeekData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [weekly, dailies, evts, rawHabits, rawActs] = await Promise.all([
+      const [weekly, dailies, evts, rawHabits, rawActivityLogs] = await Promise.all([
         getWeeklyTasks(weekStartStr, weekEndStr),
         getTasksForDateRange(weekStartStr, weekEndStr),
         getEventsForDateRange(weekStartStr, weekEndStr),
         getHabitsByDate(todayStr),
-        getAllActivities(),
+        getActivityLogsForDateRange(weekStartStr, weekEndStr),
         loadTags(),
         loadMostUsedTags(),
         refreshTagMap(),
       ]);
 
-      const actsWithLogs = await Promise.all(
-        rawActs.map(async (act) => {
-          const lastLog = await getLastActivityLog(act.id);
-          return { ...act, lastLog };
-        })
-      );
-
       setWeekTasks(weekly);
       setDailyTasks(dailies);
       setEvents(evts);
       setHabits(rawHabits);
-      setActivities(actsWithLogs);
+      setActivities(rawActivityLogs);
 
-      setExpandedDays((prev) => ({ ...prev, [todayStr]: true }));
     } catch (error) {
       console.error('Failed to load week data:', error);
     } finally {
@@ -169,28 +164,25 @@ export default function WeekScreen() {
   }, [tagVersion, refreshTagMap]);
 
   useEffect(() => {
-    const allActiveTasks = [...weekTasks, ...dailyTasks];
-    const progressionTasks = allActiveTasks.filter((t) => t.type === 'Progression');
-    if (progressionTasks.length === 0) {
-      setProgressMap({});
-      setPaceMap({});
-      return;
-    }
-
-    Promise.all(
-      progressionTasks.map(async (t) => {
-        const [currentProgress, logs] = await Promise.all([
-          getCurrentProgress(t.id),
-          getProgressLogsByTask(t.id),
-        ]);
-        const pace = calculatePace({ ...t, currentProgress }, logs);
-        return [t.id, currentProgress, pace] as const;
-      })
-    ).then((entries) => {
-      setProgressMap(Object.fromEntries(entries.map(([id, cp]) => [id, cp])));
-      setPaceMap(Object.fromEntries(entries.map(([id, , pace]) => [id, pace])));
-    });
-  }, [weekTasks, dailyTasks]);
+  const allActiveTasks = [...weekTasks, ...dailyTasks];
+  const progressionTasks = allActiveTasks.filter((t) => t.type === 'Progression');
+  if (progressionTasks.length === 0) {
+    setProgressMap({});
+    setPaceMap({});
+    return;
+  }
+  Promise.all(
+    progressionTasks.map(async (t) => {
+      const currentProgress = t.scope === 'daily' ? await getCurrentProgress(t.id) : await getEffectiveProgress(t.id);
+      const logs = await getProgressLogsByTask(t.id);
+      const pace = calculatePace({ ...t, currentProgress }, logs);
+      return [t.id, currentProgress, pace] as const;
+    })
+  ).then((entries) => {
+    setProgressMap(Object.fromEntries(entries.map(([id, cp]) => [id, cp])));
+    setPaceMap(Object.fromEntries(entries.map(([id, , pace]) => [id, pace])));
+  });
+}, [weekTasks, dailyTasks]);
 
   useEffect(() => {
     const allActiveTasks = [...weekTasks, ...dailyTasks];
@@ -210,17 +202,7 @@ export default function WeekScreen() {
     });
   }, [weekTasks, dailyTasks]);
 
-  const toggleDayExpansion = (dayStr: string) => {
-    setExpandedDays((prev) => ({ ...prev, [dayStr]: !prev[dayStr] }));
-  };
 
-  const handleDayHeaderPress = (dayStr: string, isToday: boolean) => {
-    if (isToday) {
-      router.replace('/today');
-    } else {
-      toggleDayExpansion(dayStr);
-    }
-  };
 
   const handleToggleFilterTag = (tagId: number) => {
     setSelectedFilterTagIds((prev) =>
@@ -306,9 +288,19 @@ export default function WeekScreen() {
     [habits, tagAssociations.habits, filterItem]
   );
 
+  const activitiesForFilter = useMemo(
+    () => activities.map((e) => ({ ...e, title: e.activityTitle })),
+    [activities]
+  );
+
+  const activitiesTagMap = useMemo(
+    () => Object.fromEntries(activities.map((e) => [e.id, e.tagIds])),
+    [activities]
+  );
+
   const filteredActivities = useMemo(
-    () => filterItem(activities, tagAssociations.activities),
-    [activities, tagAssociations.activities, filterItem]
+    () => filterItem(activitiesForFilter, activitiesTagMap),
+    [activitiesForFilter, activitiesTagMap, filterItem]
   );
 
   const isFilteringActive = Boolean(searchQuery.trim()) || selectedFilterTagIds.length > 0;
@@ -363,7 +355,10 @@ export default function WeekScreen() {
             if (type === 'task') await removeTask(id);
             if (type === 'habit') await removeHabit(id);
             if (type === 'event') await removeEvent(id);
-            if (type === 'activity') await removeActivity(id);
+            if (type === 'activity') {
+              const act = activities.find((a) => a.id === id);
+              if (act) await removeActivityEntry(id, act.date);
+            }
           }
           handleCancelSelection();
           await loadWeekData();
@@ -381,12 +376,17 @@ export default function WeekScreen() {
     handleCancelSelection();
 
     if (type === 'task') {
-      const task = dailyTasks.find((t) => t.id === id) || weekTasks.find((t) => t.id === id);
-      if (task) {
-        setEditingTask(task);
-        taskEditSheetRef.current?.expand();
-      }
-    } else if (type === 'habit') {
+  const task = dailyTasks.find((t) => t.id === id) || weekTasks.find((t) => t.id === id);
+  if (task) {
+    if (task.scope === 'weekly') {
+      setEditingWeeklyGoal(task);
+      newWeeklySheetRef.current?.expand();
+    } else {
+      setEditingTask(task);
+      taskEditSheetRef.current?.expand();
+    }
+  }
+} else if (type === 'habit') {
       const habit = habits.find((h) => h.id === id);
       if (habit) {
         setEditingHabit(habit);
@@ -412,7 +412,6 @@ export default function WeekScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
 
-        {/* Sticky Header swaps title area only */}
         <View style={styles.stickyHeader}>
           {selectionMode ? (
             <View style={styles.selectionBar}>
@@ -477,7 +476,6 @@ export default function WeekScreen() {
           )}
         </View>
 
-        {/* TagFilterBar remains permanently mounted */}
         <TagFilterBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -492,216 +490,117 @@ export default function WeekScreen() {
           <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 40 }} />
         ) : (
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            {/* Multi-Day Spanning Section */}
-            {filteredWeekTasks.length > 0 && (
-              <View style={styles.weeklySpanningBox}>
-                <Text style={styles.sectionHeader}>MULTI-DAY WEEKLY TARGETS</Text>
-                {filteredWeekTasks.map((task) => (
-                  <TaskCard
-                    key={`wtask-${task.id}`}
-                    task={task as any}
-                    onToggle={(id, status) => handleToggleTaskWithAutofill(id, status)}
-                    currentProgress={progressMap[task.id]}
-                    pace={paceMap[task.id]}
-                    subtaskCount={subtaskMap[task.id]}
-                    isExpanded={Boolean(expandedTaskIds[task.id])}
-                    onToggleExpand={() => handleToggleExpand(task.id)}
-                    onOpenProgressLog={handleOpenProgressLog}
-                    onSubtasksCountUpdate={handleSubtasksCountUpdate}
-                    selectionMode={selectionMode}
-                    isSelected={selectedIds.has(`task:${task.id}`)}
-                    onLongPressCard={() => handleLongPressItem('task', task.id)}
-                    onToggleSelect={() => handleToggleSelectItem('task', task.id)}
-                  />
-                ))}
-              </View>
-            )}
+            {filteredWeekTasks.length > 0 }
 
-            {/* 7 Grouped Day Accordion Sections */}
-            {daysOfCurrentWeek.map((day) => {
-              const dayStr = getLocalDateString(day);
-              const isToday = isSameDay(day, new Date());
-              const isPast = dayStr < todayStr;
+            {/* Day strip */}
+<View style={styles.dayStripRow}>
+  {daysOfCurrentWeek.map((day) => {
+    const dayStr = getLocalDateString(day);
+    const isToday = isSameDay(day, new Date());
+    const isSelected = dayStr === activeDayStr;
+    const dayTasks = filteredDailyTasks.filter((t) => t.scheduledDate === dayStr);
+    const total = dayTasks.length;
+    const completed = dayTasks.filter((t) => t.isCompleted).length;
+    let dotColor = 'transparent';
+    if (total > 0) dotColor = completed === total ? colors.success : completed > 0 ? colors.priorityMediumBorder : colors.priorityHighBorder;
 
-              const tasksForDay = filteredDailyTasks.filter((t) => t.scheduledDate === dayStr);
-              const eventsForDay = filteredEvents.filter((e) => e.startTime.startsWith(dayStr));
-              const habitsForDay = isToday ? filteredHabits : [];
-              const activitiesForDay = isToday ? filteredActivities : [];
+    return (
+      <TouchableOpacity
+        key={dayStr}
+        style={[styles.dayStripCell, isSelected && styles.dayStripCellSelected, isToday && styles.dayStripCellToday]}
+        onPress={() => setActiveDayStr(dayStr)}
+      >
+        <Text style={styles.dayStripLabel}>{format(day, 'EEE')}</Text>
+        <Text style={styles.dayStripNumber}>{format(day, 'd')}</Text>
+        <View style={[styles.dayStripDot, { backgroundColor: dotColor }]} />
+      </TouchableOpacity>
+    );
+  })}
+</View>
 
-              const hasMatchingItems =
-                tasksForDay.length > 0 ||
-                eventsForDay.length > 0 ||
-                habitsForDay.length > 0 ||
-                activitiesForDay.length > 0;
+{/* This Week's Goals */}
+<View style={styles.weeklySpanningBox}>
+  <View style={styles.sectionHeaderRow}>
+    <Text style={styles.sectionHeader}>THIS WEEK'S GOALS</Text>
+  </View>
+  {filteredWeekTasks.length === 0 ? (
+    <Text style={styles.emptyDayText}>No weekly goals set.</Text>
+  ) : (
+    filteredWeekTasks.map((task) => (
+      <GoalCard
+        key={task.id}
+        task={task}
+        scopeLabel="week"
+        effectiveProgress={progressMap[task.id]}
+        selectionMode={selectionMode}
+        isSelected={selectedIds.has(`task:${task.id}`)}
+        onPress={() => {
+          if (selectionMode) {
+            handleToggleSelectItem('task', task.id);
+          } else {
+            setEditingWeeklyGoal(task);
+            newWeeklySheetRef.current?.expand();
+          }
+        }}
+        onLongPress={() => handleLongPressItem('task', task.id)}
+      />
+    ))
+  )}
+</View>
 
-              if (isFilteringActive && !hasMatchingItems) {
-                return null;
-              }
+{/* Schedule for the selected day */}
+<View style={styles.dayCard}>
+  <Text style={[styles.dayTitleText, { padding: 12 }]}>{format(parseISO(activeDayStr), 'EEEE, MMM d')}</Text>
+  <View style={styles.expandedContent}>
+    {(() => {
+      const eventsForDay = filteredEvents.filter((e) => e.startTime.startsWith(activeDayStr));
+      const tasksForDay = filteredDailyTasks.filter((t) => t.scheduledDate === activeDayStr);
+      const isToday = activeDayStr === todayStr;
+      const habitsForDay = isToday ? filteredHabits : [];
+      const activitiesForDay = filteredActivities.filter((a) => a.date === activeDayStr);
+      const isPast = activeDayStr < todayStr;
 
-              const isExpanded = isFilteringActive ? true : Boolean(expandedDays[dayStr]);
-              const completedTasksCount = tasksForDay.filter((t) => t.isCompleted).length;
+      if (!eventsForDay.length && !tasksForDay.length && !habitsForDay.length && !activitiesForDay.length) {
+        return <Text style={styles.emptyDayText}>Nothing scheduled for this day.</Text>;
+      }
 
-              return (
-                <View
-                  key={dayStr}
-                  style={[
-                    styles.dayCard,
-                    isToday && styles.dayCardToday,
-                    isPast && styles.dayCardPast,
-                  ]}
-                >
-                  <View style={styles.dayCardHeader}>
-                    <TouchableOpacity
-                      onPress={() => handleDayHeaderPress(dayStr, isToday)}
-                      style={styles.dayTitlePressable}
-                      hitSlop={6}
-                    >
-                      <Text
-                        style={[
-                          styles.dayTitleText,
-                          isToday && styles.dayTitleToday,
-                          isPast && styles.dayTitlePast,
-                        ]}
-                      >
-                        {format(day, 'EEEE, MMM d')}
-                      </Text>
-                      {isToday && (
-                        <View style={styles.todayPill}>
-                          <Text style={styles.todayPillText}>TODAY</Text>
-                        </View>
-                      )}
-                      {isPast && (
-                        <View style={styles.pastPill}>
-                          <Text style={styles.pastPillText}>PAST</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-
-                    <View style={styles.headerRight}>
-                      {!isExpanded && (
-                        <View style={styles.summaryBadgeRow}>
-                          {tasksForDay.length > 0 && (
-                            <View style={[styles.taskBadge, isPast && styles.badgeMuted]}>
-                              <Text style={[styles.taskBadgeText, isPast && styles.badgeTextMuted]}>
-                                {completedTasksCount}/{tasksForDay.length} tasks
-                              </Text>
-                            </View>
-                          )}
-                          {eventsForDay.length > 0 && (
-                            <View style={styles.eventBadge}>
-                              <Text style={styles.eventBadgeText}>
-                                {eventsForDay.length} event{eventsForDay.length > 1 ? 's' : ''}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
-
-                      {!isFilteringActive && (
-                        <TouchableOpacity
-                          onPress={() => toggleDayExpansion(dayStr)}
-                          hitSlop={10}
-                          style={styles.chevronBtn}
-                        >
-                          <Ionicons
-                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                            size={20}
-                            color={isToday ? colors.accent : colors.textSecondary}
-                          />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-
-                  {/* Expanded View */}
-                  {isExpanded && (
-                    <View style={styles.expandedContent}>
-                      {eventsForDay.length === 0 && tasksForDay.length === 0 && habitsForDay.length === 0 && activitiesForDay.length === 0 && (
-                        <Text style={styles.emptyDayText}>Nothing scheduled for this day.</Text>
-                      )}
-
-                      {eventsForDay.map((event) => (
-                        <EventCard
-                          key={`event-${event.id}`}
-                          event={event}
-                          selectionMode={selectionMode}
-                          isSelected={selectedIds.has(`event:${event.id}`)}
-                          onLongPressCard={() => handleLongPressItem('event', event.id)}
-                          onToggleSelect={() => handleToggleSelectItem('event', event.id)}
-                        />
-                      ))}
-
-                      {tasksForDay.map((task) => (
-                        <TaskCard
-                          key={`task-${task.id}`}
-                          task={task as any}
-                          onToggle={async (id, status) => {
-                            if (isPast) {
-                              //Alert.alert('Past Day Locked', 'Past days cannot be altered.');
-                              return;
-                            }
-                            await handleToggleTaskWithAutofill(id, status);
-                          }}
-                          currentProgress={progressMap[task.id]}
-                          pace={paceMap[task.id]}
-                          subtaskCount={subtaskMap[task.id]}
-                          isExpanded={Boolean(expandedTaskIds[task.id])}
-                          onToggleExpand={() => handleToggleExpand(task.id)}
-                          onOpenProgressLog={handleOpenProgressLog}
-                          onSubtasksCountUpdate={handleSubtasksCountUpdate}
-                          selectionMode={selectionMode}
-                          isSelected={selectedIds.has(`task:${task.id}`)}
-                          onLongPressCard={() => handleLongPressItem('task', task.id)}
-                          onToggleSelect={() => handleToggleSelectItem('task', task.id)}
-                        />
-                      ))}
-
-                      {isToday && (
-                        <>
-                          {habitsForDay.map((habit) => (
-                            <HabitCard
-                              key={`habit-${habit.id}`}
-                              habit={habit}
-                              onLogToday={async () => {
-                                await logHabit(habit.id);
-                                await loadWeekData();
-                              }}
-                              selectionMode={selectionMode}
-                              isSelected={selectedIds.has(`habit:${habit.id}`)}
-                              onLongPressCard={() => handleLongPressItem('habit', habit.id)}
-                              onToggleSelect={() => handleToggleSelectItem('habit', habit.id)}
-                            />
-                          ))}
-
-                          {activitiesForDay.map((act) => (
-                            <ActivityCard
-                              key={`act-${act.id}`}
-                              activity={act}
-                              selectionMode={selectionMode}
-                              isSelected={selectedIds.has(`activity:${act.id}`)}
-                              onPressCard={() => {
-                                setSelectedActivity(act);
-                                activityModalSheetRef.current?.expand();
-                              }}
-                              onLongPressCard={() => handleLongPressItem('activity', act.id)}
-                              onToggleSelect={() => handleToggleSelectItem('activity', act.id)}
-                              onQuickLog={async () => {
-                                await quickLog(act.id);
-                                await loadWeekData();
-                              }}
-                            />
-                          ))}
-                        </>
-                      )}
-                    </View>
-                  )}
-                </View>
-              );
-            })}
+      return (
+        <>
+          {eventsForDay.map((event) => (
+            <EventCard key={`event-${event.id}`} event={event} selectionMode={selectionMode} isSelected={selectedIds.has(`event:${event.id}`)} onLongPressCard={() => handleLongPressItem('event', event.id)} onToggleSelect={() => handleToggleSelectItem('event', event.id)} />
+          ))}
+          {tasksForDay.map((task) => (
+            <TaskCard
+              key={`task-${task.id}`}
+              task={task as any}
+              onToggle={async (id, status) => { if (!isPast) await handleToggleTaskWithAutofill(id, status); }}
+              onProgressChanged={loadWeekData}
+              currentProgress={progressMap[task.id]}
+              pace={paceMap[task.id]}
+              subtaskCount={subtaskMap[task.id]}
+              isExpanded={Boolean(expandedTaskIds[task.id])}
+              onToggleExpand={() => handleToggleExpand(task.id)}
+              onSubtasksCountUpdate={handleSubtasksCountUpdate}
+              selectionMode={selectionMode}
+              isSelected={selectedIds.has(`task:${task.id}`)}
+              onLongPressCard={() => handleLongPressItem('task', task.id)}
+              onToggleSelect={() => handleToggleSelectItem('task', task.id)}
+            />
+          ))}
+          {isToday && habitsForDay.map((habit) => (
+            <HabitCard key={`habit-${habit.id}`} habit={habit} onLogToday={async () => { await logHabit(habit.id); await loadWeekData(); }} selectionMode={selectionMode} isSelected={selectedIds.has(`habit:${habit.id}`)} onLongPressCard={() => handleLongPressItem('habit', habit.id)} onToggleSelect={() => handleToggleSelectItem('habit', habit.id)} />
+          ))}
+          {activitiesForDay.map((entry) => (
+            <ActivityCard key={`act-${entry.id}`} entry={entry} tags={allTags.filter((t) => entry.tagIds.includes(t.id))} selectionMode={selectionMode} isSelected={selectedIds.has(`activity:${entry.id}`)} onPressCard={() => { setSelectedActivity(entry); activityModalSheetRef.current?.expand(); }} onLongPressCard={() => handleLongPressItem('activity', entry.id)} onToggleSelect={() => handleToggleSelectItem('activity', entry.id)} />
+          ))}
+        </>
+      );
+    })()}
+  </View>
+</View>
           </ScrollView>
         )}
 
-        {/* Edit Sheets */}
         <NewTaskModal
           sheetRef={taskEditSheetRef}
           taskToEdit={editingTask as any}
@@ -725,7 +624,7 @@ export default function WeekScreen() {
 
         <NewActivityModal
           sheetRef={activityModalSheetRef}
-          activity={selectedActivity}
+          entry={selectedActivity}
           onActivityCreated={loadWeekData}
           onClose={() => setSelectedActivity(null)}
         />
@@ -734,8 +633,9 @@ export default function WeekScreen() {
           sheetRef={newWeeklySheetRef}
           weekStartDate={weekStartStr}
           weekEndDate={weekEndStr}
+          editTask={editingWeeklyGoal}
           onTaskCreated={loadWeekData}
-          onClose={() => {}}
+          onClose={() => setEditingWeeklyGoal(null)}
         />
 
         <ProgressLogSheet
@@ -891,4 +791,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     textAlign: 'center',
   },
+  dayStripRow: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 12, padding: 8, borderWidth: 1, borderColor: colors.borderSubtle, marginBottom: 16 },
+dayStripCell: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 8 },
+dayStripCellSelected: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.accent },
+dayStripCellToday: { backgroundColor: colors.surfaceSubtle },
+dayStripLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
+dayStripNumber: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginTop: 2 },
+dayStripDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4 },
+sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
 });
+

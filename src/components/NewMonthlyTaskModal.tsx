@@ -1,8 +1,17 @@
+// src/components/NewMonthlyTaskModal.tsx
 import { useTagStore } from '@/store/tagStore';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { format, parseISO } from 'date-fns';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+    Alert,
+    Keyboard,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { assignTag, insertSubtask, insertTask, updateTask } from '../db/queries';
 import { colors } from '../theme/colors';
 import { TagPicker } from './TagPicker';
@@ -13,26 +22,26 @@ interface SubTaskDraft {
   isCompleted: boolean;
 }
 
-interface NewWeeklyTaskModalProps {
+interface NewMonthlyTaskModalProps {
   sheetRef: React.RefObject<BottomSheet | null>;
-  weekStartDate: string;
-  weekEndDate: string;
+  monthStartDate: string;
+  monthEndDate: string;
   editTask?: any | null;
   onTaskCreated: () => void;
   onClose?: () => void;
 }
 
-const WEEKLY_TASK_TYPES = ['Simple', 'Progression', 'Hybrid'] as const;
+const MONTHLY_TASK_TYPES = ['Simple', 'Progression', 'Hybrid'] as const;
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'] as const;
 
-export default function NewWeeklyTaskModal({
+export default function NewMonthlyTaskModal({
   sheetRef,
-  weekStartDate,
-  weekEndDate,
+  monthStartDate,
+  monthEndDate,
   editTask,
   onTaskCreated,
   onClose,
-}: NewWeeklyTaskModalProps) {
+}: NewMonthlyTaskModalProps) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'Simple' | 'Progression' | 'Hybrid'>('Simple');
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
@@ -45,18 +54,19 @@ export default function NewWeeklyTaskModal({
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
   const snapPoints = useMemo(() => ['75%', '50%'], []);
 
-  const formattedWeekLabel = useMemo(() => {
+  const formattedMonthLabel = useMemo(() => {
     try {
-      return `${format(parseISO(weekStartDate), 'MMM d')} – ${format(parseISO(weekEndDate), 'MMM d')}`;
+      return format(parseISO(monthStartDate), 'MMMM yyyy');
     } catch {
-      return `${weekStartDate} – ${weekEndDate}`;
+      return `${monthStartDate} – ${monthEndDate}`;
     }
-  }, [weekStartDate, weekEndDate]);
+  }, [monthStartDate, monthEndDate]);
 
   const resetForm = () => {
     setTitle('');
     setType('Simple');
     setPriority('Medium');
+    //setDecomposeToWeekly(false);
     setTargetValue('');
     setUnit('');
     setSubtasks([]);
@@ -76,11 +86,14 @@ export default function NewWeeklyTaskModal({
     } else {
       resetForm();
     }
-  }, [editTask, weekStartDate]);
+  }, [editTask, monthStartDate]);
 
   const handleAddSubtask = () => {
     if (!subtaskInput.trim()) return;
-    setSubtasks((prev) => [...prev, { id: `temp-${Date.now()}`, title: subtaskInput.trim(), isCompleted: false }]);
+    setSubtasks((prev) => [
+      ...prev,
+      { id: `temp-${Date.now()}`, title: subtaskInput.trim(), isCompleted: false },
+    ]);
     setSubtaskInput('');
   };
 
@@ -95,7 +108,7 @@ export default function NewWeeklyTaskModal({
       return;
     }
     if (type === 'Progression' && (!targetValue || Number(targetValue) <= 0)) {
-      Alert.alert('Target required', 'Please enter a valid target for this weekly goal.');
+      Alert.alert('Target required', 'Please enter a valid target for this monthly progression task.');
       return;
     }
 
@@ -109,28 +122,34 @@ export default function NewWeeklyTaskModal({
           progressUnit: type === 'Progression' ? unit.trim() || null : null,
         });
       } else {
-        const parentWeekly = await insertTask({
+        const parentMonthly = await insertTask({
           title: title.trim(),
           type,
           priority,
-          scheduledDate: weekStartDate,
-          deadline: weekEndDate,
-          scope: 'weekly',
+          scheduledDate: monthStartDate,
+          deadline: monthEndDate,
+          scope: 'monthly',
           totalProgress: type === 'Progression' ? Number(targetValue) : null,
           progressUnit: type === 'Progression' ? unit.trim() || null : null,
           rolloverEnabled: false,
           subtasksTotal: type === 'Hybrid' ? subtasks.length : 0,
         });
 
-        if (parentWeekly) {
+        if (parentMonthly) {
           if (type === 'Hybrid' && subtasks.length > 0) {
             for (const s of subtasks) {
-              await insertSubtask(parentWeekly.id, { title: s.title, scheduledDate: weekStartDate, priority });
+              await insertSubtask(parentMonthly.id, {
+                title: s.title,
+                scheduledDate: monthStartDate,
+                priority,
+              });
             }
           }
           for (const tagId of selectedTagIds) {
-            await assignTag(parentWeekly.id, tagId);
+            await assignTag(parentMonthly.id, tagId);
           }
+
+
         }
       }
 
@@ -139,7 +158,7 @@ export default function NewWeeklyTaskModal({
       if (onClose) onClose();
       sheetRef.current?.close();
     } catch (error) {
-      console.error('Failed to save weekly goal:', error);
+      console.error('Failed to save monthly task:', error);
     }
   };
 
@@ -158,12 +177,12 @@ export default function NewWeeklyTaskModal({
       }}
     >
       <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-        <Text style={styles.titleText}>{editTask ? 'Edit Weekly Goal' : 'Plan Goal for Week'}</Text>
-        <Text style={styles.subTitleText}>Range: {formattedWeekLabel}</Text>
+        <Text style={styles.titleText}>{editTask ? 'Edit Monthly Goal' : 'Plan Goal for Month'}</Text>
+        <Text style={styles.subTitleText}>Period: {formattedMonthLabel}</Text>
 
         <BottomSheetTextInput
           style={styles.input}
-          placeholder="What do you want to accomplish this week?"
+          placeholder="What macro goal do you want to accomplish?"
           placeholderTextColor={colors.textPlaceholder}
           value={title}
           onChangeText={setTitle}
@@ -172,34 +191,48 @@ export default function NewWeeklyTaskModal({
         <View style={styles.row}>
           <Text style={styles.label}>Type:</Text>
           <View style={styles.selectorGroup}>
-            {WEEKLY_TASK_TYPES.map((t) => (
-              <Pressable key={t} style={[styles.selectorItem, type === t && styles.selectedItem]} onPress={() => setType(t)}>
-                <Text style={type === t ? styles.selectedText : styles.unselectedText}>{t}</Text>
-              </Pressable>
-            ))}
+            {MONTHLY_TASK_TYPES.map((t) => {
+              const isSelected = type === t;
+              return (
+                <Pressable
+                  key={t}
+                  style={[styles.selectorItem, isSelected && styles.selectedItem]}
+                  onPress={() => setType(t)}
+                >
+                  <Text style={isSelected ? styles.selectedText : styles.unselectedText}>{t}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
         <View style={styles.row}>
           <Text style={styles.label}>Priority:</Text>
           <View style={styles.selectorGroup}>
-            {PRIORITY_OPTIONS.map((p) => (
-              <Pressable key={p} style={[styles.selectorItem, priority === p && styles.selectedItem]} onPress={() => setPriority(p)}>
-                <Text style={priority === p ? styles.selectedText : styles.unselectedText}>{p}</Text>
-              </Pressable>
-            ))}
+            {PRIORITY_OPTIONS.map((p) => {
+              const isSelected = priority === p;
+              return (
+                <Pressable
+                  key={p}
+                  style={[styles.selectorItem, isSelected && styles.selectedItem]}
+                  onPress={() => setPriority(p)}
+                >
+                  <Text style={isSelected ? styles.selectedText : styles.unselectedText}>{p}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
         {type === 'Progression' && (
           <View style={styles.dynamicContainer}>
             <View style={styles.row}>
-              <Text style={styles.label}>Target this week:</Text>
+              <Text style={styles.label}>Total Monthly Target:</Text>
               <BottomSheetTextInput
                 style={styles.inputNested}
                 value={targetValue}
                 onChangeText={setTargetValue}
-                placeholder="e.g. 4"
+                placeholder="300"
                 keyboardType="numeric"
                 placeholderTextColor={colors.textPlaceholder}
               />
@@ -210,19 +243,22 @@ export default function NewWeeklyTaskModal({
                 style={styles.inputNested}
                 value={unit}
                 onChangeText={setUnit}
-                placeholder="times, km, pages"
+                placeholder="pages, chapters, km"
                 placeholderTextColor={colors.textPlaceholder}
               />
             </View>
-            <Text style={styles.hintText}>
-              This is split into a daily target automatically — you'll see it decomposed on Today and this week's days.
-            </Text>
+
+            {!editTask && (
+              <View style={[styles.row, { marginTop: 8 }]}>
+
+              </View>
+            )}
           </View>
         )}
 
         {type === 'Hybrid' && !editTask && (
           <View style={styles.dynamicContainer}>
-            <Text style={styles.subSectionTitle}>Milestones</Text>
+            <Text style={styles.subSectionTitle}>Milestone Subtasks</Text>
             <View style={styles.addSubtaskRow}>
               <BottomSheetTextInput
                 style={styles.subtaskInput}
@@ -236,6 +272,7 @@ export default function NewWeeklyTaskModal({
                 <Text style={styles.addBtnText}>Add</Text>
               </TouchableOpacity>
             </View>
+
             {subtasks.map((s, idx) => (
               <View key={s.id} style={styles.subtaskItem}>
                 <Text style={styles.subtaskTitle}>{idx + 1}. {s.title}</Text>
@@ -254,7 +291,11 @@ export default function NewWeeklyTaskModal({
               allTags={allTags}
               mostUsedTags={mostUsedTags}
               selectedTagIds={selectedTagIds}
-              onToggleTag={(tagId) => setSelectedTagIds((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]))}
+              onToggleTag={(tagId) =>
+                setSelectedTagIds((prev) =>
+                  prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+                )
+              }
               onCreateTag={(name) => addTag({ name })}
               onDeleteTag={(tagId) => {
                 setSelectedTagIds((prev) => prev.filter((id) => id !== tagId));
@@ -268,9 +309,13 @@ export default function NewWeeklyTaskModal({
           <Pressable
             disabled={!title.trim()}
             onPress={handleSubmit}
-            style={({ pressed }) => [styles.submitButton, !title.trim() && styles.submitDisabled, pressed && title.trim() ? { opacity: 0.85 } : null]}
+            style={({ pressed }) => [
+              styles.submitButton,
+              !title.trim() && styles.submitDisabled,
+              pressed && title.trim() ? { opacity: 0.85 } : null,
+            ]}
           >
-            <Text style={styles.submitButtonText}>{editTask ? 'Save Changes' : 'Schedule Weekly Goal'}</Text>
+            <Text style={styles.submitButtonText}>{editTask ? 'Save Changes' : 'Schedule Monthly Goal'}</Text>
           </Pressable>
         </View>
       </BottomSheetScrollView>
@@ -282,20 +327,64 @@ const styles = StyleSheet.create({
   contentContainer: { padding: 24 },
   titleText: { fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.textPrimary },
   subTitleText: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 4, marginBottom: 16 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 15, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    backgroundColor: colors.surfaceSubtle,
+    color: colors.textPrimary,
+  },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 10 },
   label: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   selectorGroup: { flexDirection: 'row' },
-  selectorItem: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 20, backgroundColor: colors.surfaceSubtle, marginLeft: 6 },
+  selectorItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceSubtle,
+    marginLeft: 6,
+  },
   selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
   unselectedText: { color: colors.textSecondary, fontSize: 12 },
   selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 12 },
-  dynamicContainer: { marginTop: 10, padding: 12, backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
-  inputNested: { flex: 1.5, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, fontSize: 15, backgroundColor: colors.surfaceSubtle, marginLeft: 12, color: colors.textPrimary },
-  hintText: { fontSize: 11, color: colors.textMuted, marginTop: 8, fontStyle: 'italic' },
+  dynamicContainer: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  inputNested: {
+    flex: 1.5,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 15,
+    backgroundColor: colors.surfaceSubtle,
+    marginLeft: 12,
+    color: colors.textPrimary,
+  },
   subSectionTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
   addSubtaskRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  subtaskInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14, backgroundColor: colors.surfaceSubtle, marginRight: 8, color: colors.textPrimary },
+  subtaskInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 14,
+    backgroundColor: colors.surfaceSubtle,
+    marginRight: 8,
+    color: colors.textPrimary,
+  },
   addBtn: { backgroundColor: colors.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
   addBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
   subtaskItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },

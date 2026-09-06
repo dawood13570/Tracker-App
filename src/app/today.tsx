@@ -8,14 +8,15 @@ import ProgressLogSheet from '@/components/ProgressLogSheet';
 import { TagFilterBar } from '@/components/TagFilterBar';
 import { TaskCard } from '@/components/TaskCard';
 import {
+  ensureDailyDecompositionForDate,
   getAllTagAssociations,
   getCurrentProgress,
   getProgressLogsByTask,
-  getSubtaskCounts,
+  getSubtaskCounts
 } from '@/db/queries';
 import { calculatePace, PaceResult } from '@/engine/pace';
 import { getEffectivePriority, shouldArchiveTask } from '@/engine/priority';
-import { ActivityWithLastLog, useActivityStore } from '@/store/activityStore';
+import { ActivityLogWithDetails, useActivityStore } from '@/store/activityStore';
 import { EventRow, useEventStore } from '@/store/eventStore';
 import { HabitWithStatus, useHabitStore } from '@/store/habitStore';
 import { useTagStore } from '@/store/tagStore';
@@ -23,6 +24,7 @@ import { Task, useTaskStore } from '@/store/taskStore';
 import { useStore } from '@/store/useStore';
 import { runRolloverNow } from '@/tasks/rolloverTask';
 import { colors } from '@/theme/colors';
+import { getLocalDateString } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
@@ -83,7 +85,7 @@ export default function AppDashboard() {
   const [expandedTaskIds, setExpandedTaskIds] = useState<Record<number, boolean>>({});
   const [editingHabit, setEditingHabit] = useState<HabitWithStatus | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
-  const [selectedActivity, setSelectedActivity] = useState<ActivityWithLastLog | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityLogWithDetails | null>(null);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,8 +105,11 @@ export default function AppDashboard() {
   const { evolvingPriorityEnabled, autoArchiveEnabled } = useStore();
   const { habits, loadHabits, logHabit, removeHabit } = useHabitStore();
   const { events, loadEvents, removeEvent } = useEventStore();
-  const { activities, loadActivities, removeActivity, quickLog } = useActivityStore();
-  const { loadTags, loadMostUsedTags, tagVersion } = useTagStore();
+  const { logsByDate, loadActivitiesForDate, removeActivityEntry } = useActivityStore();
+  const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, tagVersion } = useTagStore();
+
+  const todayStr = useMemo(() => getLocalDateString(new Date()), []);
+  const todaysActivities = logsByDate[todayStr] ?? [];
 
   const handleSwitchAddType = (type: AddType) => {
     taskSheetRef.current?.close();
@@ -131,11 +136,12 @@ export default function AppDashboard() {
   useEffect(() => {
     const catchUpAndLoad = async () => {
       await runRolloverNow();
+      await ensureDailyDecompositionForDate(todayStr);
       await Promise.all([
         loadTasks(),
         loadHabits(),
         loadEvents(),
-        loadActivities(),
+        loadActivitiesForDate(todayStr),
         loadTags(),
         loadMostUsedTags(),
         refreshTagMap(),
@@ -149,13 +155,13 @@ export default function AppDashboard() {
         loadTasks();
         loadHabits();
         loadEvents();
-        loadActivities();
+        loadActivitiesForDate(todayStr);
         refreshTagMap();
       }
     });
 
     return () => subscription.remove();
-  }, [loadTags, loadMostUsedTags, loadTasks, loadHabits, loadEvents, loadActivities, refreshTagMap]);
+  }, [loadTags, loadMostUsedTags, loadTasks, loadHabits, loadEvents, loadActivitiesForDate, todayStr, refreshTagMap]);
 
   useEffect(() => {
     refreshTagMap();
@@ -338,9 +344,19 @@ export default function AppDashboard() {
     [habits, tagAssociations.habits, filterItem]
   );
 
+  const activitiesForFilter = useMemo(
+    () => todaysActivities.map((e) => ({ ...e, title: e.activityTitle })),
+    [todaysActivities]
+  );
+
+  const activitiesTagMap = useMemo(
+    () => Object.fromEntries(todaysActivities.map((e) => [e.id, e.tagIds])),
+    [todaysActivities]
+  );
+
   const filteredActivities = useMemo(
-    () => filterItem(activities, tagAssociations.activities),
-    [activities, tagAssociations.activities, filterItem]
+    () => filterItem(activitiesForFilter, activitiesTagMap),
+    [activitiesForFilter, activitiesTagMap, filterItem]
   );
 
   const handleSelectAll = () => {
@@ -369,7 +385,7 @@ export default function AppDashboard() {
               if (type === 'task') await removeTask(id);
               if (type === 'habit') await removeHabit(id);
               if (type === 'event') await removeEvent(id);
-              if (type === 'activity') await removeActivity(id);
+              if (type === 'activity') await removeActivityEntry(id, todayStr);
             }
             handleCancelSelection();
             await refreshTagMap();
@@ -402,6 +418,12 @@ export default function AppDashboard() {
         setEditingEvent(event);
         eventSheetRef.current?.expand();
       }
+    } else if (type === 'activity') {
+      const act = todaysActivities.find((a) => a.id === id);
+      if (act) {
+        setSelectedActivity(act);
+        activityDetailSheetRef.current?.expand();
+      }
     }
   };
 
@@ -412,7 +434,7 @@ export default function AppDashboard() {
       selectedIdsString: Array.from(selectedIds).join(','),
       habitsState: filteredHabits.map((h) => `${h.id}:${h.isCompletedToday}:${h.streak}`).join(','),
       eventsCount: filteredEvents.length,
-      activitiesState: filteredActivities.map((a) => `${a.id}:${a.lastLog?.date}`).join(','),
+      activitiesState: filteredActivities.map((a) => `${a.id}:${a.note}:${a.tagIds.join('.')}`).join(','),
       expandedTaskIds,
       progressMap,
       paceMap,
@@ -441,7 +463,6 @@ export default function AppDashboard() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
 
-        {/* Sticky Header swaps title area only */}
         <View style={styles.stickyHeader}>
           {selectionMode ? (
             <View style={styles.selectionBar}>
@@ -479,7 +500,6 @@ export default function AppDashboard() {
           )}
         </View>
 
-        {/* TagFilterBar remains permanently mounted so layout never shifts */}
         <TagFilterBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -513,12 +533,12 @@ export default function AppDashboard() {
                   <TaskCard
                     task={item}
                     onToggle={handleToggleTask}
+                    onProgressChanged={loadTasks}
                     currentProgress={progressMap[item.id]}
                     pace={paceMap[item.id]}
                     subtaskCount={subtaskMap[item.id]}
                     isExpanded={Boolean(expandedTaskIds[item.id])}
                     onToggleExpand={() => handleToggleExpand(item.id)}
-                    onOpenProgressLog={handleOpenProgressLog}
                     onSubtasksCountUpdate={handleSubtasksCountUpdate}
                     selectionMode={selectionMode}
                     isSelected={selectedIds.has(`task:${item.id}`)}
@@ -564,19 +584,19 @@ export default function AppDashboard() {
                           onToggleSelect={() => handleToggleSelectItem('habit', habit.id)}
                         />
                       ))}
-                      {filteredActivities.map((act) => (
+                      {filteredActivities.map((entry) => (
                         <ActivityCard
-                          key={`activity-${act.id}`}
-                          activity={act}
+                          key={`activity-${entry.id}`}
+                          entry={entry}
+                          tags={allTags.filter((t) => entry.tagIds.includes(t.id))}
                           selectionMode={selectionMode}
-                          isSelected={selectedIds.has(`activity:${act.id}`)}
+                          isSelected={selectedIds.has(`activity:${entry.id}`)}
                           onPressCard={() => {
-                            setSelectedActivity(act);
+                            setSelectedActivity(entry);
                             activityDetailSheetRef.current?.expand();
                           }}
-                          onLongPressCard={() => handleLongPressItem('activity', act.id)}
-                          onToggleSelect={() => handleToggleSelectItem('activity', act.id)}
-                          onQuickLog={() => quickLog(act.id)}
+                          onLongPressCard={() => handleLongPressItem('activity', entry.id)}
+                          onToggleSelect={() => handleToggleSelectItem('activity', entry.id)}
                         />
                       ))}
                     </View>
@@ -638,7 +658,7 @@ export default function AppDashboard() {
         <NewActivityModal
           sheetRef={newActivitySheetRef}
           onActivityCreated={async () => {
-            await loadActivities();
+            await loadActivitiesForDate(todayStr);
             await refreshTagMap();
           }}
           onClose={() => {}}
@@ -656,7 +676,11 @@ export default function AppDashboard() {
 
         <NewActivityModal
           sheetRef={activityDetailSheetRef}
-          activity={selectedActivity}
+          entry={selectedActivity}
+          onActivityCreated={async () => {
+            await loadActivitiesForDate(todayStr);
+            await refreshTagMap();
+          }}
           onClose={() => setSelectedActivity(null)}
         />
       </SafeAreaView>

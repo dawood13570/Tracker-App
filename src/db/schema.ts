@@ -136,3 +136,10 @@ export const activityTags = sqliteTable('activity_tags', {
 }, (table) => ({
   pk: primaryKey({ columns: [table.activityId, table.tagId] }),
 }));
+
+export const activityLogTags = sqliteTable('activity_log_tags', {
+  logId: integer('log_id').notNull().references(() => activityLogs.id, { onDelete: 'cascade' }),
+  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.logId, table.tagId] }),
+}));

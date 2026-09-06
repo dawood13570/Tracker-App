@@ -1,98 +1,105 @@
 import { create } from 'zustand';
 import {
-    ActivityLogRow,
-    ActivityRow,
-    deleteActivity,
-    getActivityLogs,
-    getAllActivities,
-    getLastActivityLog,
-    insertActivity,
-    logActivity,
+  ActivityLogRow,
+  ActivityLogWithDetails,
+  ActivityRow,
+  createActivityEntryWithTags,
+  deleteActivityLog,
+  getActivityLogsForDate,
+  getActivityLogsForDateRange,
+  getAllActivityMasters,
+  searchActivityLogs as searchActivityLogsQuery,
 } from '../db/queries';
 import { getLocalDateString } from '../utils/date';
 
-export type { ActivityLogRow, ActivityRow };
-
-export interface ActivityWithLastLog extends ActivityRow {
-  lastLog: ActivityLogRow | null;
-}
+export type { ActivityLogRow, ActivityLogWithDetails, ActivityRow };
 
 interface ActivityState {
-  activities: ActivityWithLastLog[];
+  logsByDate: Record<string, ActivityLogWithDetails[]>;
+  masters: ActivityRow[];
   isLoading: boolean;
-  loadActivities: () => Promise<void>;
-  addActivity: (title: string) => Promise<ActivityRow | null>;
-  removeActivity: (id: number) => Promise<void>;
-  quickLog: (activityId: number, note?: string | null, date?: string) => Promise<void>;
-  getHistory: (activityId: number) => Promise<ActivityLogRow[]>;
+  loadActivitiesForDate: (date: string) => Promise<void>;
+  loadActivitiesForRange: (startDate: string, endDate: string) => Promise<ActivityLogWithDetails[]>;
+  loadMasters: () => Promise<void>;
+  addActivityEntry: (params: {
+    title: string;
+    note?: string | null;
+    date?: string;
+    masterTagIds?: number[];
+    extraTagIds?: number[];
+  }) => Promise<ActivityLogWithDetails | null>;
+  removeActivityEntry: (logId: number, date: string) => Promise<void>;
+  searchLogs: (params: { text?: string; tagIds?: number[] }) => Promise<ActivityLogWithDetails[]>;
 }
 
 export const useActivityStore = create<ActivityState>((set, get) => ({
-  activities: [],
+  logsByDate: {},
+  masters: [],
   isLoading: false,
 
-  loadActivities: async () => {
+  loadActivitiesForDate: async (date: string) => {
     set({ isLoading: true });
     try {
-      const rows = await getAllActivities();
-      const withLogs = await Promise.all(
-        rows.map(async (act) => {
-          const lastLog = await getLastActivityLog(act.id);
-          return { ...act, lastLog };
-        })
-      );
-      set({ activities: withLogs });
+      const rows = await getActivityLogsForDate(date);
+      set((state) => ({ logsByDate: { ...state.logsByDate, [date]: rows } }));
     } catch (error) {
-      console.error('Failed to load activities:', error);
+      console.error('Failed to load activity logs:', error);
     } finally {
       set({ isLoading: false });
     }
   },
 
-  addActivity: async (title: string) => {
-    try {
-      const inserted = await insertActivity({ title });
-      if (inserted) {
-        set((state) => ({
-          activities: [...state.activities, { ...inserted, lastLog: null }],
-        }));
-        return inserted;
+  loadActivitiesForRange: async (startDate: string, endDate: string) => {
+    const rows = await getActivityLogsForDateRange(startDate, endDate);
+    set((state) => {
+      const next = { ...state.logsByDate };
+      for (const row of rows) {
+        next[row.date] = [...(next[row.date] ?? []).filter((r) => r.id !== row.id), row];
       }
-      return null;
+      return { logsByDate: next };
+    });
+    return rows;
+  },
+
+  loadMasters: async () => {
+    try {
+      const rows = await getAllActivityMasters();
+      set({ masters: rows });
     } catch (error) {
-      console.error('Failed to insert activity:', error);
+      console.error('Failed to load activity masters:', error);
+    }
+  },
+
+  addActivityEntry: async (params) => {
+    try {
+      const logDate = params.date ?? getLocalDateString(new Date());
+      const newLog = await createActivityEntryWithTags({ ...params, date: logDate });
+
+      await Promise.all([
+        get().loadActivitiesForDate(logDate),
+        get().loadMasters(),
+      ]);
+
+      return newLog;
+    } catch (error) {
+      console.error('Failed to add activity entry:', error);
       return null;
     }
   },
 
-  removeActivity: async (id: number) => {
+  removeActivityEntry: async (logId: number, date: string) => {
     try {
-      await deleteActivity(id);
+      await deleteActivityLog(logId);
       set((state) => ({
-        activities: state.activities.filter((a) => a.id !== id),
+        logsByDate: {
+          ...state.logsByDate,
+          [date]: (state.logsByDate[date] ?? []).filter((l) => l.id !== logId),
+        },
       }));
     } catch (error) {
-      console.error('Failed to remove activity:', error);
+      console.error('Failed to remove activity entry:', error);
     }
   },
 
-  quickLog: async (activityId: number, note?: string | null, date?: string) => {
-    try {
-      const logDate = date ?? getLocalDateString(new Date());
-      const newLog = await logActivity({ activityId, date: logDate, note });
-      if (newLog) {
-        set((state) => ({
-          activities: state.activities.map((act) =>
-            act.id === activityId ? { ...act, lastLog: newLog } : act
-          ),
-        }));
-      }
-    } catch (error) {
-      console.error('Failed to log activity:', error);
-    }
-  },
-
-  getHistory: async (activityId: number) => {
-    return getActivityLogs(activityId);
-  },
+  searchLogs: async (params) => searchActivityLogsQuery(params),
 }));

@@ -33,6 +33,7 @@ interface TaskState {
   completeTask: (id: number) => Promise<void>;
   uncompleteTask: (id: number) => Promise<void>;
   removeTask: (id: number) => Promise<void>;
+  updateProgress: (id: number, currentProgress: number) => Promise<void>;
 }
 
 async function handleCompletionSideEffects(
@@ -201,4 +202,18 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       console.error(`Failed to remove task ${id}:`, error);
     }
   },
+
+  updateProgress: async (id: number, currentProgress: number) => {
+    try {
+      const updated = await updateTask(id, { currentProgress });
+      if (updated) {
+        set((state) => ({
+          tasks: state.tasks.map((task) => (task.id === id ? updated : task)),
+        }));
+      }
+    } catch (error) {
+      console.error(`Failed to update progress for task ${id}:`, error);
+    }
+  },
 }));
+

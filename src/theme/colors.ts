@@ -24,17 +24,19 @@ export const colors = {
   // Accent
   accent: '#3aa8d8',
   accentPressed: '#2b7fa3',
-  habitAccent: '#9575ff',
+  habitAccent: '#a855f7', 
+  eventAccent: '#f97316',
+  activityAccent: '#0ea5e9',
 
   // Priority
-  priorityLowBg: '#12233a',
-  priorityLowBorder: '#4dabf7',
-  priorityLowText: '#4dabf7',
+  priorityLowBg: '#1f3a12',
+  priorityLowBorder: '#22c55e',
+  priorityLowText: '#4df775',
   priorityMediumBg: '#332b0a',
-  priorityMediumBorder: '#e0c341',
+  priorityMediumBorder: '#eab308',
   priorityMediumText: '#e0c341',
   priorityHighBg: '#3a1414',
-  priorityHighBorder: '#f41010',
+  priorityHighBorder: '#ef4444',
   priorityHighText: '#f87171',
 
   // Generic selector pill
@@ -63,6 +65,5 @@ export const colors = {
 
   habitAccentPressed: '#7a5ce0',
 
-  eventAccent: '#e0a840',
   eventAccentPressed: '#b88733',
 };

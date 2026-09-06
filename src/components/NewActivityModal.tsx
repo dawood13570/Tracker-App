@@ -1,5 +1,4 @@
 import BottomSheet, {
-  BottomSheetFlatList,
   BottomSheetScrollView,
   BottomSheetTextInput,
 } from '@gorhom/bottom-sheet';
@@ -14,14 +13,14 @@ import {
 } from 'react-native';
 import {
   assignTagToActivity,
+  assignTagToActivityLog,
   getTagsForActivity,
+  getTagsForActivityLog,
   removeTagFromActivity,
+  removeTagFromActivityLog,
+  updateActivityLogNote,
 } from '../db/queries';
-import {
-  ActivityLogRow,
-  ActivityWithLastLog,
-  useActivityStore,
-} from '../store/activityStore';
+import { ActivityLogWithDetails, useActivityStore } from '../store/activityStore';
 import { useTagStore } from '../store/tagStore';
 import { colors } from '../theme/colors';
 import { AddType, AddTypeSwitcher } from './AddTypeSwitcher';
@@ -29,7 +28,7 @@ import { TagPicker } from './TagPicker';
 
 export interface NewActivityModalProps {
   sheetRef: React.RefObject<BottomSheet | null>;
-  activity?: ActivityWithLastLog | null;
+  entry?: ActivityLogWithDetails | null;
   onActivityCreated?: () => void;
   onClose?: () => void;
   onSwitchType?: (type: AddType) => void;
@@ -37,114 +36,168 @@ export interface NewActivityModalProps {
 
 export default function NewActivityModal({
   sheetRef,
-  activity,
+  entry,
   onActivityCreated,
   onClose,
   onSwitchType,
 }: NewActivityModalProps) {
-  const isDetailMode = Boolean(activity);
-  const snapPoints = useMemo(() => (isDetailMode ? ['65%', '85%'] : ['60%', '40%']), [isDetailMode]);
+  const isDetailMode = Boolean(entry);
+  const snapPoints = useMemo(() => (isDetailMode ? ['55%', '75%'] : ['60%', '85%']), [isDetailMode]);
 
-  const { addActivity, quickLog, getHistory } = useActivityStore();
+  const { addActivityEntry, masters, loadMasters } = useActivityStore();
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
 
+  // --- Create-mode state ---
   const [title, setTitle] = useState('');
-  const [initialNote, setInitialNote] = useState('');
-  const [logImmediately, setLogImmediately] = useState(false);
-  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
-
-  const [history, setHistory] = useState<ActivityLogRow[]>([]);
-  const [noteText, setNoteText] = useState('');
+  const [matchedMasterId, setMatchedMasterId] = useState<number | null>(null);
+  const [note, setNote] = useState('');
+  const [masterTagIds, setMasterTagIds] = useState<number[]>([]);
+  const [extraTagIds, setExtraTagIds] = useState<number[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // --- Detail-mode state ---
+  const [detailNote, setDetailNote] = useState('');
+  const [detailMasterTagIds, setDetailMasterTagIds] = useState<number[]>([]);
+  const [detailExtraTagIds, setDetailExtraTagIds] = useState<number[]>([]);
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
   const resetCreateForm = () => {
     setTitle('');
-    setInitialNote('');
-    setLogImmediately(false);
-    setSelectedTagIds([]);
+    setMatchedMasterId(null);
+    setNote('');
+    setMasterTagIds([]);
+    setExtraTagIds([]);
   };
 
   useEffect(() => {
     loadTags();
     loadMostUsedTags();
+    loadMasters();
   }, []);
 
   useEffect(() => {
-    if (activity) {
-      getHistory(activity.id).then(setHistory);
-      getTagsForActivity(activity.id).then((rows) => setSelectedTagIds(rows.map((r) => r.id)));
-      setNoteText('');
+    if (entry) {
+      setDetailNote(entry.note ?? '');
+      Promise.all([getTagsForActivity(entry.activityId), getTagsForActivityLog(entry.id)]).then(
+        ([masterRows, logRows]) => {
+          setDetailMasterTagIds(masterRows.map((r) => r.id));
+          setDetailExtraTagIds(logRows.map((r) => r.id));
+        }
+      );
     } else {
-      setHistory([]);
       resetCreateForm();
     }
-  }, [activity]);
+  }, [entry]);
 
-  const handleToggleTag = async (tagId: number) => {
-    const isSelected = selectedTagIds.includes(tagId);
-    if (activity) {
-      if (isSelected) {
-        await removeTagFromActivity(activity.id, tagId);
-      } else {
-        await assignTagToActivity(activity.id, tagId);
-      }
-    }
-    setSelectedTagIds((prev) =>
-      isSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId]
-    );
+  const suggestions = useMemo(() => {
+    const q = title.trim().toLowerCase();
+    if (!q) return [];
+    return masters.filter((m) => m.title.toLowerCase().includes(q)).slice(0, 6);
+  }, [title, masters]);
+
+  const handleTitleChange = (text: string) => {
+    setTitle(text);
+    setMatchedMasterId(null);
+  };
+
+  const handlePickSuggestion = async (masterId: number, masterTitle: string) => {
+    setTitle(masterTitle);
+    setMatchedMasterId(masterId);
+    const rows = await getTagsForActivity(masterId);
+    setMasterTagIds(rows.map((r) => r.id));
+  };
+
+  const handleToggleMasterTag = (tagId: number) => {
+    setMasterTagIds((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  };
+
+  const handleToggleExtraTag = (tagId: number) => {
+    setExtraTagIds((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
   };
 
   const handleDeleteTag = async (tagId: number) => {
-    if (activity && selectedTagIds.includes(tagId)) {
-      await removeTagFromActivity(activity.id, tagId);
-    }
-    setSelectedTagIds((prev) => prev.filter((id) => id !== tagId));
+    setMasterTagIds((prev) => prev.filter((id) => id !== tagId));
+    setExtraTagIds((prev) => prev.filter((id) => id !== tagId));
     await removeTag(tagId);
   };
 
   const handleCreateActivity = async () => {
     Keyboard.dismiss();
     if (!title.trim()) {
-      Alert.alert('Title required', 'Please enter an activity title.');
+      Alert.alert('Name required', 'Please enter an activity name.');
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      const created = await addActivity(title.trim());
-      if (created) {
-        if (selectedTagIds.length > 0) {
-          for (const tagId of selectedTagIds) {
-            await assignTagToActivity(created.id, tagId);
-          }
-        }
-        if (logImmediately) {
-          await quickLog(created.id, initialNote.trim() || null);
-        }
-      }
+      const created = await addActivityEntry({
+        title: title.trim(),
+        note: note.trim() || null,
+        masterTagIds,
+        extraTagIds,
+      });
 
-      resetCreateForm();
-      if (onActivityCreated) onActivityCreated();
-      if (onClose) onClose();
-      sheetRef.current?.close();
+      if (created) {
+        resetCreateForm();
+        onActivityCreated?.();
+        onClose?.();
+        sheetRef.current?.close();
+      }
     } catch (err) {
       console.error('Failed to save activity:', err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleLogHistory = async () => {
-    if (!activity) return;
-    setIsSubmitting(true);
-    Keyboard.dismiss();
+  // --- Detail-mode handlers ---
 
+  const handleToggleDetailMasterTag = async (tagId: number) => {
+    if (!entry) return;
+    const isSelected = detailMasterTagIds.includes(tagId);
+    if (isSelected) {
+      await removeTagFromActivity(entry.activityId, tagId);
+    } else {
+      await assignTagToActivity(entry.activityId, tagId);
+    }
+    setDetailMasterTagIds((prev) => (isSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  };
+
+  const handleToggleDetailExtraTag = async (tagId: number) => {
+    if (!entry) return;
+    const isSelected = detailExtraTagIds.includes(tagId);
+    if (isSelected) {
+      await removeTagFromActivityLog(entry.id, tagId);
+    } else {
+      await assignTagToActivityLog(entry.id, tagId);
+    }
+    setDetailExtraTagIds((prev) => (isSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  };
+
+  const handleDeleteDetailTag = async (tagId: number) => {
+    if (!entry) return;
+    if (detailMasterTagIds.includes(tagId)) {
+      await removeTagFromActivity(entry.activityId, tagId);
+    }
+    if (detailExtraTagIds.includes(tagId)) {
+      await removeTagFromActivityLog(entry.id, tagId);
+    }
+    setDetailMasterTagIds((prev) => prev.filter((id) => id !== tagId));
+    setDetailExtraTagIds((prev) => prev.filter((id) => id !== tagId));
+    await removeTag(tagId);
+  };
+
+  const handleSaveNote = async () => {
+    if (!entry) return;
+    setIsSavingNote(true);
+    Keyboard.dismiss();
     try {
-      await quickLog(activity.id, noteText.trim() ? noteText.trim() : null);
-      const updated = await getHistory(activity.id);
-      setHistory(updated);
-      setNoteText('');
+      await updateActivityLogNote(entry.id, detailNote.trim() || null);
+      onActivityCreated?.();
     } catch (err) {
-      console.error('Failed to log entry:', err);
+      console.error('Failed to update note:', err);
     } finally {
-      setIsSubmitting(false);
+      setIsSavingNote(false);
     }
   };
 
@@ -159,63 +212,53 @@ export default function NewActivityModal({
       keyboardBlurBehavior="restore"
       onClose={() => {
         resetCreateForm();
-        if (onClose) onClose();
+        onClose?.();
       }}
     >
-      {isDetailMode && activity ? (
-        <View style={styles.detailContainer}>
-          <Text style={styles.titleText}>{activity.title}</Text>
-          <Text style={styles.subTitle}>Activity History</Text>
+      {isDetailMode && entry ? (
+        <BottomSheetScrollView contentContainerStyle={styles.detailContainer} keyboardShouldPersistTaps="handled">
+          <Text style={styles.titleText}>{entry.activityTitle}</Text>
+          <Text style={styles.subTitle}>Logged {entry.date}</Text>
 
-          <View style={styles.logBox}>
-            <BottomSheetTextInput
-              style={styles.input}
-              placeholder="Add note for today..."
-              placeholderTextColor={colors.textPlaceholder}
-              value={noteText}
-              onChangeText={setNoteText}
-            />
-            <Pressable
-              disabled={isSubmitting}
-              onPress={handleLogHistory}
-              style={({ pressed }) => [styles.logBtn, pressed && { opacity: 0.8 }]}
-            >
-              <Text style={styles.logBtnText}>Log Today</Text>
-            </Pressable>
-          </View>
+          <BottomSheetTextInput
+            style={styles.input}
+            placeholder="Note..."
+            placeholderTextColor={colors.textPlaceholder}
+            value={detailNote}
+            onChangeText={setDetailNote}
+          />
+          <Pressable
+            disabled={isSavingNote}
+            onPress={handleSaveNote}
+            style={({ pressed }) => [styles.logBtn, { alignSelf: 'flex-start', marginTop: 8 }, pressed && { opacity: 0.8 }]}
+          >
+            <Text style={styles.logBtnText}>Save Note</Text>
+          </Pressable>
 
-          <View style={[styles.dynamicContainer, { marginBottom: 12 }]}>
-            <Text style={styles.subSectionTitle}>Tags</Text>
+          <View style={[styles.dynamicContainer, { marginTop: 16 }]}>
+            <Text style={styles.subSectionTitle}>Category tags (all "{entry.activityTitle}" entries)</Text>
             <TagPicker
               allTags={allTags}
               mostUsedTags={mostUsedTags}
-              selectedTagIds={selectedTagIds}
-              onToggleTag={handleToggleTag}
+              selectedTagIds={detailMasterTagIds}
+              onToggleTag={handleToggleDetailMasterTag}
               onCreateTag={(name) => addTag({ name })}
-              onDeleteTag={handleDeleteTag}
+              onDeleteTag={handleDeleteDetailTag}
             />
           </View>
 
-          <BottomSheetFlatList
-            data={history}
-            keyExtractor={(item) => `log-${item.id}`}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <View style={styles.logItem}>
-                <View style={styles.logItemHeader}>
-                  <Text style={styles.logDate}>{item.date}</Text>
-                  <Text style={styles.logTime}>{item.createdAt.slice(11, 16)}</Text>
-                </View>
-                {Boolean(item.note) && <Text style={styles.logNote}>{item.note}</Text>}
-              </View>
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No logs recorded yet.</Text>
-              </View>
-            }
-          />
-        </View>
+          <View style={[styles.dynamicContainer, { marginBottom: 24 }]}>
+            <Text style={styles.subSectionTitle}>Just for this entry</Text>
+            <TagPicker
+              allTags={allTags}
+              mostUsedTags={mostUsedTags}
+              selectedTagIds={detailExtraTagIds}
+              onToggleTag={handleToggleDetailExtraTag}
+              onCreateTag={(name) => addTag({ name })}
+              onDeleteTag={handleDeleteDetailTag}
+            />
+          </View>
+        </BottomSheetScrollView>
       ) : (
         <BottomSheetScrollView
           contentContainerStyle={styles.contentContainer}
@@ -226,41 +269,59 @@ export default function NewActivityModal({
 
           <BottomSheetTextInput
             style={styles.input}
-            placeholder="e.g., Oil Change, Dentist, Guitar strings..."
+            placeholder="Enter Activity Here..."
             placeholderTextColor={colors.textPlaceholder}
             value={title}
-            onChangeText={setTitle}
+            onChangeText={handleTitleChange}
           />
 
-          <View style={styles.row}>
-            <Text style={styles.label}>Log first entry now:</Text>
-            <Pressable
-              onPress={() => setLogImmediately((prev) => !prev)}
-              style={[styles.toggleChip, logImmediately && styles.toggleChipActive]}
-            >
-              <Text style={logImmediately ? styles.toggleChipTextActive : styles.toggleChipText}>
-                {logImmediately ? 'Yes' : 'No'}
-              </Text>
-            </Pressable>
-          </View>
-
-          {logImmediately && (
-            <BottomSheetTextInput
-              style={[styles.input, { marginTop: 8 }]}
-              placeholder="Optional note for this first entry..."
-              placeholderTextColor={colors.textPlaceholder}
-              value={initialNote}
-              onChangeText={setInitialNote}
-            />
+          {suggestions.length > 0 && !matchedMasterId && (
+            <View style={styles.suggestionBox}>
+              {suggestions.map((m) => (
+                <Pressable
+                  key={m.id}
+                  onPress={() => handlePickSuggestion(m.id, m.title)}
+                  style={styles.suggestionRow}
+                >
+                  <Text style={styles.suggestionText}>{m.title}</Text>
+                </Pressable>
+              ))}
+            </View>
           )}
 
+          {matchedMasterId && (
+            <Text style={styles.matchedHint}>Reusing existing "{title}" category and its tags.</Text>
+          )}
+
+          <BottomSheetTextInput
+            style={[styles.input, { marginTop: 8 }]}
+            placeholder="Note for today (optional)..."
+            placeholderTextColor={colors.textPlaceholder}
+            value={note}
+            onChangeText={setNote}
+          />
+
           <View style={styles.dynamicContainer}>
-            <Text style={styles.subSectionTitle}>Tags</Text>
+            <Text style={styles.subSectionTitle}>
+              {matchedMasterId ? 'Category tags' : 'Category tags (applies every time you use this name)'}
+            </Text>
             <TagPicker
               allTags={allTags}
               mostUsedTags={mostUsedTags}
-              selectedTagIds={selectedTagIds}
-              onToggleTag={handleToggleTag}
+              selectedTagIds={masterTagIds}
+              onToggleTag={handleToggleMasterTag}
+              onCreateTag={(name) => addTag({ name })}
+              onDeleteTag={handleDeleteTag}
+            />
+          </View>
+
+          <View style={styles.dynamicContainer}>
+            <Text style={styles.subSectionTitle}>Just for this entry</Text>
+            <TagPicker
+              allTags={allTags}
+              mostUsedTags={mostUsedTags}
+              selectedTagIds={extraTagIds}
+              onToggleTag={handleToggleExtraTag}
               onCreateTag={(name) => addTag({ name })}
               onDeleteTag={handleDeleteTag}
             />
@@ -268,11 +329,11 @@ export default function NewActivityModal({
 
           <View style={{ marginTop: 24, width: '100%', paddingBottom: 40 }}>
             <Pressable
-              disabled={!title.trim()}
+              disabled={!title.trim() || isSubmitting}
               onPress={handleCreateActivity}
               style={({ pressed }) => [
                 styles.submitButton,
-                !title.trim() && styles.submitButtonDisabled,
+                (!title.trim() || isSubmitting) && styles.submitButtonDisabled,
                 pressed && title.trim() ? { opacity: 0.85 } : null,
               ]}
             >
@@ -287,7 +348,7 @@ export default function NewActivityModal({
 
 const styles = StyleSheet.create({
   contentContainer: { padding: 24 },
-  detailContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
+  detailContainer: { padding: 24 },
   titleText: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 6, color: colors.textPrimary },
   subTitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginBottom: 16 },
   input: {
@@ -299,46 +360,33 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
     color: colors.textPrimary,
   },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 12 },
-  label: { fontSize: 16, fontWeight: '500', color: colors.textPrimary },
-  toggleChip: {
+  suggestionBox: {
+    marginTop: 4,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.borderSubtle,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceElevated,
+    overflow: 'hidden',
   },
-  toggleChipActive: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
-  toggleChipText: { fontSize: 13, color: colors.textSecondary },
-  toggleChipTextActive: { fontSize: 13, color: colors.selectedText, fontWeight: '600' },
+  suggestionRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  suggestionText: { fontSize: 14, color: colors.textPrimary },
+  matchedHint: { fontSize: 12, color: colors.accent, marginTop: 6, fontStyle: 'italic' },
   dynamicContainer: { marginTop: 10, padding: 12, backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
   subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
   submitButton: { backgroundColor: colors.selectedBorder, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
   submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
   submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
-  logBox: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   logBtn: {
     backgroundColor: colors.accent,
     borderRadius: 8,
     paddingHorizontal: 16,
-    justifyContent: 'center',
+    paddingVertical: 10,
     alignItems: 'center',
   },
   logBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
-  listContent: { paddingBottom: 24 },
-  logItem: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  logItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  logDate: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
-  logTime: { fontSize: 12, color: colors.textMuted },
-  logNote: { fontSize: 13, color: colors.textSecondary, marginTop: 4 },
-  emptyContainer: { paddingVertical: 32, alignItems: 'center' },
-  emptyText: { color: colors.textMuted, fontSize: 13 },
 });

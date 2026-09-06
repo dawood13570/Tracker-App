@@ -1,21 +1,23 @@
 import { calculateHabitStreak } from '@/engine/streaks';
-import { endOfWeek, format, startOfWeek } from 'date-fns';
+// add to date-fns import:
+import { differenceInCalendarDays, differenceInCalendarWeeks, endOfMonth, endOfWeek, format, parseISO, startOfMonth, startOfWeek } from 'date-fns';
 import type { InferInsertModel } from 'drizzle-orm';
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm';
 import { db } from './client';
 import {
-    activities,
-    activityLogs,
-    activityTags,
-    events,
-    eventTags,
-    habitLogs,
-    habits,
-    habitTags,
-    progressLogs,
-    tags,
-    tasks,
-    taskTags,
+  activities,
+  activityLogs,
+  activityLogTags,
+  activityTags,
+  events,
+  eventTags,
+  habitLogs,
+  habits,
+  habitTags,
+  progressLogs,
+  tags,
+  tasks,
+  taskTags
 } from './schema';
 
 export type TaskRow = typeof tasks.$inferSelect;
@@ -213,7 +215,7 @@ export async function decomposeWeeklyProgressionToDaily(
   targetDate: string,
   daysRemaining: number
 ): Promise<TaskRow> {
-  const currentDone = await getCurrentProgress(weeklyTask.id);
+  const currentDone = await getEffectiveProgress(weeklyTask.id); // was getCurrentProgress — wrong once children exist
   const totalNeeded = weeklyTask.totalProgress ?? 0;
   const remainingTarget = Math.max(0, totalNeeded - currentDone);
   const dailyTarget = Math.ceil(remainingTarget / Math.max(1, daysRemaining));
@@ -594,5 +596,301 @@ export async function applyRolloverSnapshots(
 
     // 2. Insert the new active instance for today
     await db.insert(tasks).values(action.newCard);
+  }
+}
+
+export type ActivityLogWithDetails = ActivityLogRow & {
+  activityTitle: string;
+  tagIds: number[]; // union of category tags + this entry's own tags
+};
+
+async function attachTagsToLogs(
+  rows: (ActivityLogRow & { activityTitle: string })[]
+): Promise<ActivityLogWithDetails[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      const [masterTags, logTags] = await Promise.all([
+        db.select({ tagId: activityTags.tagId }).from(activityTags).where(eq(activityTags.activityId, row.activityId)),
+        db.select({ tagId: activityLogTags.tagId }).from(activityLogTags).where(eq(activityLogTags.logId, row.id)),
+      ]);
+      const tagIds = Array.from(new Set([...masterTags.map((t) => t.tagId), ...logTags.map((t) => t.tagId)]));
+      return { ...row, tagIds };
+    })
+  );
+}
+
+export async function getActivityLogsForDate(date: string): Promise<ActivityLogWithDetails[]> {
+  const rows = await db
+    .select({
+      id: activityLogs.id,
+      activityId: activityLogs.activityId,
+      date: activityLogs.date,
+      note: activityLogs.note,
+      createdAt: activityLogs.createdAt,
+      activityTitle: activities.title,
+    })
+    .from(activityLogs)
+    .innerJoin(activities, eq(activityLogs.activityId, activities.id))
+    .where(eq(activityLogs.date, date))
+    .orderBy(desc(activityLogs.createdAt));
+
+  return attachTagsToLogs(rows);
+}
+
+export async function getActivityLogsForDateRange(
+  startDate: string,
+  endDate: string
+): Promise<ActivityLogWithDetails[]> {
+  const rows = await db
+    .select({
+      id: activityLogs.id,
+      activityId: activityLogs.activityId,
+      date: activityLogs.date,
+      note: activityLogs.note,
+      createdAt: activityLogs.createdAt,
+      activityTitle: activities.title,
+    })
+    .from(activityLogs)
+    .innerJoin(activities, eq(activityLogs.activityId, activities.id))
+    .where(and(gte(activityLogs.date, startDate), lte(activityLogs.date, endDate)))
+    .orderBy(activityLogs.date, desc(activityLogs.createdAt));
+
+  return attachTagsToLogs(rows);
+}
+
+export async function searchActivityLogs(params: {
+  text?: string;
+  tagIds?: number[];
+}): Promise<ActivityLogWithDetails[]> {
+  const rows = await db
+    .select({
+      id: activityLogs.id,
+      activityId: activityLogs.activityId,
+      date: activityLogs.date,
+      note: activityLogs.note,
+      createdAt: activityLogs.createdAt,
+      activityTitle: activities.title,
+    })
+    .from(activityLogs)
+    .innerJoin(activities, eq(activityLogs.activityId, activities.id))
+    .orderBy(desc(activityLogs.date), desc(activityLogs.createdAt));
+
+  const withTags = await attachTagsToLogs(rows);
+  const q = params.text?.trim().toLowerCase();
+  const tagIds = params.tagIds ?? [];
+
+  return withTags.filter((row) => {
+    const matchesText =
+      !q || row.activityTitle.toLowerCase().includes(q) || (row.note ?? '').toLowerCase().includes(q);
+    const matchesTags = tagIds.length === 0 || tagIds.some((t) => row.tagIds.includes(t));
+    return matchesText && matchesTags;
+  });
+}
+
+export async function findActivityByTitle(title: string): Promise<ActivityRow | null> {
+  const [row] = await db
+    .select()
+    .from(activities)
+    .where(sql`lower(${activities.title}) = lower(${title})`)
+    .limit(1);
+  return row ?? null;
+}
+
+export async function getAllActivityMasters(): Promise<ActivityRow[]> {
+  return db.select().from(activities).orderBy(activities.title);
+}
+
+export async function deleteActivityLog(id: number) {
+  const [deleted] = await db.delete(activityLogs).where(eq(activityLogs.id, id)).returning();
+  return deleted;
+}
+
+export async function assignTagToActivityLog(logId: number, tagId: number) {
+  return db.insert(activityLogTags).values({ logId, tagId }).onConflictDoNothing().returning();
+}
+
+export async function removeTagFromActivityLog(logId: number, tagId: number) {
+  return db
+    .delete(activityLogTags)
+    .where(and(eq(activityLogTags.logId, logId), eq(activityLogTags.tagId, tagId)))
+    .returning();
+}
+
+export async function getTagsForActivityLog(logId: number) {
+  return db
+    .select({ id: tags.id, name: tags.name, color: tags.color })
+    .from(activityLogTags)
+    .innerJoin(tags, eq(activityLogTags.tagId, tags.id))
+    .where(eq(activityLogTags.logId, logId));
+}
+
+export async function updateActivityLogNote(id: number, note: string | null) {
+  const [updated] = await db
+    .update(activityLogs)
+    .set({ note })
+    .where(eq(activityLogs.id, id))
+    .returning();
+  return updated;
+}
+
+export async function createActivityEntryWithTags(params: {
+  title: string;
+  note?: string | null;
+  date?: string;
+  masterTagIds?: number[];
+  extraTagIds?: number[];
+}): Promise<ActivityLogWithDetails> {
+  const logDate = params.date ?? new Date().toISOString().split('T')[0];
+
+  return db.transaction(async (tx) => {
+    let [master] = await tx
+      .select()
+      .from(activities)
+      .where(sql`lower(${activities.title}) = lower(${params.title.trim()})`)
+      .limit(1);
+
+    if (!master) {
+      [master] = await tx
+        .insert(activities)
+        .values({ title: params.title.trim() })
+        .returning();
+
+      for (const tagId of params.masterTagIds ?? []) {
+        await tx.insert(activityTags).values({ activityId: master.id, tagId }).onConflictDoNothing();
+      }
+    }
+
+    const [insertedLog] = await tx
+      .insert(activityLogs)
+      .values({
+        activityId: master.id,
+        date: logDate,
+        note: params.note ?? null,
+      })
+      .returning();
+
+    for (const tagId of params.extraTagIds ?? []) {
+      await tx.insert(activityLogTags).values({ logId: insertedLog.id, tagId }).onConflictDoNothing();
+    }
+
+    const [row] = await tx
+      .select({
+        id: activityLogs.id,
+        activityId: activityLogs.activityId,
+        date: activityLogs.date,
+        note: activityLogs.note,
+        createdAt: activityLogs.createdAt,
+        activityTitle: activities.title,
+      })
+      .from(activityLogs)
+      .innerJoin(activities, eq(activityLogs.activityId, activities.id))
+      .where(eq(activityLogs.id, insertedLog.id));
+
+    const [masterTags, logTags] = await Promise.all([
+      tx.select({ tagId: activityTags.tagId }).from(activityTags).where(eq(activityTags.activityId, row.activityId)),
+      tx.select({ tagId: activityLogTags.tagId }).from(activityLogTags).where(eq(activityLogTags.logId, row.id)),
+    ]);
+
+    const tagIds = Array.from(new Set([...masterTags.map((t) => t.tagId), ...logTags.map((t) => t.tagId)]));
+
+    return { ...row, tagIds };
+  });
+}
+
+export async function getMonthlyTasks(monthStartDate: string, monthEndDate: string): Promise<TaskRow[]> {
+  return db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.scope, 'monthly'),
+        isNull(tasks.parentId),
+        gte(tasks.scheduledDate, monthStartDate),
+        lte(tasks.scheduledDate, monthEndDate)
+      )
+    )
+    .orderBy(tasks.id);
+}
+
+export async function decomposeMonthlyProgressionToWeekly(
+  monthlyTask: TaskRow,
+  weekStartDate: string,
+  weeksRemaining: number
+): Promise<TaskRow> {
+  const currentDone = await getEffectiveProgress(monthlyTask.id); // was missing entirely
+  const totalNeeded = monthlyTask.totalProgress ?? 0;
+  const remainingTarget = Math.max(0, totalNeeded - currentDone);
+  const weeklyTarget = Math.ceil(remainingTarget / Math.max(1, weeksRemaining));
+
+  const [existingWeekly] = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.sourceTaskId, monthlyTask.id), eq(tasks.scheduledDate, weekStartDate), eq(tasks.scope, 'weekly')));
+
+  if (existingWeekly) {
+    const [updated] = await db.update(tasks).set({ totalProgress: weeklyTarget }).where(eq(tasks.id, existingWeekly.id)).returning();
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(tasks)
+    .values({
+      title: `${monthlyTask.title} (Weekly)`,
+      type: 'Progression',
+      priority: monthlyTask.priority,
+      scheduledDate: weekStartDate,
+      scope: 'weekly',
+      sourceTaskId: monthlyTask.id,
+      totalProgress: weeklyTarget,
+      progressUnit: monthlyTask.progressUnit,
+      deadline: monthlyTask.deadline,
+      rolloverEnabled: false,
+    })
+    .returning();
+  return created;
+}
+
+// NEW: children of a decomposed goal
+export async function getChildTasks(taskId: number): Promise<TaskRow[]> {
+  return db.select().from(tasks).where(eq(tasks.sourceTaskId, taskId));
+}
+
+// NEW: a parent goal's real progress is the sum of its descendants' progress,
+// not its own (empty) progress_logs row. Leaf tasks fall back to the direct sum.
+export async function getEffectiveProgress(taskId: number): Promise<number> {
+  const children = await getChildTasks(taskId);
+  if (children.length === 0) {
+    return getCurrentProgress(taskId);
+  }
+  const childTotals = await Promise.all(children.map((c) => getEffectiveProgress(c.id)));
+  return childTotals.reduce((sum, v) => sum + v, 0);
+}
+
+export async function ensureDailyDecompositionForDate(dateStr: string): Promise<void> {
+  const dayDate = parseISO(dateStr);
+  const weekStart = format(startOfWeek(dayDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const weekEnd = format(endOfWeek(dayDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const monthStart = format(startOfMonth(dayDate), 'yyyy-MM-dd');
+  const monthEnd = format(endOfMonth(dayDate), 'yyyy-MM-dd');
+
+  const monthlyGoals = await getMonthlyTasks(monthStart, monthEnd);
+  for (const monthly of monthlyGoals) {
+    if (monthly.type !== 'Progression') continue;
+    const weeksRemaining = differenceInCalendarWeeks(parseISO(monthEnd), dayDate, { weekStartsOn: 1 }) + 1;
+    await decomposeMonthlyProgressionToWeekly(monthly, weekStart, weeksRemaining);
+  }
+
+  const weeklyGoals = await getWeeklyTasks(weekStart, weekEnd);
+  for (const weekly of weeklyGoals) {
+    if (weekly.type !== 'Progression') continue;
+    const daysRemaining = differenceInCalendarDays(parseISO(weekEnd), dayDate) + 1;
+    await decomposeWeeklyProgressionToDaily(weekly, dateStr, daysRemaining);
+  }
+}
+export async function setAbsoluteProgress(taskId: number, targetValue: number): Promise<void> {
+  const current = await getCurrentProgress(taskId);
+  const delta = targetValue - current;
+  if (delta !== 0) {
+    await insertProgressLog({ taskId, amount: delta });
   }
 }

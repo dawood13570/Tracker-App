@@ -347,9 +347,9 @@ Added: 2026-07-18
 - [x] 6.1.4 — Tapping a task opens its detail
 
 ### 6.2 — Monthly View
-- [ ] 6.2.1 — Calendar grid showing each day of month
-- [ ] 6.2.2 — Each day has a dot or count indicator (e.g. green = all done, red = incomplete)
-- [ ] 6.2.3 — Tapping a day shows that day's task summary
+- [x] 6.2.1 — Calendar grid showing each day of month
+- [x] 6.2.2 — Each day has a dot or count indicator (e.g. green = all done, red = incomplete)
+- [x] 6.2.3 — Tapping a day shows that day's task summary
 
 ### 6.3 — Notes (multi-cadence)
 - [ ] 6.3.1 — Write `notes` schema with a `scope` field: daily | weekly | monthly | yearly (if not already sketched in 2.1.7)

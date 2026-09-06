@@ -1,32 +1,33 @@
 import { SelectionIndicator } from '@/components/SelectionIndicator';
-import { ActivityWithLastLog } from '@/store/activityStore';
+import { ActivityLogWithDetails } from '@/store/activityStore';
 import { colors } from '@/theme/colors';
-import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+interface TagLite {
+  id: number;
+  name: string;
+  color?: string | null;
+}
 
 interface ActivityCardProps {
-  activity: ActivityWithLastLog;
+  entry: ActivityLogWithDetails;
+  tags: TagLite[]; // resolved tag objects for entry.tagIds, passed in from parent
   selectionMode: boolean;
   isSelected: boolean;
   onPressCard: () => void;
   onLongPressCard: () => void;
   onToggleSelect: () => void;
-  onQuickLog: () => void;
 }
 
 export function ActivityCard({
-  activity,
+  entry,
+  tags,
   selectionMode,
   isSelected,
   onPressCard,
   onLongPressCard,
   onToggleSelect,
-  onQuickLog,
 }: ActivityCardProps) {
-  const lastDoneText = activity.lastLog
-    ? `Last done: ${activity.lastLog.date}`
-    : 'Never logged';
-
   const handlePress = () => {
     if (selectionMode) {
       onToggleSelect();
@@ -55,26 +56,23 @@ export function ActivityCard({
 
             <View style={styles.cardContent}>
               <Text style={styles.activityTitle} numberOfLines={1}>
-                {activity.title}
+                {entry.activityTitle}
               </Text>
-              <Text style={styles.lastDoneText}>{lastDoneText}</Text>
-              {Boolean(activity.lastLog?.note) && (
+              {Boolean(entry.note) && (
                 <Text style={styles.noteSnippet} numberOfLines={1}>
-                  "{activity.lastLog?.note}"
+                  "{entry.note}"
                 </Text>
               )}
+              {tags.length > 0 && (
+                <View style={styles.tagRow}>
+                  {tags.map((tag) => (
+                    <View key={tag.id} style={[styles.tagChip, tag.color ? { borderColor: tag.color } : null]}>
+                      <Text style={[styles.tagChipText, tag.color ? { color: tag.color } : null]}>{tag.name}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
-
-            {!selectionMode && (
-              <TouchableOpacity
-                onPress={onQuickLog}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                style={styles.quickLogButton}
-              >
-                <Ionicons name="flash-outline" size={16} color={colors.accent} />
-                <Text style={styles.quickLogText}>Log</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </Pressable>
       </View>
@@ -94,73 +92,23 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  selectedCard: {
-    borderColor: colors.accent,
-    backgroundColor: colors.selectedBg,
-  },
-  cardInner: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    minHeight: 56,
-  },
-  accentBar: {
-    width: 4,
-    backgroundColor: colors.accent,
-  },
-  pressableRow: {
-    flex: 1,
-  },
-  cardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  leadSlot: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  cardContent: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  activityTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  lastDoneText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  noteSnippet: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontStyle: 'italic',
-    marginTop: 2,
-  },
-  quickLogButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.surfaceElevated,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+  selectedCard: { borderColor: colors.accent, backgroundColor: colors.selectedBg },
+  cardInner: { flexDirection: 'row', alignItems: 'stretch', minHeight: 56 },
+  accentBar: { width: 4, backgroundColor: colors.activityAccent },
+  pressableRow: { flex: 1 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
+  leadSlot: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  cardContent: { flex: 1, justifyContent: 'center' },
+  activityTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+  noteSnippet: { fontSize: 11, color: colors.textMuted, fontStyle: 'italic', marginTop: 2 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  tagChip: {
     borderWidth: 1,
     borderColor: colors.borderSubtle,
-    marginLeft: 10,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
-  quickLogText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.accent,
-  },
-  cardPressed: {
-    opacity: 0.7,
-  },
+  tagChipText: { fontSize: 10, fontWeight: '600', color: colors.textSecondary },
+  cardPressed: { opacity: 0.7 },
 });
