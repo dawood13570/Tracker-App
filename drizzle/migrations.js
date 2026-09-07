@@ -7,6 +7,7 @@ import m0002 from './0002_bouncy_donald_blake.sql';
 import m0003 from './0003_dark_apocalypse.sql';
 import m0004 from './0004_romantic_spacker_dave.sql';
 import m0005 from './0005_pink_jubilee.sql';
+import m0006 from './0006_fearless_nomad.sql';
 
   export default {
     journal,
@@ -16,7 +17,8 @@ m0001,
 m0002,
 m0003,
 m0004,
-m0005
+m0005,
+m0006
     }
   }
   

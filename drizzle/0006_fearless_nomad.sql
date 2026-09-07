@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `next_occurrence_generated` integer DEFAULT false NOT NULL;

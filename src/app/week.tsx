@@ -11,6 +11,7 @@ import ProgressLogSheet from '@/components/ProgressLogSheet';
 import { TagFilterBar } from '@/components/TagFilterBar';
 import { TaskCard } from '@/components/TaskCard';
 import {
+  deleteTaskCascade,
   EventRow,
   getActivityLogsForDateRange,
   getAllTagAssociations,
@@ -352,7 +353,7 @@ export default function WeekScreen() {
           for (const key of selectedIds) {
             const [type, rawId] = key.split(':') as [ItemType, string];
             const id = Number(rawId);
-            if (type === 'task') await removeTask(id);
+            if (type === 'task') await deleteTaskCascade(id);
             if (type === 'habit') await removeHabit(id);
             if (type === 'event') await removeEvent(id);
             if (type === 'activity') {

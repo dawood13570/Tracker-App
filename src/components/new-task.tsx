@@ -53,13 +53,13 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
   const { addTask, updateTask, selectedDate } = useTaskStore();
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
-  const [ selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);
   const [deletedSubtaskIds, setDeletedSubtaskIds] = useState<number[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
 
-  const snapPoints = useMemo(() => ['60%', '35%'], []);
+  const snapPoints = useMemo(() => ['75%', '50%'], []);
 
   const handleAddSubtask = () => {
     if (subtaskInput.trim() === '') return;
@@ -76,7 +76,6 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   };
 
   const handleRemoveSubtask = (id: string) => {
-    // If it's an existing database subtask, mark it for deletion upon save
     if (!id.startsWith('temp-')) {
       const numId = Number(id);
       if (!isNaN(numId)) {
@@ -140,7 +139,6 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
         setRecurrenceDaysOfWeek([]);
       }
 
-      // Load existing real subtasks from SQLite
       if (taskToEdit.type === 'Hybrid') {
         getSubtasksByParent(taskToEdit.id).then((items) => {
           setSubtasks(
@@ -172,31 +170,28 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     }
   }, [taskToEdit]);
 
-  // Uncheck or check a tag for this specific task
-const handleToggleTag = async (tagId: number) => {
-  const isSelected = selectedTagIds.includes(tagId);
+  const handleToggleTag = async (tagId: number) => {
+    const isSelected = selectedTagIds.includes(tagId);
 
-  if (taskToEdit) {
-    if (isSelected) {
-      await removeTagFromTask(taskToEdit.id, tagId);
-    } else {
-      await assignTag(taskToEdit.id, tagId);
-    }
-  }
-  setSelectedTagIds((prev) =>
-    isSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId]
-  );
-};
-
-    
-    const handleDeleteTag = async (tagId: number) => {
-      if (taskToEdit && selectedTagIds.includes(tagId)) {
+    if (taskToEdit) {
+      if (isSelected) {
         await removeTagFromTask(taskToEdit.id, tagId);
+      } else {
+        await assignTag(taskToEdit.id, tagId);
       }
-      setSelectedTagIds((prev) => prev.filter((id) => id !== tagId));
-      await removeTag(tagId);
-    };
+    }
+    setSelectedTagIds((prev) =>
+      isSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
+  };
 
+  const handleDeleteTag = async (tagId: number) => {
+    if (taskToEdit && selectedTagIds.includes(tagId)) {
+      await removeTagFromTask(taskToEdit.id, tagId);
+    }
+    setSelectedTagIds((prev) => prev.filter((id) => id !== tagId));
+    await removeTag(tagId);
+  };
 
   return (
     <BottomSheet
@@ -205,69 +200,76 @@ const handleToggleTag = async (tagId: number) => {
       snapPoints={snapPoints}
       enablePanDownToClose={true}
       backgroundStyle={{ backgroundColor: colors.surface }}
+      handleIndicatorStyle={{ backgroundColor: colors.border }}
       keyboardBehavior="fillParent"
       keyboardBlurBehavior="restore"
     >
       <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-        {!taskToEdit && onSwitchType && <AddTypeSwitcher active="Task" onSelect={onSwitchType} />}
-        <Text style={styles.titleText}>{taskToEdit ? 'Edit Task' : 'New Task Input'}</Text>
-        
+        {!taskToEdit && onSwitchType && (
+          <View style={styles.switcherWrapper}>
+            <AddTypeSwitcher active="Task" onSelect={onSwitchType} />
+          </View>
+        )}
+        <Text style={styles.titleText}>{taskToEdit ? 'Edit Task' : 'New Task'}</Text>
 
         <BottomSheetTextInput
           style={styles.input}
-          placeholder="Enter Task Here"
+          placeholder="What needs to be done?"
           placeholderTextColor={colors.textPlaceholder}
           value={title}
           onChangeText={setTitle}
         />
 
-        <View style={styles.row}>
-          <Text style={styles.label}>Type:</Text>
-          <View style={styles.selectorGroup}>
-            {TASK_TYPES.map((t) => {
-              const isSelected = type === t;
-              return (
-                <Pressable
-                  key={t}
-                  style={[styles.selectorItem, isSelected && styles.selectedItem]}
-                  onPress={() => setType(t)}
-                >
-                  <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
-                    {t}
-                  </Text>
-                </Pressable>
-              );
-            })}
+        <View style={styles.sectionCard}>
+          <View style={styles.row}>
+            <Text style={styles.label}>Type</Text>
+            <View style={styles.selectorGroup}>
+              {TASK_TYPES.map((t) => {
+                const isSelected = type === t;
+                return (
+                  <Pressable
+                    key={t}
+                    style={[styles.selectorItem, isSelected && styles.selectedItem]}
+                    onPress={() => setType(t)}
+                  >
+                    <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
+                      {t}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Priority</Text>
+            <View style={styles.selectorGroup}>
+              {PRIORITY_OPTIONS.map((p) => {
+                const isSelected = priority === p;
+                const priorityStyles: Record<string, { item: any; text: any }> = {
+                  Low: { item: styles.selectedLow, text: styles.textLow },
+                  Medium: { item: styles.selectedMedium, text: styles.textMedium },
+                  High: { item: styles.selectedHigh, text: styles.textHigh },
+                };
+                return (
+                  <Pressable
+                    key={p}
+                    style={[styles.selectorItem, isSelected && priorityStyles[p].item]}
+                    onPress={() => setPriority(p)}
+                  >
+                    <Text style={[isSelected ? priorityStyles[p].text : styles.unselectedText]}>
+                      {p}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
 
-        <View style={styles.row}>
-          <Text style={styles.label}>Priority:</Text>
-          <View style={styles.selectorGroup}>
-            {PRIORITY_OPTIONS.map((p) => {
-              const isSelected = priority === p;
-
-              const priorityStyles: Record<string, { item: any; text: any }> = {
-                Low: { item: styles.selectedLow, text: styles.textLow },
-                Medium: { item: styles.selectedMedium, text: styles.textMedium },
-                High: { item: styles.selectedHigh, text: styles.textHigh },
-              };
-              return (
-                <Pressable
-                  key={p}
-                  style={[styles.selectorItem, isSelected && priorityStyles[p].item]}
-                  onPress={() => setPriority(p)}
-                >
-                  <Text style={[isSelected ? priorityStyles[p].text : styles.unselectedText]}>
-                    {p}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.dynamicContainer}>
+        <View style={styles.sectionCard}>
           <Text style={styles.subSectionTitle}>Tags</Text>
           <TagPicker
             allTags={allTags}
@@ -279,98 +281,113 @@ const handleToggleTag = async (tagId: number) => {
           />
         </View>
 
-        <View style={styles.row}>
-          <Text style={styles.label}>Rollover Task:</Text>
-          <Switch value={allowRollover} onValueChange={setAllowRollover} />
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Repeats:</Text>
-          <View style={[styles.selectorGroup, styles.recurrenceSelectorGroup]}>
-            {RECURRENCE_OPTIONS.map(({ value, label }) => {
-              const isSelected = recurrenceType === value;
-              return (
-                <Pressable
-                  key={value}
-                  style={[styles.selectorItem, isSelected && styles.selectedItem]}
-                  onPress={() => setRecurrenceType(value)}
-                >
-                  <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {recurrenceType === 'every_n_days' && (
-          <View style={styles.dynamicContainer}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Repeat every:</Text>
-              <BottomSheetTextInput
-                style={styles.inputs}
-                value={recurrenceInterval}
-                onChangeText={setRecurrenceInterval}
-                placeholder="3"
-                keyboardType="numeric"
-                placeholderTextColor="#b0b0b0"
-              />
-              <Text style={[styles.label, { marginLeft: 8 }]}>days</Text>
+        <View style={styles.sectionCard}>
+          <View style={styles.row}>
+            <View>
+              <Text style={styles.label}>Rollover Task</Text>
+              <Text style={styles.subLabel}>Move incomplete work to the next day</Text>
             </View>
+            <Switch
+              value={allowRollover}
+              onValueChange={setAllowRollover}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.textOnAccent}
+            />
           </View>
-        )}
 
-        {recurrenceType === 'weekly' && (
-          <View style={styles.dynamicContainer}>
-            <Text style={styles.subSectionTitle}>Repeat on:</Text>
-            <View style={styles.dayOfWeekRow}>
-              {DAYS_OF_WEEK.map((day) => {
-                const isSelected = recurrenceDaysOfWeek.includes(day);
+          <View style={styles.divider} />
+
+          <View style={styles.rowColumn}>
+            <View style={styles.rowHeader}>
+              <Text style={styles.label}>Repeats</Text>
+            </View>
+            <View style={[styles.selectorGroup, styles.recurrenceSelectorGroup]}>
+              {RECURRENCE_OPTIONS.map(({ value, label }) => {
+                const isSelected = recurrenceType === value;
                 return (
                   <Pressable
-                    key={day}
-                    style={[styles.dayPill, isSelected && styles.selectedItem]}
-                    onPress={() => toggleRecurrenceDay(day)}
+                    key={value}
+                    style={[styles.selectorItem, isSelected && styles.selectedItem]}
+                    onPress={() => setRecurrenceType(value)}
                   >
                     <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
-                      {day.charAt(0).toUpperCase() + day.slice(1)}
+                      {label}
                     </Text>
                   </Pressable>
                 );
               })}
             </View>
           </View>
-        )}
+
+          {recurrenceType === 'every_n_days' && (
+            <View style={[styles.row, { marginTop: 12 }]}>
+              <Text style={styles.subLabel}>Repeat every</Text>
+              <View style={styles.inlineInputWrapper}>
+                <BottomSheetTextInput
+                  style={styles.inlineInput}
+                  value={recurrenceInterval}
+                  onChangeText={setRecurrenceInterval}
+                  placeholder="3"
+                  keyboardType="numeric"
+                  placeholderTextColor={colors.textPlaceholder}
+                />
+                <Text style={styles.unitLabel}>days</Text>
+              </View>
+            </View>
+          )}
+
+          {recurrenceType === 'weekly' && (
+            <View style={{ marginTop: 12 }}>
+              <Text style={[styles.subLabel, { marginBottom: 8 }]}>Repeat on days</Text>
+              <View style={styles.dayOfWeekRow}>
+                {DAYS_OF_WEEK.map((day) => {
+                  const isSelected = recurrenceDaysOfWeek.includes(day);
+                  return (
+                    <Pressable
+                      key={day}
+                      style={[styles.dayPill, isSelected && styles.selectedItem]}
+                      onPress={() => toggleRecurrenceDay(day)}
+                    >
+                      <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
+                        {day.toUpperCase()}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+        </View>
 
         {/* PROGRESSION TASK INPUTS */}
         {type === 'Progression' && (
-          <View style={styles.dynamicContainer}>
+          <View style={styles.sectionCard}>
+            <Text style={styles.subSectionTitle}>Progression Details</Text>
             <View style={styles.row}>
-              <Text style={styles.label}>Target Value: </Text>
+              <Text style={styles.label}>Target Value</Text>
               <BottomSheetTextInput
                 style={styles.inputs}
                 value={targetValue}
                 onChangeText={setTargetValue}
                 placeholder="e.g., 100"
                 keyboardType="numeric"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textPlaceholder}
               />
             </View>
 
-            <View style={styles.row}>
-              <Text style={styles.label}>Unit:</Text>
+            <View style={[styles.row, { marginTop: 12 }]}>
+              <Text style={styles.label}>Unit</Text>
               <BottomSheetTextInput
-                style={styles.inputStyleNested}
+                style={styles.inputs}
                 value={unit}
                 onChangeText={setUnit}
                 placeholder="e.g., kg, miles, reps"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textPlaceholder}
               />
             </View>
 
-            <View style={styles.row}>
-              <Text style={styles.label}>Deadline:</Text>
+            <View style={[styles.row, { marginTop: 12 }]}>
+              <Text style={styles.label}>Deadline</Text>
               <Pressable onPress={() => setShowDeadlinePicker(true)} style={styles.deadlinePressable}>
                 <Text style={deadline ? styles.deadlineText : styles.deadlinePlaceholder}>
                   {deadline ? getLocalDateString(deadline) : 'Select a date'}
@@ -392,7 +409,7 @@ const handleToggleTag = async (tagId: number) => {
 
         {/* HYBRID TASK INPUTS */}
         {type === 'Hybrid' && (
-          <View style={styles.dynamicContainer}>
+          <View style={styles.sectionCard}>
             <Text style={styles.subSectionTitle}>Subtasks</Text>
 
             <View style={styles.addSubtaskRow}>
@@ -400,8 +417,8 @@ const handleToggleTag = async (tagId: number) => {
                 style={styles.subtaskTextInput}
                 value={subtaskInput}
                 onChangeText={setSubtaskInput}
-                placeholder="Enter subtask title..."
-                placeholderTextColor="#999"
+                placeholder="Add a subtask..."
+                placeholderTextColor={colors.textPlaceholder}
                 onSubmitEditing={handleAddSubtask}
               />
               <TouchableOpacity style={styles.addSubtaskButton} onPress={handleAddSubtask}>
@@ -413,7 +430,7 @@ const handleToggleTag = async (tagId: number) => {
               <View style={styles.subtaskListContainer}>
                 {subtasks.map((item, index) => (
                   <View key={item.id} style={styles.subtaskItemRow}>
-                    <Text style={styles.subtaskIndex}>{index + 1}.</Text>
+                    <Text style={styles.subtaskIndex}>{index + 1}</Text>
                     <Text
                       style={[
                         styles.subtaskTitle,
@@ -434,7 +451,7 @@ const handleToggleTag = async (tagId: number) => {
         )}
 
         {/* Submit Button */}
-        <View style={{ marginTop: 24, width: '100%', paddingBottom: 40 }}>
+        <View style={styles.submitContainer}>
           <Pressable
             disabled={!title.trim()}
             onPress={async () => {
@@ -476,11 +493,9 @@ const handleToggleTag = async (tagId: number) => {
                   await updateTask(taskToEdit.id, sharedFields);
 
                   if (type === 'Hybrid') {
-                    // 1. Delete removed subtasks
                     for (const delId of deletedSubtaskIds) {
                       await deleteTask(delId);
                     }
-                    // 2. Insert newly added subtasks
                     for (const sub of subtasks) {
                       if (sub.isNew) {
                         await insertSubtask(taskToEdit.id, {
@@ -528,7 +543,9 @@ const handleToggleTag = async (tagId: number) => {
               pressed && title.trim() ? { opacity: 0.85 } : null,
             ]}
           >
-            <Text style={styles.submitButtonText}>{taskToEdit ? 'Update Task' : 'Submit Task'}</Text>
+            <Text style={[styles.submitButtonText, !title.trim() && { color: colors.textMuted }]}>
+              {taskToEdit ? 'Update Task' : 'Create Task'}
+            </Text>
           </Pressable>
         </View>
       </BottomSheetScrollView>
@@ -537,43 +554,281 @@ const handleToggleTag = async (tagId: number) => {
 }
 
 const styles = StyleSheet.create({
-  contentContainer: { padding: 24 },
-  titleText: { fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 20, color: colors.textPrimary },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 10 },
-  label: { fontSize: 16, fontWeight: '500', color: colors.textPrimary },
-  selectorGroup: { flexDirection: 'row' },
-  recurrenceSelectorGroup: { flexWrap: 'wrap', justifyContent: 'flex-end', flex: 1 },
-  selectorItem: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 20, backgroundColor: colors.surfaceSubtle, marginLeft: 6 },
-  selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
-  unselectedText: { color: colors.textSecondary, fontSize: 13 },
-  selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 13 },
-  selectedLow: { backgroundColor: colors.priorityLowBg, borderColor: colors.priorityLowBorder, borderWidth: 1.5 },
-  textLow: { color: colors.priorityLowText, fontWeight: '600', fontSize: 13 },
-  selectedMedium: { backgroundColor: colors.priorityMediumBg, borderColor: colors.priorityMediumBorder, borderWidth: 1.5 },
-  textMedium: { color: colors.priorityMediumText, fontWeight: '600', fontSize: 13 },
-  selectedHigh: { backgroundColor: colors.priorityHighBg, borderColor: colors.priorityHighBorder, borderWidth: 1.5 },
-  textHigh: { color: colors.priorityHighText, fontWeight: '600', fontSize: 13 },
-  inputs: { flex: 1.5, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 16, backgroundColor: colors.surfaceSubtle, marginLeft: 12, color: colors.textPrimary },
-  inputStyleNested: { flex: 1.5, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 16, backgroundColor: colors.surfaceSubtle, marginLeft: 12, color: colors.textPrimary },
-  dynamicContainer: { marginTop: 10, padding: 12, backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
-  dayOfWeekRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  dayPill: { paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 16, backgroundColor: colors.surfaceSubtle, marginRight: 6, marginBottom: 6 },
-  subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
-  addSubtaskRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  subtaskTextInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, backgroundColor: colors.surfaceSubtle, marginRight: 8, color: colors.textPrimary },
-  addSubtaskButton: { backgroundColor: colors.accent, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
-  addSubtaskButtonText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 14 },
-  subtaskListContainer: { marginTop: 8, backgroundColor: colors.surfaceSubtle, borderRadius: 6, borderWidth: 1, borderColor: colors.borderSubtle },
-  subtaskItemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-  subtaskIndex: { fontSize: 12, fontWeight: '500', color: colors.textMuted, marginRight: 6 },
-  subtaskTitle: { flex: 1, fontSize: 13, color: colors.textPrimary },
-  removeSubtaskButton: { padding: 4, marginLeft: 8 },
-  removeSubtaskButtonText: { fontSize: 12, color: colors.danger, fontWeight: '600' },
-  submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
-  submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
-  submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
-  deadlinePressable: { flex: 1.5, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.surfaceSubtle, marginLeft: 12 },
-  deadlineText: { fontSize: 16, color: colors.textPrimary },
-  deadlinePlaceholder: { fontSize: 16, color: colors.textPlaceholder },
+  contentContainer: { 
+    paddingHorizontal: 20, 
+    paddingBottom: 40,
+    paddingTop: 8,
+  },
+  switcherWrapper: {
+    marginBottom: 16,
+  },
+  titleText: { 
+    fontSize: 20, 
+    fontWeight: '700', 
+    textAlign: 'center', 
+    marginBottom: 16, 
+    color: colors.textPrimary,
+    letterSpacing: 0.3,
+  },
+  input: { 
+    borderWidth: 1, 
+    borderColor: colors.border, 
+    borderRadius: 12, 
+    paddingHorizontal: 16, 
+    paddingVertical: 14, 
+    fontSize: 16, 
+    backgroundColor: colors.surfaceSubtle, 
+    color: colors.textPrimary,
+    marginBottom: 16,
+  },
+  sectionCard: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: 16,
+    marginBottom: 16,
+  },
+  row: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+  },
+  rowColumn: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  rowHeader: {
+    marginBottom: 8,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.borderSubtle,
+    marginVertical: 12,
+  },
+  label: { 
+    fontSize: 15, 
+    fontWeight: '600', 
+    color: colors.textPrimary,
+  },
+  subLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  selectorGroup: { 
+    flexDirection: 'row',
+    gap: 6,
+  },
+  recurrenceSelectorGroup: { 
+    flexWrap: 'wrap', 
+    justifyContent: 'flex-start', 
+    marginTop: 4,
+  },
+  selectorItem: { 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderWidth: 1, 
+    borderColor: colors.border, 
+    borderRadius: 8, 
+    backgroundColor: colors.surfaceSubtle, 
+  },
+  selectedItem: { 
+    borderColor: colors.selectedBorder, 
+    backgroundColor: colors.selectedBg, 
+  },
+  unselectedText: { 
+    color: colors.textSecondary, 
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  selectedText: { 
+    color: colors.selectedText, 
+    fontWeight: '600', 
+    fontSize: 13, 
+  },
+  selectedLow: { 
+    backgroundColor: colors.priorityLowBg, 
+    borderColor: colors.priorityLowBorder, 
+    borderWidth: 1, 
+  },
+  textLow: { 
+    color: colors.priorityLowText, 
+    fontWeight: '600', 
+    fontSize: 13, 
+  },
+  selectedMedium: { 
+    backgroundColor: colors.priorityMediumBg, 
+    borderColor: colors.priorityMediumBorder, 
+    borderWidth: 1, 
+  },
+  textMedium: { 
+    color: colors.priorityMediumText, 
+    fontWeight: '600', 
+    fontSize: 13, 
+  },
+  selectedHigh: { 
+    backgroundColor: colors.priorityHighBg, 
+    borderColor: colors.priorityHighBorder, 
+    borderWidth: 1, 
+  },
+  textHigh: { 
+    color: colors.priorityHighText, 
+    fontWeight: '600', 
+    fontSize: 13, 
+  },
+  inputs: { 
+    flex: 1, 
+    maxWidth: 160,
+    borderWidth: 1, 
+    borderColor: colors.border, 
+    borderRadius: 8, 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    fontSize: 15, 
+    backgroundColor: colors.surfaceSubtle, 
+    color: colors.textPrimary,
+    textAlign: 'right',
+  },
+  inlineInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inlineInput: {
+    width: 60,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: 6,
+    textAlign: 'center',
+    fontSize: 15,
+    backgroundColor: colors.surfaceSubtle,
+    color: colors.textPrimary,
+  },
+  unitLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  dayOfWeekRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  dayPill: { 
+    paddingHorizontal: 10, 
+    paddingVertical: 8, 
+    borderWidth: 1, 
+    borderColor: colors.border, 
+    borderRadius: 8, 
+    backgroundColor: colors.surfaceSubtle, 
+  },
+  subSectionTitle: { 
+    fontSize: 15, 
+    fontWeight: '600', 
+    color: colors.textPrimary, 
+    marginBottom: 12, 
+  },
+  addSubtaskRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8,
+    marginBottom: 12, 
+  },
+  subtaskTextInput: { 
+    flex: 1, 
+    borderWidth: 1, 
+    borderColor: colors.border, 
+    borderRadius: 8, 
+    paddingHorizontal: 12, 
+    paddingVertical: 10, 
+    fontSize: 14, 
+    backgroundColor: colors.surfaceSubtle, 
+    color: colors.textPrimary, 
+  },
+  addSubtaskButton: { 
+    backgroundColor: colors.accent, 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    borderRadius: 8, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+  },
+  addSubtaskButtonText: { 
+    color: colors.textOnAccent, 
+    fontWeight: '600', 
+    fontSize: 14, 
+  },
+  subtaskListContainer: { 
+    backgroundColor: colors.surfaceSubtle, 
+    borderRadius: 8, 
+    borderWidth: 1, 
+    borderColor: colors.borderSubtle,
+    overflow: 'hidden',
+  },
+  subtaskItemRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingVertical: 10, 
+    paddingHorizontal: 12, 
+    borderBottomWidth: 1, 
+    borderBottomColor: colors.borderSubtle, 
+  },
+  subtaskIndex: { 
+    fontSize: 12, 
+    fontWeight: '600', 
+    color: colors.textMuted, 
+    width: 20,
+  },
+  subtaskTitle: { 
+    flex: 1, 
+    fontSize: 14, 
+    color: colors.textPrimary, 
+  },
+  removeSubtaskButton: { 
+    padding: 4, 
+  },
+  removeSubtaskButtonText: { 
+    fontSize: 14, 
+    color: colors.danger, 
+    fontWeight: '600', 
+  },
+  submitContainer: {
+    marginTop: 8,
+    width: '100%',
+  },
+  submitButton: { 
+    backgroundColor: colors.accent, 
+    borderRadius: 12, 
+    paddingVertical: 16, 
+    alignItems: 'center',
+  },
+  submitButtonDisabled: { 
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  submitButtonText: { 
+    color: colors.textOnAccent, 
+    fontSize: 16, 
+    fontWeight: '700', 
+  },
+  deadlinePressable: { 
+    borderWidth: 1, 
+    borderColor: colors.border, 
+    borderRadius: 8, 
+    paddingHorizontal: 12, 
+    paddingVertical: 10, 
+    backgroundColor: colors.surfaceSubtle, 
+    minWidth: 160,
+    alignItems: 'flex-end',
+  },
+  deadlineText: { 
+    fontSize: 15, 
+    color: colors.textPrimary, 
+  },
+  deadlinePlaceholder: { 
+    fontSize: 15, 
+    color: colors.textPlaceholder, 
+  },
 });

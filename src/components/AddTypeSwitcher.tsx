@@ -9,10 +9,10 @@ interface AddTypeSwitcherProps {
 }
 
 const TYPE_COLORS: Record<AddType, string> = {
-  Task: colors.accent,
+  Task: colors.taskAccent,
   Habit: colors.habitAccent,
   Event: colors.eventAccent,
-  Activity: colors.selectedBorder ?? '#4ade80',
+  Activity: colors.activityAccent ?? '#4ade80',
 };
 
 const TYPES: AddType[] = ['Task', 'Habit', 'Event', 'Activity'];

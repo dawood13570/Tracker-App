@@ -1,5 +1,6 @@
 // src/store/taskStore.ts
 import { getNextOccurrence } from '@/engine/recurrence';
+import { addDays, differenceInCalendarDays, parseISO } from 'date-fns';
 import { InferSelectModel } from 'drizzle-orm';
 import { create, type StoreApi } from 'zustand';
 import {
@@ -33,14 +34,13 @@ interface TaskState {
   completeTask: (id: number) => Promise<void>;
   uncompleteTask: (id: number) => Promise<void>;
   removeTask: (id: number) => Promise<void>;
-  updateProgress: (id: number, currentProgress: number) => Promise<void>;
 }
 
 async function handleCompletionSideEffects(
   get: StoreApi<TaskState>['getState'],
   updated: Task
 ) {
-  if (updated.isCompleted && updated.recurrenceType !== 'none') {
+  if (updated.isCompleted && updated.recurrenceType !== 'none' && !updated.nextOccurrenceGenerated) {
     const nextDate = getNextOccurrence(
       { ...updated, recurrenceType: updated.recurrenceType as 'daily' | 'every_n_days' | 'weekly' },
       new Date()
@@ -50,27 +50,39 @@ async function handleCompletionSideEffects(
       const { id: oldId, createdAt: _c, updatedAt: _u, ...taskData } = updated;
       const scheduledDateStr = getLocalDateString(nextDate);
 
+      let newDeadline: string | null = updated.deadline ?? null;
+      if (updated.deadline) {
+        const deltaDays = differenceInCalendarDays(parseISO(updated.deadline), parseISO(updated.scheduledDate));
+        newDeadline = getLocalDateString(addDays(nextDate, deltaDays));
+      }
+
       const newTaskPayload: NewTask = {
         ...(taskData as NewTask),
         scheduledDate: scheduledDateStr,
+        deadline: newDeadline,
         isCompleted: false,
         procrastinationCount: 0,
         currentProgress: 0,
         subtasksCompleted: 0,
+        nextOccurrenceGenerated: false,
       };
 
       const newParent = await get().addTask(newTaskPayload);
 
-      if (newParent && updated.type === 'Hybrid') {
-        const existingSubtasks = await getSubtasksByParent(oldId);
-        for (const sub of existingSubtasks) {
-          await insertSubtask(newParent.id, {
-            title: sub.title,
-            type: sub.type,
-            priority: sub.priority,
-            scheduledDate: scheduledDateStr,
-            isCompleted: false,
-          });
+      if (newParent) {
+        await get().updateTask(oldId, { nextOccurrenceGenerated: true });
+
+        if (updated.type === 'Hybrid') {
+          const existingSubtasks = await getSubtasksByParent(oldId);
+          for (const sub of existingSubtasks) {
+            await insertSubtask(newParent.id, {
+              title: sub.title,
+              type: sub.type,
+              priority: sub.priority,
+              scheduledDate: scheduledDateStr,
+              isCompleted: false,
+            });
+          }
         }
       }
     }
@@ -200,19 +212,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       }));
     } catch (error) {
       console.error(`Failed to remove task ${id}:`, error);
-    }
-  },
-
-  updateProgress: async (id: number, currentProgress: number) => {
-    try {
-      const updated = await updateTask(id, { currentProgress });
-      if (updated) {
-        set((state) => ({
-          tasks: state.tasks.map((task) => (task.id === id ? updated : task)),
-        }));
-      }
-    } catch (error) {
-      console.error(`Failed to update progress for task ${id}:`, error);
     }
   },
 }));

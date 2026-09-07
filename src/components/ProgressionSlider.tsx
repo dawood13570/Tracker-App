@@ -10,6 +10,17 @@ interface ProgressionSliderProps {
   onUpdate: (taskId: number, val: number) => void;
 }
 
+// ProgressionSlider.tsx — add above the component
+function interpolateProgressColor(percent: number): string {
+  const p = Math.max(0, Math.min(1, percent));
+  const start = { r: 217, g: 83, b: 79 };   // muted red
+  const end = { r: 46, g: 204, b: 113 };    // green
+  const r = Math.round(start.r + (end.r - start.r) * p);
+  const g = Math.round(start.g + (end.g - start.g) * p);
+  const b = Math.round(start.b + (end.b - start.b) * p);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 export const ProgressionSlider: React.FC<ProgressionSliderProps> = ({
   taskId,
   current,
@@ -35,6 +46,9 @@ export const ProgressionSlider: React.FC<ProgressionSliderProps> = ({
     setIsEditingText(false);
     Keyboard.dismiss();
   };
+
+
+  const trackColor = interpolateProgressColor(draftVal / (total || 1));
 
   return (
     <View style={styles.container}>
@@ -66,9 +80,9 @@ export const ProgressionSlider: React.FC<ProgressionSliderProps> = ({
         step={1}
         value={draftVal}
         onValueChange={(val) => setDraftVal(clamp(val))}
-        minimumTrackTintColor="#d4af37"
+        minimumTrackTintColor={trackColor}
         maximumTrackTintColor="#333338"
-        thumbTintColor="#d4af37"
+        thumbTintColor={trackColor}
       />
 
       {isDirty && (

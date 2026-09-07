@@ -8,6 +8,7 @@ export const tasks = sqliteTable('tasks', {
   priority: text('priority', { enum: ['Low', 'Medium', 'High'] }).notNull(),
   isCompleted: integer('is_completed', { mode: 'boolean' }).default(false).notNull(),
   scheduledDate: text('scheduled_date').notNull(),
+  nextOccurrenceGenerated: integer('next_occurrence_generated', { mode: 'boolean' }).notNull().default(false),
 
   // Scope & Decomposition
   scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly'] }).default('daily').notNull(),
@@ -143,3 +144,4 @@ export const activityLogTags = sqliteTable('activity_log_tags', {
 }, (table) => ({
   pk: primaryKey({ columns: [table.logId, table.tagId] }),
 }));
+

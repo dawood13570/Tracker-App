@@ -894,3 +894,10 @@ export async function setAbsoluteProgress(taskId: number, targetValue: number): 
     await insertProgressLog({ taskId, amount: delta });
   }
 }
+export async function deleteTaskCascade(id: number): Promise<void> {
+  const children = await getChildTasks(id);
+  for (const child of children) {
+    await deleteTaskCascade(child.id);
+  }
+  await deleteTask(id);
+}

@@ -1,7 +1,7 @@
 // src/app/(tabs)/month.tsx
 import { GoalCard } from '@/components/GoalCard';
 import NewMonthlyTaskModal from '@/components/NewMonthlyTaskModal';
-import { deleteTask, getEffectiveProgress, getMonthlyTasks, getSubtaskCounts, getTasksForDateRange } from '@/db/queries';
+import { deleteTaskCascade, ensureDailyDecompositionForDate, getEffectiveProgress, getMonthlyTasks, getSubtaskCounts, getTasksForDateRange } from '@/db/queries';
 import { useTaskStore } from '@/store/taskStore';
 import { colors } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +18,8 @@ import {
   startOfWeek,
   subMonths,
 } from 'date-fns';
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -47,13 +48,16 @@ export default function MonthScreen() {
 
   const daysGrid = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
-  useEffect(() => {
+  useFocusEffect(
+  useCallback(() => {
     loadMonthData();
-  }, [currentMonth]);
+  }, [currentMonth])
+);
 
   const loadMonthData = async () => {
     setIsLoading(true);
     try {
+      await ensureDailyDecompositionForDate(format(new Date(), 'yyyy-MM-dd'));
       const startStr = format(calendarStart, 'yyyy-MM-dd');
       const endStr = format(calendarEnd, 'yyyy-MM-dd');
       const monthStartStr = format(monthStart, 'yyyy-MM-dd');
@@ -117,7 +121,7 @@ export default function MonthScreen() {
           style: 'destructive',
           onPress: async () => {
             for (const id of selectedIds) {
-              await deleteTask(id);
+              await deleteTaskCascade(id);
             }
             setSelectedIds([]);
             setSelectionMode(false);

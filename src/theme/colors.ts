@@ -23,6 +23,7 @@ export const colors = {
 
   // Accent
   accent: '#3aa8d8',
+  taskAccent: '#22c55e',
   accentPressed: '#2b7fa3',
   habitAccent: '#a855f7', 
   eventAccent: '#f97316',
