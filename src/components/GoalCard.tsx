@@ -4,8 +4,9 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface GoalCardProps {
   task: TaskRow;
-  scopeLabel: 'week' | 'month';
+  scopeLabel: 'week' | 'month' | 'year';
   effectiveProgress?: number;
+  completedOccurrences?: number;
   subtaskCounts?: { completed: number; total: number };
   selectionMode?: boolean;
   isSelected?: boolean;
@@ -13,7 +14,7 @@ interface GoalCardProps {
   onLongPress: () => void;
 }
 
-export function GoalCard({ task, scopeLabel, effectiveProgress = 0, subtaskCounts, selectionMode, isSelected, onPress, onLongPress }: GoalCardProps) {
+export function GoalCard({ task, scopeLabel, effectiveProgress = 0, completedOccurrences = 0, subtaskCounts, selectionMode, isSelected, onPress, onLongPress }: GoalCardProps) {
   const isDone = Boolean(task.isCompleted);
   let metaLine = `${task.priority} priority`;
   let percent = 0;
@@ -25,6 +26,10 @@ export function GoalCard({ task, scopeLabel, effectiveProgress = 0, subtaskCount
   } else if (task.type === 'Hybrid' && subtaskCounts) {
     percent = subtaskCounts.total > 0 ? subtaskCounts.completed / subtaskCounts.total : 0;
     metaLine = `${subtaskCounts.completed}/${subtaskCounts.total} milestones • ${task.priority}`;
+  } else if (task.type === 'Simple' && task.totalProgress) {
+    const target = task.totalProgress;
+    percent = target > 0 ? Math.min(1, completedOccurrences / target) : 0;
+    metaLine = `${completedOccurrences}/${target} times this ${scopeLabel} • ${task.priority}`;
   }
 
   return (
@@ -38,7 +43,7 @@ export function GoalCard({ task, scopeLabel, effectiveProgress = 0, subtaskCount
         <View style={{ flex: 1, marginLeft: selectionMode ? 10 : 0 }}>
           <Text style={[styles.title, isDone && styles.titleDone]}>{isDone ? '✓ ' : '• '}{task.title}</Text>
           <Text style={styles.meta}>{metaLine}</Text>
-          {task.type !== 'Simple' && (
+          {(task.type !== 'Simple' || task.totalProgress) && (
             <View style={styles.barTrack}>
               <View style={[styles.barFill, { width: `${Math.round(percent * 100)}%` }]} />
             </View>

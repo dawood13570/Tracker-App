@@ -1,9 +1,11 @@
+// src/app/(tabs)/today.tsx
 import { AddType } from '@/components/AddTypeSwitcher';
 import { EventCard } from '@/components/EventCard';
 import NewTaskModal from '@/components/new-task';
 import NewActivityModal from '@/components/NewActivityModal';
 import NewEventModal from '@/components/NewEventModal';
 import NewHabitModal from '@/components/NewHabitModal';
+import NoteSheet from '@/components/NoteSheet';
 import ProgressLogSheet from '@/components/ProgressLogSheet';
 import { TagFilterBar } from '@/components/TagFilterBar';
 import { TaskCard } from '@/components/TaskCard';
@@ -12,8 +14,9 @@ import {
   getAllTagAssociations,
   getCurrentProgress,
   getProgressLogsByTask,
-  getSubtaskCounts
+  getSubtaskCounts,
 } from '@/db/queries';
+import { generateDailySeed } from '@/engine/notesSeed';
 import { calculatePace, PaceResult } from '@/engine/pace';
 import { getEffectivePriority, shouldArchiveTask } from '@/engine/priority';
 import { ActivityLogWithDetails, useActivityStore } from '@/store/activityStore';
@@ -24,10 +27,12 @@ import { Task, useTaskStore } from '@/store/taskStore';
 import { useStore } from '@/store/useStore';
 import { runRolloverNow } from '@/tasks/rolloverTask';
 import { colors } from '@/theme/colors';
-import { getLocalDateString } from '@/utils/date';
+import { getAppToday, getLocalDateString, isEligibleToFinalizeDay } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
+import { parseISO } from 'date-fns';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -37,6 +42,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -53,17 +59,54 @@ const PRIORITY_WEIGHT: Record<string, number> = {
 
 type ItemType = 'task' | 'habit' | 'event' | 'activity';
 
-export function DateHeader() {
-  const currentDate = new Date().toLocaleDateString('en-GB', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+function SectionHeader({
+  title,
+  count,
+  isExpanded,
+  onToggle,
+}: {
+  title: string;
+  count: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.sectionHeaderRow} onPress={onToggle} activeOpacity={0.7}>
+      <View style={styles.sectionHeaderLeft}>
+        <View style={styles.sectionHeaderIndicator} />
+        <Text style={styles.sectionHeaderTitle}>{title}</Text>
+        {count > 0 && <Text style={styles.sectionCountText}>({count})</Text>}
+      </View>
+      <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={15} color={colors.textMuted} />
+    </TouchableOpacity>
+  );
+}
+
+export function DateHeader({ dateStr, onOpenNote }: { dateStr: string; onOpenNote: () => void }) {
+  const displayDate = useMemo(() => {
+    try {
+      return parseISO(dateStr).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      return new Date().toLocaleDateString('en-GB', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    }
+  }, [dateStr]);
 
   return (
-    <View>
-      <Text style={styles.dateHeaderText}>{currentDate}</Text>
+    <View style={styles.dateHeaderRow}>
+      <Text style={styles.dateHeaderText}>{displayDate}</Text>
+      <Pressable onPress={onOpenNote} hitSlop={10} style={styles.noteButton}>
+        <Ionicons name="document-text-outline" size={20} color={colors.textSecondary} />
+      </Pressable>
     </View>
   );
 }
@@ -76,6 +119,7 @@ export default function AppDashboard() {
   const eventSheetRef = useRef<BottomSheet>(null);
   const newActivitySheetRef = useRef<BottomSheet>(null);
   const activityDetailSheetRef = useRef<BottomSheet>(null);
+  const noteSheetRef = useRef<BottomSheet>(null);
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [loggingTask, setLoggingTask] = useState<Task | null>(null);
@@ -86,6 +130,19 @@ export default function AppDashboard() {
   const [editingHabit, setEditingHabit] = useState<HabitWithStatus | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<ActivityLogWithDetails | null>(null);
+
+  // Section collapse state
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    events: true,
+    habits: true,
+    activities: true,
+    tasks: true,
+    completedTasks: false,
+  });
+
+  const toggleSection = (key: string) => {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,13 +159,14 @@ export default function AppDashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { tasks, isLoading, loadTasks, toggleTask, removeTask } = useTaskStore();
-  const { evolvingPriorityEnabled, autoArchiveEnabled } = useStore();
+  const { evolvingPriorityEnabled, autoArchiveEnabled, setManualDayOverrideDate } = useStore();
   const { habits, loadHabits, logHabit, removeHabit } = useHabitStore();
   const { events, loadEvents, removeEvent } = useEventStore();
   const { logsByDate, loadActivitiesForDate, removeActivityEntry } = useActivityStore();
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, tagVersion } = useTagStore();
 
-  const todayStr = useMemo(() => getLocalDateString(new Date()), []);
+  const [todayStr, setTodayStr] = useState<string>(() => getAppToday());
+  const canFinalize = useMemo(() => isEligibleToFinalizeDay(), [todayStr]);
   const todaysActivities = logsByDate[todayStr] ?? [];
 
   const handleSwitchAddType = (type: AddType) => {
@@ -133,35 +191,43 @@ export default function AppDashboard() {
     setTagAssociations(map);
   }, []);
 
+  const refreshDashboard = useCallback(async () => {
+    const currentAppDay = getAppToday();
+    setTodayStr(currentAppDay);
+
+    await ensureDailyDecompositionForDate(currentAppDay);
+    await Promise.all([
+      loadTasks(currentAppDay),
+      loadHabits(),
+      loadEvents(),
+      loadActivitiesForDate(currentAppDay),
+      refreshTagMap(),
+    ]);
+  }, [loadTasks, loadHabits, loadEvents, loadActivitiesForDate, refreshTagMap]);
+
   useEffect(() => {
-    const catchUpAndLoad = async () => {
+    const initialLoad = async () => {
       await runRolloverNow();
-      await ensureDailyDecompositionForDate(todayStr);
-      await Promise.all([
-        loadTasks(),
-        loadHabits(),
-        loadEvents(),
-        loadActivitiesForDate(todayStr),
-        loadTags(),
-        loadMostUsedTags(),
-        refreshTagMap(),
-      ]);
+      await refreshDashboard();
+      await Promise.all([loadTags(), loadMostUsedTags()]);
     };
 
-    catchUpAndLoad();
+    initialLoad();
 
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        loadTasks();
-        loadHabits();
-        loadEvents();
-        loadActivitiesForDate(todayStr);
-        refreshTagMap();
+        refreshDashboard();
       }
     });
 
     return () => subscription.remove();
-  }, [loadTags, loadMostUsedTags, loadTasks, loadHabits, loadEvents, loadActivitiesForDate, todayStr, refreshTagMap]);
+  }, [refreshDashboard, loadTags, loadMostUsedTags]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshDashboard();
+    }, [refreshDashboard])
+  );
 
   useEffect(() => {
     refreshTagMap();
@@ -206,6 +272,26 @@ export default function AppDashboard() {
       setSubtaskMap(Object.fromEntries(entries));
     });
   }, [tasks]);
+
+  const handleFinalizeDay = async () => {
+    Alert.alert(
+      'Finalize Day',
+      'Wrap up yesterday and roll over your uncompleted items to today?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Finalize',
+          style: 'default',
+          onPress: async () => {
+            const calendarToday = getLocalDateString(new Date());
+            setManualDayOverrideDate(calendarToday);
+            await runRolloverNow();
+            await refreshDashboard();
+          },
+        },
+      ]
+    );
+  };
 
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
@@ -334,6 +420,13 @@ export default function AppDashboard() {
     return { visibleTasks: list, archivedCount: sortedTasks.length - list.length };
   }, [filteredTasks, sortedTasks, tasks, autoArchiveEnabled, selectedFilterTagIds.length, searchQuery]);
 
+  const { incompleteTasks, completedTasks } = useMemo(() => {
+    return {
+      incompleteTasks: visibleTasks.filter((t) => !t.isCompleted),
+      completedTasks: visibleTasks.filter((t) => t.isCompleted),
+    };
+  }, [visibleTasks]);
+
   const filteredEvents = useMemo(
     () => filterItem(events, tagAssociations.events),
     [events, tagAssociations.events, filterItem]
@@ -442,6 +535,7 @@ export default function AppDashboard() {
       searchQuery,
       selectedFilterTagIds: selectedFilterTagIds.join(','),
       strictTagFilter,
+      expandedSections,
     };
   }, [
     selectionMode,
@@ -456,6 +550,7 @@ export default function AppDashboard() {
     searchQuery,
     selectedFilterTagIds,
     strictTagFilter,
+    expandedSections,
   ]);
 
   return (
@@ -496,7 +591,7 @@ export default function AppDashboard() {
               </View>
             </View>
           ) : (
-            <DateHeader />
+            <DateHeader dateStr={todayStr} onOpenNote={() => noteSheetRef.current?.expand()} />
           )}
         </View>
 
@@ -514,39 +609,32 @@ export default function AppDashboard() {
           {isLoading ? (
             <ActivityIndicator size="large" color="#1c8db9" style={{ marginTop: 40 }} />
           ) : (
-            <>
-              {archivedCount > 0 && selectedFilterTagIds.length === 0 && !searchQuery.trim() && (
-                <View style={styles.archiveBanner}>
-                  <Text style={styles.archiveBannerText}>
-                    {archivedCount} task{archivedCount > 1 ? 's' : ''} archived until an overdue task is done
-                  </Text>
-                </View>
+            <FlashList
+              ref={flashListRef}
+              data={expandedSections.tasks ? incompleteTasks : []}
+              keyExtractor={(item) => `task-${item.id}`}
+              extraData={listExtraData}
+              removeClippedSubviews={false}
+              contentContainerStyle={styles.listContent}
+              renderItem={({ item }) => (
+                <TaskCard
+                  task={item}
+                  onToggle={handleToggleTask}
+                  onProgressChanged={loadTasks}
+                  currentProgress={progressMap[item.id]}
+                  pace={paceMap[item.id]}
+                  subtaskCount={subtaskMap[item.id]}
+                  isExpanded={Boolean(expandedTaskIds[item.id])}
+                  onToggleExpand={() => handleToggleExpand(item.id)}
+                  onSubtasksCountUpdate={handleSubtasksCountUpdate}
+                  selectionMode={selectionMode}
+                  isSelected={selectedIds.has(`task:${item.id}`)}
+                  onLongPressCard={() => handleLongPressItem('task', item.id)}
+                  onToggleSelect={() => handleToggleSelectItem('task', item.id)}
+                />
               )}
-              <FlashList
-                ref={flashListRef}
-                data={visibleTasks}
-                keyExtractor={(item) => `task-${item.id}`}
-                extraData={listExtraData}
-                removeClippedSubviews={false}
-                contentContainerStyle={styles.listContent}
-                renderItem={({ item }) => (
-                  <TaskCard
-                    task={item}
-                    onToggle={handleToggleTask}
-                    onProgressChanged={loadTasks}
-                    currentProgress={progressMap[item.id]}
-                    pace={paceMap[item.id]}
-                    subtaskCount={subtaskMap[item.id]}
-                    isExpanded={Boolean(expandedTaskIds[item.id])}
-                    onToggleExpand={() => handleToggleExpand(item.id)}
-                    onSubtasksCountUpdate={handleSubtasksCountUpdate}
-                    selectionMode={selectionMode}
-                    isSelected={selectedIds.has(`task:${item.id}`)}
-                    onLongPressCard={() => handleLongPressItem('task', item.id)}
-                    onToggleSelect={() => handleToggleSelectItem('task', item.id)}
-                  />
-                )}
-                ListEmptyComponent={
+              ListEmptyComponent={
+                expandedSections.tasks ? (
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyStateText}>
                       {searchQuery.trim() || selectedFilterTagIds.length > 0
@@ -559,51 +647,146 @@ export default function AppDashboard() {
                         : 'Tap + to add task.'}
                     </Text>
                   </View>
-                }
-                ListHeaderComponent={
-                  filteredEvents.length > 0 || filteredHabits.length > 0 || filteredActivities.length > 0 ? (
-                    <View style={{ marginBottom: 8 }} collapsable={false}>
-                      {filteredEvents.map((event) => (
-                        <EventCard
-                          key={`event-${event.id}`}
-                          event={event}
-                          selectionMode={selectionMode}
-                          isSelected={selectedIds.has(`event:${event.id}`)}
-                          onLongPressCard={() => handleLongPressItem('event', event.id)}
-                          onToggleSelect={() => handleToggleSelectItem('event', event.id)}
-                        />
-                      ))}
-                      {filteredHabits.map((habit) => (
-                        <HabitCard
-                          key={`habit-${habit.id}`}
-                          habit={habit}
-                          onLogToday={logHabit}
-                          selectionMode={selectionMode}
-                          isSelected={selectedIds.has(`habit:${habit.id}`)}
-                          onLongPressCard={() => handleLongPressItem('habit', habit.id)}
-                          onToggleSelect={() => handleToggleSelectItem('habit', habit.id)}
-                        />
-                      ))}
-                      {filteredActivities.map((entry) => (
-                        <ActivityCard
-                          key={`activity-${entry.id}`}
-                          entry={entry}
-                          tags={allTags.filter((t) => entry.tagIds.includes(t.id))}
-                          selectionMode={selectionMode}
-                          isSelected={selectedIds.has(`activity:${entry.id}`)}
-                          onPressCard={() => {
-                            setSelectedActivity(entry);
-                            activityDetailSheetRef.current?.expand();
-                          }}
-                          onLongPressCard={() => handleLongPressItem('activity', entry.id)}
-                          onToggleSelect={() => handleToggleSelectItem('activity', entry.id)}
-                        />
-                      ))}
+                ) : null
+              }
+              ListHeaderComponent={
+                <View collapsable={false}>
+                  {canFinalize && (
+                    <TouchableOpacity
+                      style={styles.finalizeBanner}
+                      onPress={handleFinalizeDay}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.finalizeBannerLeft}>
+                        <Ionicons name="moon" size={16} color={colors.accent} />
+                        <Text style={styles.finalizeBannerText}>Still in yesterday? Tap to finalize day.</Text>
+                      </View>
+                      <View style={styles.finalizeActionBtn}>
+                        <Text style={styles.finalizeActionText}>Wrap Up</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+
+                  {filteredEvents.length > 0 && (
+                    <>
+                      <SectionHeader
+                        title="Events"
+                        count={filteredEvents.length}
+                        isExpanded={expandedSections.events}
+                        onToggle={() => toggleSection('events')}
+                      />
+                      {expandedSections.events &&
+                        filteredEvents.map((event) => (
+                          <EventCard
+                            key={`event-${event.id}`}
+                            event={event}
+                            selectionMode={selectionMode}
+                            isSelected={selectedIds.has(`event:${event.id}`)}
+                            onLongPressCard={() => handleLongPressItem('event', event.id)}
+                            onToggleSelect={() => handleToggleSelectItem('event', event.id)}
+                          />
+                        ))}
+                    </>
+                  )}
+
+                  {filteredHabits.length > 0 && (
+                    <>
+                      <SectionHeader
+                        title="Habits"
+                        count={filteredHabits.length}
+                        isExpanded={expandedSections.habits}
+                        onToggle={() => toggleSection('habits')}
+                      />
+                      {expandedSections.habits &&
+                        filteredHabits.map((habit) => (
+                          <HabitCard
+                            key={`habit-${habit.id}`}
+                            habit={habit}
+                            onLogToday={logHabit}
+                            selectionMode={selectionMode}
+                            isSelected={selectedIds.has(`habit:${habit.id}`)}
+                            onLongPressCard={() => handleLongPressItem('habit', habit.id)}
+                            onToggleSelect={() => handleToggleSelectItem('habit', habit.id)}
+                          />
+                        ))}
+                    </>
+                  )}
+
+                  {filteredActivities.length > 0 && (
+                    <>
+                      <SectionHeader
+                        title="Activities"
+                        count={filteredActivities.length}
+                        isExpanded={expandedSections.activities}
+                        onToggle={() => toggleSection('activities')}
+                      />
+                      {expandedSections.activities &&
+                        filteredActivities.map((entry) => (
+                          <ActivityCard
+                            key={`activity-${entry.id}`}
+                            entry={entry}
+                            tags={allTags.filter((t) => entry.tagIds.includes(t.id))}
+                            selectionMode={selectionMode}
+                            isSelected={selectedIds.has(`activity:${entry.id}`)}
+                            onPressCard={() => {
+                              setSelectedActivity(entry);
+                              activityDetailSheetRef.current?.expand();
+                            }}
+                            onLongPressCard={() => handleLongPressItem('activity', entry.id)}
+                            onToggleSelect={() => handleToggleSelectItem('activity', entry.id)}
+                          />
+                        ))}
+                    </>
+                  )}
+
+                  {archivedCount > 0 && selectedFilterTagIds.length === 0 && !searchQuery.trim() && (
+                    <View style={styles.archiveBanner}>
+                      <Text style={styles.archiveBannerText}>
+                        {archivedCount} task{archivedCount > 1 ? 's' : ''} archived until an overdue task is done
+                      </Text>
                     </View>
-                  ) : null
-                }
-              />
-            </>
+                  )}
+
+                  <SectionHeader
+                    title="Tasks"
+                    count={incompleteTasks.length}
+                    isExpanded={expandedSections.tasks}
+                    onToggle={() => toggleSection('tasks')}
+                  />
+                </View>
+              }
+              ListFooterComponent={
+                completedTasks.length > 0 ? (
+                  <View collapsable={false}>
+                    <SectionHeader
+                      title="Completed"
+                      count={completedTasks.length}
+                      isExpanded={expandedSections.completedTasks}
+                      onToggle={() => toggleSection('completedTasks')}
+                    />
+                    {expandedSections.completedTasks &&
+                      completedTasks.map((item) => (
+                        <TaskCard
+                          key={`completed-task-${item.id}`}
+                          task={item}
+                          onToggle={handleToggleTask}
+                          onProgressChanged={loadTasks}
+                          currentProgress={progressMap[item.id]}
+                          pace={paceMap[item.id]}
+                          subtaskCount={subtaskMap[item.id]}
+                          isExpanded={Boolean(expandedTaskIds[item.id])}
+                          onToggleExpand={() => handleToggleExpand(item.id)}
+                          onSubtasksCountUpdate={handleSubtasksCountUpdate}
+                          selectionMode={selectionMode}
+                          isSelected={selectedIds.has(`task:${item.id}`)}
+                          onLongPressCard={() => handleLongPressItem('task', item.id)}
+                          onToggleSelect={() => handleToggleSelectItem('task', item.id)}
+                        />
+                      ))}
+                  </View>
+                ) : null
+              }
+            />
           )}
         </View>
 
@@ -683,6 +866,18 @@ export default function AppDashboard() {
           }}
           onClose={() => setSelectedActivity(null)}
         />
+
+        <NoteSheet
+          sheetRef={noteSheetRef}
+          scope="daily"
+          dateKey={todayStr}
+          periodLabel={parseISO(todayStr).toLocaleDateString('en-GB', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          })}
+          getSeed={() => generateDailySeed(todayStr)}
+        />
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -690,8 +885,23 @@ export default function AppDashboard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  dateHeaderText: { fontSize: 22, color: colors.textPrimary, fontWeight: '800', paddingLeft: 25, paddingTop: 18 },
-  stickyHeader: { backgroundColor: colors.surface, borderBottomWidth: 1, borderColor: colors.border, elevation: 2, paddingBottom: 16 },
+  dateHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 25,
+    paddingRight: 16,
+    paddingTop: 18,
+  },
+  dateHeaderText: { fontSize: 22, color: colors.textPrimary, fontWeight: '800' },
+  noteButton: { padding: 6 },
+  stickyHeader: {
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+    elevation: 2,
+    paddingBottom: 16,
+  },
   selectionBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -705,6 +915,40 @@ const styles = StyleSheet.create({
   iconActionBtn: { padding: 4 },
   actionDisabled: { opacity: 0.35 },
   listContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 90 },
+  finalizeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  finalizeBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  finalizeBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  finalizeActionBtn: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  finalizeActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textOnAccent,
+  },
   buttonStuff: {
     width: 60,
     height: 60,
@@ -721,9 +965,48 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   buttonText: { color: colors.textOnAccent, fontSize: 32, fontWeight: '300', textAlign: 'center', marginTop: -3 },
-  emptyState: { marginTop: 60, alignItems: 'center', paddingHorizontal: 32 },
+  emptyState: { marginTop: 10, alignItems: 'center', paddingHorizontal: 32 },
   emptyStateText: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
   emptyStateSubtext: { fontSize: 14, color: colors.textMuted, marginTop: 6, textAlign: 'center' },
-  archiveBanner: { marginHorizontal: 20, marginBottom: 10, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.dangerBg, borderRadius: 8, borderWidth: 1, borderColor: colors.dangerBorder },
+  archiveBanner: {
+    marginBottom: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: colors.dangerBg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
   archiveBannerText: { fontSize: 12, color: colors.danger, textAlign: 'center' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionHeaderIndicator: {
+    width: 3,
+    height: 12,
+    backgroundColor: colors.accent,
+    borderRadius: 1.5,
+  },
+  sectionHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  sectionCountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
 });

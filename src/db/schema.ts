@@ -14,6 +14,8 @@ export const tasks = sqliteTable('tasks', {
   scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly'] }).default('daily').notNull(),
   sourceTaskId: integer('source_task_id'),
 
+  projectId: integer('project_id').references((): any => projects.id, { onDelete: 'set null' }),
+
   // Progression fields
   currentProgress: integer('current_progress').default(0),
   totalProgress: integer('total_progress').default(0),
@@ -33,6 +35,8 @@ export const tasks = sqliteTable('tasks', {
   // Gamification / Tracking fields
   procrastinationCount: integer('procrastination_count').default(0),
   rolloverEnabled: integer('rollover_enabled', { mode: 'boolean' }).notNull().default(true),
+
+  maxGapDays: integer('max_gaps_days'),
 
   surplusMode: text('surplus_mode', { enum: ['breathing_room', 'raise_bar', 'bank_it', 'none'] }),
   bufferDays: integer('buffer_days').default(0),
@@ -83,8 +87,9 @@ export const events = sqliteTable('events', {
 
 export const notes = sqliteTable('notes', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly'] }).notNull(),
+  scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly', 'custom'] }).notNull(),
   dateKey: text('date_key').notNull(),
+  title: text('title'),
   content: text('content'),
   createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text('updated_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
@@ -145,3 +150,12 @@ export const activityLogTags = sqliteTable('activity_log_tags', {
   pk: primaryKey({ columns: [table.logId, table.tagId] }),
 }));
 
+// schema.ts — new table
+export const projects = sqliteTable('projects', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  status: text('status', { enum: ['plan_to_do', 'active', 'on_hold', 'dropped', 'completed'] }).notNull().default('plan_to_do'),
+  description: text('description'), // free-form — the "details" you write
+  createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text('updated_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});

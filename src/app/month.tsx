@@ -1,9 +1,21 @@
 // src/app/(tabs)/month.tsx
 import { GoalCard } from '@/components/GoalCard';
 import NewMonthlyTaskModal from '@/components/NewMonthlyTaskModal';
-import { deleteTaskCascade, ensureDailyDecompositionForDate, getEffectiveProgress, getMonthlyTasks, getSubtaskCounts, getTasksForDateRange } from '@/db/queries';
+import NoteSheet from '@/components/NoteSheet';
+import {
+  deleteTaskCascade,
+  ensureDailyDecompositionForDate,
+  getCompletedOccurrenceCount,
+  getEffectiveProgress,
+  getMonthlyTasks,
+  getSubtaskCounts,
+  getTasksForDateRange,
+  TaskRow,
+} from '@/db/queries';
+import { generatePeriodSeed } from '@/engine/notesSeed';
 import { useTaskStore } from '@/store/taskStore';
 import { colors } from '@/theme/colors';
+import { isPeriodEligibleForReflection } from '@/utils/reflections';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import {
@@ -14,32 +26,37 @@ import {
   format,
   isSameDay,
   isSameMonth,
+  parseISO,
   startOfMonth,
   startOfWeek,
   subMonths,
 } from 'date-fns';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function MonthScreen() {
   const insets = useSafeAreaInsets();
   const { setSelectedDate, loadTasks } = useTaskStore();
   const monthlyModalRef = useRef<BottomSheet>(null);
+  const noteSheetRef = useRef<BottomSheet>(null);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [monthData, setMonthData] = useState<Record<string, { total: number; completed: number }>>({});
   const [monthlyTasks, setMonthlyTasks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDayStr, setSelectedDayStr] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
-  
+  const [daySummary, setDaySummary] = useState<TaskRow[]>([]);
+
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectedTaskToEdit, setSelectedTaskToEdit] = useState<any | null>(null);
 
   const [goalProgress, setGoalProgress] = useState<Record<number, number>>({});
   const [goalSubtasks, setGoalSubtasks] = useState<Record<number, { completed: number; total: number }>>({});
+  const [goalOccurrences, setGoalOccurrences] = useState<Record<number, number>>({});
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -48,20 +65,18 @@ export default function MonthScreen() {
 
   const daysGrid = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
-  useFocusEffect(
-  useCallback(() => {
-    loadMonthData();
-  }, [currentMonth])
-);
+  // Only allow end-of-month reflections if today is on or past the month end date
+  const isMonthEligible = useMemo(() => isPeriodEligibleForReflection(monthEnd), [monthEnd]);
 
-  const loadMonthData = async () => {
+  const monthStartStr = useMemo(() => format(monthStart, 'yyyy-MM-dd'), [monthStart]);
+  const monthEndStr = useMemo(() => format(monthEnd, 'yyyy-MM-dd'), [monthEnd]);
+
+  const loadMonthData = useCallback(async () => {
     setIsLoading(true);
     try {
       await ensureDailyDecompositionForDate(format(new Date(), 'yyyy-MM-dd'));
       const startStr = format(calendarStart, 'yyyy-MM-dd');
       const endStr = format(calendarEnd, 'yyyy-MM-dd');
-      const monthStartStr = format(monthStart, 'yyyy-MM-dd');
-      const monthEndStr = format(monthEnd, 'yyyy-MM-dd');
 
       const [tasksInRange, mTasks] = await Promise.all([
         getTasksForDateRange(startStr, endStr),
@@ -80,21 +95,35 @@ export default function MonthScreen() {
 
       const progressionGoals = mTasks.filter((t) => t.type === 'Progression');
       const hybridGoals = mTasks.filter((t) => t.type === 'Hybrid');
-      const [progressEntries, subtaskEntries] = await Promise.all([
+      const countGoals = mTasks.filter((t) => t.type === 'Simple' && t.totalProgress);
+
+      const [progressEntries, subtaskEntries, countEntries] = await Promise.all([
         Promise.all(progressionGoals.map(async (t) => [t.id, await getEffectiveProgress(t.id)] as const)),
         Promise.all(hybridGoals.map(async (t) => [t.id, await getSubtaskCounts(t.id)] as const)),
+        Promise.all(countGoals.map(async (t) => [t.id, await getCompletedOccurrenceCount(t.id)] as const)),
       ]);
+
       setGoalProgress(Object.fromEntries(progressEntries));
       setGoalSubtasks(Object.fromEntries(subtaskEntries));
+      setGoalOccurrences(Object.fromEntries(countEntries));
     } catch (error) {
       console.error('Failed to load month data:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [calendarStart, calendarEnd, monthStartStr, monthEndStr]);
 
-  const handleDayPress = (day: Date) => {
-    setSelectedDayStr(format(day, 'yyyy-MM-dd'));
+  useFocusEffect(
+    useCallback(() => {
+      loadMonthData();
+    }, [loadMonthData])
+  );
+
+  const handleDayPress = async (day: Date) => {
+    const dayStr = format(day, 'yyyy-MM-dd');
+    setSelectedDayStr(dayStr);
+    const dayTasks = await getTasksForDateRange(dayStr, dayStr);
+    setDaySummary(dayTasks);
   };
 
   const toggleSelectTask = (id: number) => {
@@ -138,7 +167,7 @@ export default function MonthScreen() {
   };
 
   const handleSelectAllMonthly = () => {
-  setSelectedIds(monthlyTasks.map((t) => t.id));
+    setSelectedIds(monthlyTasks.map((t) => t.id));
   };
 
   const handleEditSingleSelected = () => {
@@ -155,138 +184,177 @@ export default function MonthScreen() {
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
 
   return (
-    <View style={styles.outerContainer}>
-      {selectionMode && (
-      <View style={[styles.selectionHeader, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={exitSelectionMode} hitSlop={10}>
-          <Ionicons name="close" size={22} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <Text style={styles.selectionCountText}>{selectedIds.length} selected</Text>
-        <View style={{ flexDirection: 'row', gap: 16 }}>
-          <TouchableOpacity onPress={handleSelectAllMonthly} hitSlop={8}>
-            <Ionicons name="checkbox-outline" size={20} color={colors.accent} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleEditSingleSelected} disabled={selectedIds.length !== 1} hitSlop={8}>
-            <Ionicons name="pencil-outline" size={20} color={selectedIds.length === 1 ? colors.accent : colors.textMuted} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleBatchDelete} disabled={selectedIds.length === 0} hitSlop={8}>
-            <Ionicons name="trash-outline" size={20} color={colors.danger ?? '#ef4444'} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    )}
-      <ScrollView 
-        style={[styles.container, { paddingTop: selectionMode ? 8 : insets.top }]} 
-        contentContainerStyle={styles.contentContainer}
-      >
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={prevMonth} style={styles.navButton}>
-            <Text style={styles.navButtonText}>◀</Text>
-          </TouchableOpacity>
-          <Text style={styles.monthTitle}>{format(currentMonth, 'MMMM yyyy')}</Text>
-          <TouchableOpacity onPress={nextMonth} style={styles.navButton}>
-            <Text style={styles.navButtonText}>▶</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.weekHeaderRow}>
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
-            <Text key={d} style={styles.weekHeaderText}>{d}</Text>
-          ))}
-        </View>
-
-        <View style={styles.gridContainer}>
-          {daysGrid.map((day, index) => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const stats = monthData[dayStr];
-            const isCurrentMonth = isSameMonth(day, currentMonth);
-            const isSelected = dayStr === selectedDayStr;
-            const isToday = isSameDay(day, new Date());
-
-            let dotColor = 'transparent';
-            if (stats && stats.total > 0) {
-              if (stats.completed === stats.total) {
-                dotColor = colors.success;
-              } else if (stats.completed > 0) {
-                dotColor = colors.priorityMediumBorder;
-              } else {
-                dotColor = colors.priorityHighBorder;
-              }
-            }
-
-            return (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.dayCell,
-                  !isCurrentMonth && styles.outsideMonthCell,
-                  isSelected && styles.selectedDayCell,
-                  isToday && styles.todayCell,
-                ]}
-                onPress={() => handleDayPress(day)}
-              >
-                <Text style={[styles.dayText, !isCurrentMonth && styles.outsideMonthText]}>
-                  {format(day, 'd')}
-                </Text>
-                <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.outerContainer}>
+        {selectionMode && (
+          <View style={[styles.selectionHeader, { paddingTop: insets.top + 8 }]}>
+            <TouchableOpacity onPress={exitSelectionMode} hitSlop={10}>
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <Text style={styles.selectionCountText}>{selectedIds.length} selected</Text>
+            <View style={{ flexDirection: 'row', gap: 16 }}>
+              <TouchableOpacity onPress={handleSelectAllMonthly} hitSlop={8}>
+                <Ionicons name="checkbox-outline" size={20} color={colors.accent} />
               </TouchableOpacity>
-            );
-          })}
-        </View>
+              <TouchableOpacity onPress={handleEditSingleSelected} disabled={selectedIds.length !== 1} hitSlop={8}>
+                <Ionicons
+                  name="pencil-outline"
+                  size={20}
+                  color={selectedIds.length === 1 ? colors.accent : colors.textMuted}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleBatchDelete} disabled={selectedIds.length === 0} hitSlop={8}>
+                <Ionicons name="trash-outline" size={20} color={colors.danger ?? '#ef4444'} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
-        <View style={styles.summaryContainer}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.summaryHeader}>Monthly Goals & Tasks</Text>
-            <TouchableOpacity 
-              style={styles.addButton} 
-              onPress={() => {
-                setSelectedTaskToEdit(null);
-                monthlyModalRef.current?.expand();
-              }}
-            >
-              <Text style={styles.addButtonText}>+ Add Monthly</Text>
+        <ScrollView
+          style={[styles.container, { paddingTop: selectionMode ? 8 : insets.top }]}
+          contentContainerStyle={styles.contentContainer}
+        >
+          <View style={styles.headerRow}>
+            <TouchableOpacity onPress={prevMonth} style={styles.navButton}>
+              <Text style={styles.navButtonText}>◀</Text>
+            </TouchableOpacity>
+
+            <View style={styles.headerCenter}>
+              <Text style={styles.monthTitle}>{format(currentMonth, 'MMMM yyyy')}</Text>
+              {isMonthEligible && (
+                <TouchableOpacity
+                  onPress={() => noteSheetRef.current?.expand()}
+                  hitSlop={10}
+                  style={styles.reflectionBtn}
+                >
+                  <Ionicons name="document-text-outline" size={20} color={colors.accent} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <TouchableOpacity onPress={nextMonth} style={styles.navButton}>
+              <Text style={styles.navButtonText}>▶</Text>
             </TouchableOpacity>
           </View>
 
-          {monthlyTasks.length === 0 ? (
-            <Text style={styles.emptySummary}>No monthly-scope tasks set for this month.</Text>
-          ) : (
-            monthlyTasks.map((task) => (
-              <GoalCard
-                key={task.id}
-                task={task}
-                scopeLabel="month"
-                effectiveProgress={goalProgress[task.id]}
-                subtaskCounts={goalSubtasks[task.id]}
-                selectionMode={selectionMode}
-                isSelected={selectedIds.includes(task.id)}
-                onPress={() => {
-                  if (selectionMode) {
-                    toggleSelectTask(task.id);
-                  } else {
-                    setSelectedTaskToEdit(task);
-                    monthlyModalRef.current?.expand();
-                  }
-                }}
-                onLongPress={() => handleLongPressTask(task)}
-              />
-            ))
-          )}
-        </View>
-      </ScrollView>
+          <View style={styles.weekHeaderRow}>
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+              <Text key={d} style={styles.weekHeaderText}>{d}</Text>
+            ))}
+          </View>
 
-      <NewMonthlyTaskModal
-        sheetRef={monthlyModalRef}
-        monthStartDate={format(monthStart, 'yyyy-MM-dd')}
-        monthEndDate={format(monthEnd, 'yyyy-MM-dd')}
-        editTask={selectedTaskToEdit}
-        onTaskCreated={loadMonthData}
-        onClose={() => setSelectedTaskToEdit(null)}
-      />
-    </View>
-    
+          <View style={styles.gridContainer}>
+            {daysGrid.map((day, index) => {
+              const dayStr = format(day, 'yyyy-MM-dd');
+              const stats = monthData[dayStr];
+              const isCurrentMonth = isSameMonth(day, currentMonth);
+              const isSelected = dayStr === selectedDayStr;
+              const isToday = isSameDay(day, new Date());
+
+              let dotColor = 'transparent';
+              if (stats && stats.total > 0) {
+                if (stats.completed === stats.total) {
+                  dotColor = colors.success;
+                } else if (stats.completed > 0) {
+                  dotColor = colors.priorityMediumBorder;
+                } else {
+                  dotColor = colors.priorityHighBorder;
+                }
+              }
+
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.dayCell,
+                    !isCurrentMonth && styles.outsideMonthCell,
+                    isSelected && styles.selectedDayCell,
+                    isToday && styles.todayCell,
+                  ]}
+                  onPress={() => handleDayPress(day)}
+                >
+                  <Text style={[styles.dayText, !isCurrentMonth && styles.outsideMonthText]}>
+                    {format(day, 'd')}
+                  </Text>
+                  <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.summaryContainer}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.summaryHeader}>Monthly Goals & Tasks</Text>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => {
+                  setSelectedTaskToEdit(null);
+                  monthlyModalRef.current?.expand();
+                }}
+              >
+                <Text style={styles.addButtonText}>+ Add Monthly</Text>
+              </TouchableOpacity>
+            </View>
+
+            {monthlyTasks.length === 0 ? (
+              <Text style={styles.emptySummary}>No monthly-scope tasks set for this month.</Text>
+            ) : (
+              monthlyTasks.map((task) => (
+                <GoalCard
+                  key={task.id}
+                  task={task}
+                  scopeLabel="month"
+                  effectiveProgress={goalProgress[task.id]}
+                  completedOccurrences={goalOccurrences[task.id]}
+                  subtaskCounts={goalSubtasks[task.id]}
+                  selectionMode={selectionMode}
+                  isSelected={selectedIds.includes(task.id)}
+                  onPress={() => {
+                    if (selectionMode) {
+                      toggleSelectTask(task.id);
+                    }
+                  }}
+                  onLongPress={() => handleLongPressTask(task)}
+                />
+              ))
+            )}
+          </View>
+
+          <View style={styles.summaryContainer}>
+            <Text style={styles.summaryHeader}>{format(parseISO(selectedDayStr), 'EEEE, MMM d')}</Text>
+            {daySummary.length === 0 ? (
+              <Text style={styles.emptySummary}>Nothing scheduled.</Text>
+            ) : (
+              daySummary.map((task) => (
+                <View key={task.id} style={styles.summaryCard}>
+                  <Text style={[styles.summaryTaskTitle, task.isCompleted && styles.completedTaskTitle]}>
+                    {task.isCompleted ? '✓ ' : '• '}{task.title}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+        </ScrollView>
+
+        <NewMonthlyTaskModal
+          sheetRef={monthlyModalRef}
+          monthStartDate={monthStartStr}
+          monthEndDate={monthEndStr}
+          editTask={selectedTaskToEdit}
+          onTaskCreated={loadMonthData}
+          onClose={() => setSelectedTaskToEdit(null)}
+        />
+
+        <NoteSheet
+          sheetRef={noteSheetRef}
+          scope="monthly"
+          dateKey={monthStartStr}
+          periodLabel={format(currentMonth, 'MMMM yyyy')}
+          getSeed={() => generatePeriodSeed('monthly', monthStartStr, monthEndStr)}
+        />
+      </View>
+    </GestureHandlerRootView>
   );
-  
 }
 
 const styles = StyleSheet.create({
@@ -299,6 +367,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
     paddingHorizontal: 8,
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  reflectionBtn: {
+    padding: 4,
   },
   monthTitle: { fontSize: 20, fontWeight: '700', color: colors.textPrimary },
   navButton: { padding: 10, backgroundColor: colors.surface, borderRadius: 8 },
@@ -364,7 +440,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  selectionCancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
   selectionCountText: { color: colors.textPrimary, fontSize: 15, fontWeight: '700' },
-  selectionDeleteText: { color: colors.danger ?? '#ef4444', fontSize: 14, fontWeight: '700' },
+  summaryCard: {
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
+  },
+  summaryTaskTitle: {
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  completedTaskTitle: {
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
+  },
 });

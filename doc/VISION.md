@@ -6,9 +6,11 @@
 
 ## What This App Is
 
-A personal productivity OS that lives on your phone. It combines a to-do list, a goal tracker, a journal, and a calendar into one system that thinks ahead for you — auto-managing your day based on what you've committed to, how you're progressing, and what you've been putting off.
+A personal productivity OS that lives on your phone. It combines a to-do list, a goal tracker, and a calendar into one system that thinks ahead for you — auto-managing your day based on what you've committed to, how you're progressing, and what you've been putting off.
 
 The core philosophy: **the app does the logistics, you do the living.**
+
+**Scope discipline (added this cycle):** this is a productivity / second-brain / muhasabah tool, not an all-purpose app. Notes and Pursuits both earned their place because they're accountability/logging mechanisms in service of that goal, not because they added surface area. Future feature ideas get evaluated against this bar before being added — "is this within arm's reach of tracking something over time and staying honest about it" — not "is this a neat thing an app could do."
 
 ---
 
@@ -26,6 +28,7 @@ Eventually: public, cross-platform (iOS, desktop), multi-user with accounts.
 - No measurable progress.
 - Examples: "Reply to email", "Buy groceries", "Call the dentist"
 - Can still have priority, recurrence, and rollover enabled.
+- **Extended this cycle:** a Simple task can also carry a count-based recurrence target at Week/Month/Year scope ("do X 8 times this month") — see Goal Decomposition Engine below. This is still a binary-completion task; the count lives on the parent goal, not on the individual occurrence.
 
 ### Progression Task
 - Has a numeric target and a unit (pages, km, minutes, sessions, words).
@@ -33,84 +36,74 @@ Eventually: public, cross-platform (iOS, desktop), multi-user with accounts.
 - App tracks pace and tells you if you're on track, behind, or ahead.
 - Has a deadline (daily, weekly, monthly, yearly, or custom date).
 - Examples: "Read 300 pages by end of month", "Run 50km this week"
+- **Critical scoping rule, established this cycle:** Progression's pace/behind/ahead/surplus math makes an honest promise only when the unit itself is uniform effort — a page, a km, a minute. It should NOT be used for goals whose "unit" secretly varies in size or difficulty (see "Progression vs Hybrid: choosing the right tool" below). Misusing Progression for uneven units doesn't just give bad pace numbers — it can create a false sense of "on track" right before a disproportionately hard chunk of work.
 
 ### Hybrid Task
 - Has sub-tasks (checklist style).
-- Each sub-task is a Simple Task internally.
+- Each sub-task is a Simple Task internally (real `parent_id`-linked rows, not just a count).
 - Completing all sub-tasks auto-completes the parent.
 - Progress on parent is shown as X/Y sub-tasks done.
 - Examples: "Finish Chapter 3" (scenes as sub-tasks), "Prepare presentation" (slides as sub-tasks)
+- **This is the correct tool for uneven-effort multi-part goals** — e.g. "read 5 chapters" where chapters vary wildly in length/difficulty should be 5 titled Hybrid milestones, not a Progression task with `total: 5`. See below.
+- **Not yet built, designed only:** sequential vs non-sequential milestone ordering, with sequential Hybrid goals at Week/Month/Year scope surfacing only their current milestone as a real daily task (see Roadmap 13.1).
+
+### Progression vs Hybrid: choosing the right tool
+*Added this cycle, after real friction hit while planning a history-study goal.*
+
+The dividing line isn't "does effort vary day to day" (it always does — that's what pace tracking is *for*, noticing you slipped). The dividing line is: **do you know, before starting, that the unit itself carries unequal weight?** If "chapter 9" is knowably 5x the work of "chapter 2," the unit was never honest as a linear measure, no matter how countable it looks.
+
+Worked examples (kept here as reference, not to be re-litigated every time a new goal is planned):
+- "Run 10km this week" / "Practice guitar 30 min daily" / "Read 300 pages of one evenly-typeset book this month" → **Progression.** Unit really is close to uniform.
+- "Read 5 chapters" (uneven lengths) / "Map Berke Khan's reign" (5 genuinely distinct, unevenly-sized sub-topics) → **Hybrid**, ideally sequential once that's built.
+- "Save $2000 this month" → **Progression**, even though daily income/spending is lumpy — because the metric itself (dollars in the account) is what's actually being tracked, and a dollar is worth exactly a dollar regardless of which day it arrived. Don't over-correct into Hybrid just because daily effort is uneven; the question is whether the *unit* is uneven.
+- "Finish this 12-chapter textbook" where chapter count is uniform but *cognitive load* isn't (intro fluff vs. hard proofs) → acknowledged as a case **no unit system fully solves**. Not a task-modeling gap to chase with more schema — a real limit of what "progress" as a concept can measure. Hybrid's binary "did the work session happen" is the honest ceiling here; the app doesn't claim to measure comprehension.
+- "Ship v2" (backend/UI/testing, wildly unequal share of real work) → the one case where flat Hybrid genuinely undersells reality (checking off "testing" jumps the bar the same as checking off "backend"). This is the only scenario that would justify **weighted subtasks** (each subtask carrying its own progress fraction, parent computed as a weighted sum) — deferred, not built; see the old "Hybrid subtasks with mixed types" parking-lot entry below, which this supersedes as the concrete trigger case.
+
+**A cheap, not-yet-built idea that would make this app noticeably smarter without new engine work:** at task creation, flag likely-uneven units (a small denylist like "chapters"/"milestones"/"sections", or a low target count paired with a plural noun-ish unit) and nudge toward Hybrid instead of silently accepting a Progression goal that's likely to lie to you later. Not built. Cheap when it happens — a string-match heuristic, not a schema change.
 
 ---
 
 ## Other Entity Types
-*Added: 2026-07-18 — these are separate entities, not Task variants.*
 
 Tasks are procrastination-tracked and rollover-aware. Habits and Events don't behave that way, so they get their own tables instead of being forced into the Task shape.
 
 ### Habit
 - Cadence-based, not deadline-based: "do X daily" or "do X N times a week."
-- Tracked by **streak**, not `procrastination_count` — habits reward consistency,
-  they don't punish delay the way tasks do.
+- Tracked by **streak**, not `procrastination_count` — habits reward consistency, they don't punish delay the way tasks do.
 - Own `habit_logs` table: one row per completion (date, habit_id).
 - Missing a day breaks the streak. It doesn't roll forward like a task does.
 - Examples: "Read Quran", "Journal before bed", "No sugar"
+- **Display rule, established this cycle:** a habit's "done today" state is only meaningful projected onto the *current* app-day. Views that let you browse other dates (Horizon's day-focus panel) intentionally do not show Habits for past/future days — showing one there would misrepresent what a habit even is.
 
 ### Event
 - Point-in-time, not a to-do. Has a start time (and optional end time).
-- No completion state, no rollover, no procrastination count — it either happened
-  or it's scheduled.
+- No completion state, no rollover, no procrastination count — it either happened or it's scheduled.
 - Examples: "Meeting with Ali at 3pm", "Dentist appointment"
 
 ### Note
 - One entity, multiple scopes: `daily | weekly | monthly | yearly`.
-- Replaces the old "Journal" idea in Views — same freetext + auto-seeded-summary
-  pattern, just at different cadences.
-- Daily: seeded with the day's task/habit summary. Weekly/monthly/yearly: seeded
-  with rollups (completion rate, streaks, procrastination trends).
-- This is where the muhasabah framing lives — a reflection prompt at each cadence
-  boundary, not just a log.
+- Auto-seeded-summary + free-text reflection pattern; this is where the muhasabah framing lives.
+- **Built, then rebuilt by hand:** the original sketch (`NoteSheet`/`generateDailySeed`/`generatePeriodSeed`) shipped and works; the user subsequently reimplemented their own improved version. Current Note implementation is user-authored and considered the source of truth going forward — don't re-derive from the original sketch described in earlier roadmap entries.
 
 ### Activity
-*Added: 2026-07-18, decided: 2026-07-18 (Option A — new entity, not a Habit variant)*
-- No fixed schedule, no cadence target, no streak. Just a name and a log of
-  dates/notes each time it's touched.
-- Purpose: "when did I last do X, and what happened that time" — Python
-  practice, drawing, reading an Arabic book, expanding story lore.
+- No fixed schedule, no cadence target, no streak. Just a name and a log of dates/notes each time it's touched.
+- Purpose: "when did I last do X, and what happened that time."
 - Own `activity_logs` table: one row per touch (date, activity_id, note?).
-- Different from Habit specifically because Habit implies a target cadence
-  (3x/week) and a streak; Activity has neither — it's pure recall, no
-  pressure, no target.
+- **Two legitimate display modes, both now built:** (1) calendar-scoped — shown on whatever day it was actually logged, inside Horizon's day-focus panel, same as the original Week view always did; (2) retrospective search — a standalone, calendar-independent search box ("when did I last use shampoo") that queries across all history regardless of what week/month/year is currently in view. These aren't in tension — an Activity genuinely has both a "this happened on date X" fact and an "I want to find it later, whenever" use case, and both are honest.
 
-**Worked example (2026-07-21):** gym tracking. "Push Day" (chest/tricep/
-shoulder) is a plain recurring **Task** — Mon/Thu, no subtasks. Each exercise
-(Bench, Incline DB Press, Shoulder Press) is its own **Activity**, logged
-whenever it's actually done, independent of which day it falls on — same
-weight/rep-history need as the original notes-folder example that motivated
-Activity in the first place. **Tags** (`push`/`pull`/`legs`) group Activities
-by workout type without hardcoding that grouping into the Task. This resolved
-a real dead end: building mixed-type Hybrid subtasks (checkbox + progression
-items inside one task) to solve this same problem — Task + Activity + Tags is
-simpler and needs no schema beyond what's already speced for Milestone 5.
-
-*Status: Not yet built. Schema sketch planned alongside Milestone 5 (Habits, Events, Tags).*
+### Pursuit
+*Added this cycle. Domain-agnostic — gym routines, study topics, creative projects, anything with a self-declared status, not history-study-specific.*
+- Modeled deliberately like a MyAnimeList entry, not a project-management rollup: a title, a **user-declared status** (Plan to Do / Active / On Hold / Dropped / Completed), and free-form notes the user writes themselves.
+- **No computed completion percentage, on purpose.** Status is never derived from linked tasks — a Pursuit can be "Completed" with unfinished linked tasks (you just decided you're done, same as marking an anime "Dropped" at episode 8/24), or "Plan to Do" with zero tasks yet, existing purely as a logged intention.
+- Tasks link to a Pursuit via a nullable `pursuitId` (membership, not ownership) — deleting a Pursuit never deletes or affects its linked tasks; it only clears the link. This is the opposite cascade direction from `sourceTaskId` (decomposition) or `parentId` (Hybrid subtasks), both of which do cascade-delete, because those relationships really are ownership.
+- Naming note: initially discussed as "Project," renamed to avoid colliding with what "Goal" already means in this app (Progression) and to read naturally across non-study domains.
 
 ---
 
 ## Tags
-*Added: 2026-07-18*
-
-- User-defined, freeform (e.g. "Deen", "Creativity", "Study", "Career") — not a
-  fixed list. The user creates their own tags as they go.
+- User-defined, freeform (e.g. "Deen", "Creativity", "Study", "Career") — not a fixed list.
 - Many-to-many: one Task can carry multiple tags, one tag applies to many tasks.
-- **Primary use case is Tasks.** Habits and Events could carry tags too via the
-  same join-table pattern, but that's not an MVP priority — build it for Tasks
-  first, extend later if it's actually needed.
-- Needs a `tags` table (id, name, color?) and a `task_tags` join table
-  (task_id, tag_id).
-
-*Status: Not yet built. Schema sketch planned in Milestone 2 (2.1.7), full
-implementation in Milestone 5.*
+- Primary use case is Tasks; Habits/Events could extend to tags via the same join-table pattern if ever needed, not currently a priority.
 
 ---
 
@@ -119,151 +112,66 @@ implementation in Milestone 5.*
 ### Procrastination Counter
 - Every task has a `procrastination_count` starting at 0.
 - Each time the midnight engine moves an incomplete task to the next day, count goes up by 1.
-- Displayed as a badge on the task card (e.g. "+3 days").
-- Only resets when the task is marked done.
-- Manual reschedule by the user does NOT reset the counter — only completion does.
-- Skipped tasks freeze their count in history; they don't keep climbing.
+- Displayed as a badge on the task card.
+- Only resets when the task is marked done. Manual reschedule does NOT reset it.
 
 ### Rollover System
 - Each task has a toggle: "Move to next day if not completed."
-- At midnight, the engine checks all of yesterday's incomplete tasks.
-- High priority + rollover enabled → moves to today, count +1.
-- Normal priority + rollover enabled → moves to today, count +1.
-- Low priority OR rollover disabled → marked as skipped, stays in history.
-- Rule: history is never rewritten. Completed/skipped entries stay as-is.
+- Eligibility depends only on `rolloverEnabled`, never priority (see Decisions Log).
+- **Day boundary, added this cycle:** rollover's notion of "today" respects the user-configurable `dayBoundaryHour` (default 3am) rather than the raw calendar midnight — a task worked on at 1am isn't prematurely treated as "yesterday's" and locked from completion. See Account settings.
 
 ### Recurrence
-- When a recurring task is marked done, the engine creates a NEW task entry for the next
-  occurrence. The completed one stays in history untouched.
+- When a recurring task is marked done, the engine creates a NEW task entry for the next occurrence. The completed one stays in history untouched.
 - Recurrence types: daily, every N days, specific weekdays, weekly.
-- Recurring tasks with rollover: if missed, they carry forward AND still regenerate
-  for the next scheduled occurrence (so you don't lose the cycle).
+- **Fixed this cycle — two real bugs:**
+  1. A `nextOccurrenceGenerated` sticky flag now prevents done→undone→done from spawning duplicate "next day" instances (previously, re-toggling the same completed task fired the side effect every time).
+  2. A recurring task's deadline now shifts by the same offset as its schedule on each regeneration, instead of staying frozen at its original absolute date (which previously made a "due tomorrow" recurring task permanently due on one fixed calendar date, eventually making generation impossible once that date passed).
 
 ---
 
 ## Progression Task Intelligence
 
 ### Pace Tracking
-The engine computes daily:
-- **Target rate**: `remaining_target / remaining_days`
-- **Actual rate**: rolling average from recent `progress_logs`
-- **Status**: one of → On Track / Slightly Behind / Behind / Critical / Ahead
+Computes daily: **target rate** (`remaining / days_remaining`), **actual rate** (rolling average), **status** (On Track / Slightly Behind / Behind / Critical / Ahead).
 
-Displayed on task card in plain language:
-> "Need 8 pages/day · You're averaging 5 · 3 days behind pace"
+### Above-Average Progress Modes (Surplus)
+Three modes: Breathing Room (lower tomorrow's target, capped at 50% reduction), Bank It (buffer days), Raise the Bar (explicit-confirm target increase). Thresholds: 130% triggers detection, 200%×3-consecutive-days triggers the Raise-the-Bar suggestion.
 
----
+- **Known regression, not yet fixed (tracked in Roadmap 10.2.7):** surplus detection lives in `ProgressLogSheet` (`getSurplusChoices`), but the everyday interaction — the `ProgressionSlider`'s Confirm button — now writes progress via a separate path (`setAbsoluteProgress`) that never calls surplus detection. In practice, surplus mode is currently dormant for normal day-to-day slider use. Needs the two write paths unified into one function before this can be considered working again.
+- **Design direction, agreed but not yet built:** move surplus mode from an upfront per-task setup toggle to a live, contextual, dismissible nudge that only appears once a real threshold actually fires ("You've beaten pace 3 days running — bank the extra, or raise the goal to 380?"), rather than asking the user to predict at creation time whether they'll want this weeks later. `surplusMode`/`bufferDays` schema stays as-is; only the UI trigger point moves.
 
-### IDEA: Above-Average Progress Modes [v1.1 candidate]
-*Added: 2026-07-07*
-
-When a user logs significantly more progress than their required daily rate,
-the app currently does nothing special. Proposal: let the user choose a
-"surplus behaviour" per task from three options:
-
-**Mode A — Breathing Room (default)**
-Surplus progress reduces tomorrow's required amount.
-Example: Need 10 pages/day. Log 18 today. Tomorrow the requirement drops to ~2.
-Feel: the app rewards hustle with rest.
-Risk: user may exploit it to avoid the task entirely the next day.
-Mitigation: cap the reduction at 50% of the original daily target.
-
-**Mode B — Raise the Bar**
-Surplus progress causes the app to increase the total target proportionally,
-assuming the user is clearly capable of more than originally planned.
-Example: Need 10 pages/day, log 18 consistently → app suggests raising goal to 400 pages.
-Requires explicit user confirmation before changing target — never auto-changes.
-Feel: the app grows with you.
-
-**Mode C — Bank It (buffer days)**
-Surplus is saved as "banked days." Instead of changing daily requirements,
-it shows: "You have 2 days of buffer." If you miss a day, a buffer day is consumed
-before the procrastination counter starts.
-Feel: like saving up vacation days.
-
-**User control:**
-- Set per task at creation or edit time.
-- Default is Mode A (Breathing Room) but can be changed in app settings globally.
-- A fourth option: "None — just track, don't adjust anything."
-
-**Thresholds (to be tuned):**
-- Surplus is triggered when logged value > 130% of daily target for that day.
-- Significant surplus (Mode B trigger suggestion) = >200% for 3 consecutive days.
-
-*Status: Not yet built. Add to Milestone 4 spec when ready.*
+### Evolving Priority System
+Low → Medium → High as `procrastination_count` climbs (threshold: 4 days per step), computed live via `getEffectivePriority`, never stored. Global toggle `evolvingPriorityEnabled`, now **persisted** (Account settings) rather than resetting to default on every launch — this was the explicitly deferred item from the original decision, closed out this cycle alongside the settings screen build.
 
 ---
 
-### Evolving Priority System [Milestone 3.5.5 — built 2026-07-21]
-*Added: 2026-08-07, expanded: 2026-07-18, decided: 2026-07-21*
+## Goal Decomposition Engine
+*Promoted from "parking lot idea" to fully specified and largely built this cycle — see Roadmap Milestone 9 for the implementation checklist.*
 
-A Low priority task that keeps getting procrastinated on should gradually raise
-its own priority — Low → Medium → High — the longer it sits undone. At the
-extreme, a low-turned-high task can push other Low priority tasks for that day
-into archive/delayed status until it's done.
+The original open questions from when this was just an idea are now answered:
 
-**Decided and built:**
-- **Threshold:** 4 days of `procrastination_count` per step — Low → Medium at 4,
-  Medium → High at 8. Applies uniformly regardless of starting priority, not
-  just Low — a neglected Medium task can climb to High too. The mechanism
-  (procrastination count crossing a threshold) has no natural reason to
-  special-case one tier. (`getEffectivePriority`, `src/utils/priority.ts`)
-- **Archive duration:** persists every day until the evolved task is completed,
-  not just the day it evolved. Needs no explicit "how long has this been
-  archived" tracking — it's recomputed fresh every render from live
-  `procrastinationCount`, so it naturally stays true until the evolved task's
-  count resets to 0 on completion. (`shouldArchiveTask`, same file)
-- **Archived tasks' `procrastination_count`:** keeps climbing normally. Rollover
-  already ignores priority when incrementing it (decided 2026-07-19) —
-  freezing it here would mean re-coupling something deliberately decoupled,
-  and "archived" isn't a stored field rollover could even check. This is also
-  self-correcting: a buried task eventually crosses its own threshold and
-  evolves out of hiding on its own.
-- **Computed, not stored.** `task.priority` in the DB always stays exactly what
-  the user set. `getEffectivePriority` computes the *effective* priority live,
-  used only for sorting and display. Same "compute it, don't store it" pattern
-  as skip (rollover) and archive — three instances of the same shape now, not
-  a coincidence. Turning the feature off requires no data migration, since
-  nothing was ever overwritten.
-- **Global toggle:** `evolvingPriorityEnabled` in `src/store/useStore.ts`,
-  default `true`. Gates both escalation and archiving at the call site
-  (`today.tsx`, `TaskCard.tsx`) — the engine functions themselves stay
-  toggle-agnostic, pure math.
+- **"Does a goal-generated Task need a `sourceGoalId` to trace it back?"** → Yes, reusing the existing `sourceTaskId` field (no new column needed — a goal is just a task at a higher scope, so the same parent-tracing field that was already built for Hybrid/recurrence works unchanged).
+- **"Editing today's auto-generated amount — recompute immediately or only next generation run?"** → Neither is forced: edits just take effect as stated, and the *next* decomposition call recomputes fresh from whatever the current state is (completed-so-far, days remaining) — there's no separate "recompute now" step because nothing is ever precomputed further than one occurrence ahead in the first place.
+- **"How do Activity, Evolving Priority, and this engine reconcile into one system?"** → They don't need to merge into literally one function, but they do share one underlying philosophy that's now explicit across the whole codebase: **compute live from ground truth, never store a derived value that can go stale.** `getEffectiveProgress`, `getEffectivePriority`, `shouldArchiveTask`, and the decomposition engine's remaining-target math are all the same pattern applied to different data.
+- **Count-based decomposition's open question ("which days get a generated task — spread evenly, adaptive, or user-adjustable?")** → Adaptive, self-healing, user sets only the ceiling (`maxGapDays`). A missed occurrence pulls the next one closer automatically; the user never manually redistributes anything. Confirmed design choice: a missed occurrence **counts against the target** — the engine never force-catches-up by cramming multiple occurrences together near a deadline, since that risks feeling naggy/unhealthy. If you fall behind, the period ends honestly short (e.g. "7/8 this month").
 
-**Deferred, not forgotten:**
-- **Persisting the toggle** across app restarts (currently in-memory only,
-  resets to `true` on every launch) and **a real settings UI** to flip it both
-  belong to Milestone 7.4 (Global settings screen) — building that screen now
-  would jump ahead of the roadmap's own sequencing. What exists now is the
-  underlying mechanism the settings screen will eventually control.
-- **Per-task override** ("same pattern as the surplus modes") is not built —
-  it would need a new schema column (e.g. `evolvingPriorityEnabled` per task),
-  which is a real schema decision on the same weight as the `status` field
-  question earlier, and wasn't explicitly signed off on. Revisit if a global
-  on/off ends up feeling too blunt in practice.
-
-*Status: Core mechanism built and wired into Today's sort, display, and
-filtering. Toggle UI and per-task override intentionally not yet built.*
+**Still open (Roadmap 9.3.6):** showing a *projected* future schedule directly on the calendar grids (hollow "ghost" dots, visually distinct from real ones) so long-running goals are visible ahead of time for planning purposes, not just reactively generated one occurrence at a time. The pure projection function (`previewOccurrenceSchedule`) already exists and is used in the creation-modal hint text — only the calendar-rendering wiring is outstanding.
 
 ---
 
 ## Notification Strategy
-- One morning digest, not per-task pings.
-- Morning summary: "5 tasks today, 2 carried over, 1 deadline this week."
-- One evening optional prompt: "You have 2 unfinished tasks. Mark done, skip, or move?"
-- Background midnight job is silent — no notification for the rollover itself.
-- Milestone 3+ feature: smart nudge if a high-priority task hasn't been touched by 3 PM.
+Unchanged from original: one morning digest, one optional evening prompt, silent midnight rollover, critical-pace nudges. Not yet built (Roadmap 7.1).
 
 ---
 
 ## Views
-- **Today** — default home. All tasks, habits, and events for today. Swipe to complete.
-- **Week** — tasks (and events) grouped by day for current week.
-- **Month** — high-level summary view.
-- **Goals** — progression tasks only, with pace bars.
-- **Notes** — freetext reflection at daily/weekly/monthly/yearly scope, auto-seeded
-  with that period's summary. (Replaces "Journal" — same concept, multiple cadences.)
-- **History/Archive** — browse any past date.
+- **Today** — default home. All tasks, habits, events, activities for the current app-day (respecting `dayBoundaryHour`). Now sectioned and collapsible (Events/Habits/Activities/Tasks/Completed) rather than one flat mixed list.
+- **Horizon** *(renamed/unified this cycle, replaces separate Week/Month/Year screens)* — one zoomable screen, `anchorDate` + `zoomLevel`, tap the period label to zoom out, tap a month/week-number to zoom in. Shows period goals (Progression/Hybrid/count-based Simple, all via the same `GoalCard`), a tap-a-cell day/month summary, and — restored this cycle — Habits/Events/Activities in the day-focus panel, plus a standalone cross-time Activity search block.
+- **Pursuits** *(new this cycle)* — status-filterable list of self-declared, domain-agnostic pursuits (MAL-style), each with free-form notes and loosely linked tasks. No computed rollups.
+- **Account** *(new this cycle)* — settings (evolving priority, auto-archive, day-boundary hour, dark mode) plus data actions (export, planned).
+- Old separate **Week**, **Month**, **Year**, **Goals** (never built past stub), and **Explore** (unused starter leftover) screens/tabs are being retired in favor of the above (Roadmap 11.14).
+
+Tab bar, as currently planned: **Today · Horizon · Pursuits · Account** (four, possibly a fifth if a genuine need surfaces — deliberately resisting the urge to add tabs for their own sake, per the scope-discipline note at the top of this document).
 
 ---
 
@@ -271,148 +179,52 @@ filtering. Toggle UI and per-task override intentionally not yet built.*
 - Offline-first. App works 100% without internet.
 - Cloud sync is additive, not required.
 - History is never deleted by the engine, only by the user explicitly.
-- Export to JSON/CSV available from day one (validates schema health).
+- **Cascade direction is meaningful, not incidental (clarified this cycle):** `sourceTaskId` (decomposition) and `parentId` (Hybrid subtasks) represent true ownership and cascade-delete. `pursuitId` (Pursuits) represents membership and explicitly does NOT cascade — deleting a Pursuit only clears the link. Any future relationship should be designed by asking which of these two shapes it actually is, not defaulted to one or the other.
+- Export to JSON/CSV available from day one goal — not yet built (Roadmap 7.5).
 
 ---
 
 ## Platform Targets
-| Platform | Priority | Notes |
-|---|---|---|
-| Android | Now | Development target |
-| iOS | Phase 2 | Same codebase via React Native |
-| Desktop | Phase 3 | React Native Windows/macOS or web |
+Unchanged: Android now, iOS phase 2, Desktop phase 3.
 
 ---
 
 ## Future Ideas Parking Lot
-> Dump ideas here. No idea is too rough. Date them so you know when you thought of it.
 
-- **2026-07-20** — Hybrid subtasks with mixed types, not just checkboxes.
-  Came from a gym example: a Hybrid task's subtasks might not all be simple
-  yes/no items — "bench: 3 sets" behaves like a small Progression task in its
-  own right, not a checkbox. Depends on the already-known gap that Hybrid
-  currently only stores `subtasksTotal`/`subtasksCompleted` as counts, not
-  real titled subtask rows (flagged after Milestone 2.5). A real `subtasks`
-  table would need its own `type` per row, not just per parent task. Revisit
-  once that table gets built — don't design it in isolation from that work.
-  *(2026-07-21: the gym example that motivated this got a better answer —
-  Task + Activity + Tags, see the "Worked example" under Activity above.
-  Doesn't need this. Leaving the idea parked in case a real case for mixed
-  subtask types shows up elsewhere later, but it's no longer blocking
-  anything.)*
-
-- **2026-07-07** — App/website usage tracking. Track how long spent in apps.
-  correlate with task completion rates. Deferred to post-MVP.
-
-- **2026-07-07** — Weekly review ritual screen. Sunday prompt: "Here's your week.
-  What moved? What did you finish? What's still hanging?" 2-minute reflection built in.
-
-- **2026-07-07** — "Renegotiate" a goal without it feeling like failure. Extend
-  deadline or lower target with a clear log of the change and the reason.
-
-- **2026-07-07** — Correlation insights: "On days you log 2+ hours of social media,
-  you complete 40% fewer tasks." Long-term feature, needs usage tracking first.
-
-- **2026-08-07** - One to-do list is daily, and one is weekly , there could also be monthly and yearly, and there should be an option to connects these 2 or 4 tabs , so like today's to-do is connected to the week's to-do. Weekly to-do's might be progression based and have sub task which you do daily.
-
-- **2026-08-07** - Being able to set some tasks to evolve, from low to high as days pass and you don't do them, it becomes high like 'yoo you havent draw in a bazillion days even though you wanted to. so draw something today". this feature might also cause other 'high' priority tasks to be skipped for the sake of the evolved task.
-  *(Promoted to full spec — see "IDEA: Evolving Priority System" under Core Behaviours.)*
-
-- **2026-07-18** — "Last time I did X" / activity history, not just a future to-do list.
-  Came from describing an actual workflow: gym exercises tracked in dated notes
-  folders (Monday/Wednesday/Friday etc.), looked back on the following week to
-  adjust weights. Generalizes past gym: "when did I last work on my Python
-  project," "when did I last draw," "when did I last read that Arabic book,"
-  "when did I last expand my story's lore." None of these are on a fixed
-  schedule and none have a numeric target — they're just things the user wants
-  to log whenever touched, and recall the most recent entry (and ideally full
-  history) on demand.
-
-  This doesn't fit any current entity cleanly:
-  - **Task** — tied to one scheduled day, wrong shape for "no fixed day."
-  - **Habit** — closest fit, but implies a cadence target (3x/week). These
-    activities have no target, just irregular touch-and-log.
-  - **Progression Task** — has the right idea (logged entries over time) but
-    is tied to a deadline and a numeric goal, which doesn't apply to "drew
-    something" or "read some pages" with no target in mind.
-
-  **Decided 2026-07-18:** Option A — new "Activity" entity, not a stretched
-  Habit. See "Activity" under Other Entity Types.
-
-  *(Related to the earlier gym-exercise note under Decisions Log about
-  `progress_logs` being tied to a single dated Task — same root gap: history
-  needs to be decoupled from "today's schedule.")*
-
----
-
-### IDEA: Goal Decomposition Engine (Week/Month/Year → Today) [big rock]
-*Added: 2026-07-18*
-
-Week/Month/Year screens aren't read-only summaries — they're where a target
-gets set, and the app auto-generates Today's task from what's left, so nothing
-has to be manually typed out day to day.
-
-Two decomposition strategies depending on task type:
-
-- **Count-based (Simple tasks):** e.g. "Draw, 8 times this month." Month view
-  shows a tally: "0/8 this month." Open question: which days get a generated
-  "Draw" task — spread evenly, adaptive to what else is scheduled that day,
-  or user-adjustable?
-- **Quantity-based (Progression tasks):** e.g. "Read 20 pages this week."
-  Each day: `(target − done so far) ÷ days remaining` = today's number.
-  Recalculates daily — overshoot today, tomorrow's number drops.
-
-Both connect to systems already speced: skipping a generated daily task
-increases `procrastination_count` like any Task, which can trigger the
-Evolving Priority System (low-priority tasks pushed aside for the neglected one).
-
-**This is the same underlying idea as Activity and Evolving Priority, from a
-different angle** — something with no fixed schedule that the app nags about
-with escalating urgency, decomposed from a higher-level target into daily
-nudges. Worth designing as one coherent system, not three overlapping ones,
-before building any of them.
-
-This also means the `goals` table (2.1.4, currently just `id, title,
-description`) is a placeholder in the truest sense — it'll need real shape:
-target amount or count, cadence, decomposition strategy, and a way to trace
-which Task rows a goal generated.
-
-**Open questions:**
-- Does a goal-generated Task need a `sourceGoalId` to trace it back, or is it
-  indistinguishable from a manually created one?
-- Editing today's auto-generated amount — does it recompute tomorrow's target
-  immediately, or only at the next daily generation run?
-- How do Activity, Evolving Priority, and this engine reconcile into one
-  system rather than three?
-
-*Status: Not yet built. Milestone 4+ concept (Progression Task Intelligence).
-Reshapes the `goals` table. Revisit before building the real Goals screen.*
+- **Sequential vs. non-sequential Hybrid milestones at higher scopes** — see Roadmap 13.1. Supersedes the older "Hybrid subtasks with mixed types" entry below for the *ordering* half of that idea; the *weighted-progress* half is kept separate (see "Ship v2" example above).
+- **Hybrid subtasks with mixed types / weighted progress** (originally 2026-07-20, refined this cycle) — only worth building for the specific case where a flat checklist genuinely misrepresents completion (unequal-weight subtasks like backend/UI/testing on a dev project), not as a general-purpose upgrade. Deferred.
+- **Flexible task shape** (a plain task gaining an optional progress bar and/or optional subtasks, subtasks in turn gaining their own optional progress bars, "Add task" + "Add more options" as the eventual creation flow) — acknowledged direction for a future rigidity-removal pass across the whole task model. Not started; see Roadmap 13.2 for the note on writing new code (e.g. completion-fraction helpers) in a way that survives this later.
+- **Creation-time non-linear-unit nudge** ("chapters" etc. suggesting Hybrid instead of Progression) — see "Progression vs Hybrid" section above. Cheap, not built.
+- **Ghost/projected occurrences on calendar grids** — see Roadmap 9.3.6.
+- **Beyond-Today multi-scope add sheet** (Week/Month/Year/Custom-range switcher matching Today's `AddTypeSwitcher`) — see Roadmap 11.15, deferred until Horizon is fully stable.
+- **App/website usage tracking**, **weekly review ritual screen**, **"renegotiate" a goal without it feeling like failure**, **correlation insights** — all still parked, unchanged, post-MVP.
+- **Correct-but-expensive dark mode** (per-component theme hook) — see Roadmap 13.3.
 
 ---
 
 ## Decisions Log
 > When you make an architectural or product decision, write it here with the reason.
-> This prevents re-arguing the same decisions six months later.
 
 | Date | Decision | Reason |
 |---|---|---|
-| 2026-07-07 | React Native over Flutter | Already set up and working. Cross-platform covered. |
+| 2026-07-07 | React Native over Flutter | Already set up and working. |
 | 2026-07-07 | Supabase over Firebase | Postgres-based, open, self-hostable later. |
-| 2026-07-07 | App usage tracking deferred | Complexity too high for MVP. Personal use first. |
-| 2026-07-07 | History is never mutated by engine | Preserves honest log. Rollover creates forward, not edits. |
-| 2026-07-07 | Manual reschedule doesn't reset procrastination count | Only completion resets it. Honest accounting. |
-| 2026-07-18 | Habits and Events are separate entities, not Task variants | Procrastination/rollover logic doesn't apply to habits (streak-based) or events (point-in-time). Keeping them separate avoids polluting the Task schema and logic. |
-| 2026-07-18 | Tags are many-to-many, freeform, Task-first | Matches the real categorization need (Deen/Creativity/Study/Career). Habits/Events can extend to tags later via the same join-table pattern if needed. |
-| 2026-07-18 | Notes replace Journal, with a `scope` field instead of separate screens | Daily/weekly/monthly/yearly reflection is one entity type at different cadences, not four different features. |
-| 2026-07-18 | Activity is a new entity, not a Habit variant | Habit implies a cadence target and streak; Activity has neither — keeps Habit's semantics clean instead of overloading it with an optional-everything config. |
-| 2026-07-18 | No `status` field for rollover — `isCompleted` stays a 2-state boolean | "Skipped" isn't stored; a task that isn't rolled forward keeps its original `scheduledDate` and just stops appearing on Today once the day passes. Avoids a schema change; "skipped" is computed (past date + incomplete) rather than stored, if ever needed for History filtering. |
-| 2026-07-19 | Rollover eligibility depends only on `rolloverEnabled`, not priority | Gating rollover by priority would freeze Low priority tasks' `procrastinationCount`, which breaks the Evolving Priority System's premise (Low escalates to High *as* its count climbs — it needs to keep climbing). Priority's influence stays in sort order and future escalation, not rollover eligibility. |
-| 2026-07-21 | Hybrid subtasks are `parent_id`-linked Task rows, not a separate table | Reuses existing toggle/edit/delete infrastructure instead of building parallel machinery. Gets mixed-type subtasks (a Progression-type child under a Hybrid parent) for free, no extra schema needed. |
-| 2026-07-21 | `currentProgress` is computed live (`SUM` over `progress_logs`), not a stored/synced column | Same compute-don't-store pattern as skip, archive, and effective priority. A stored column would risk going stale if a log entry is later edited or deleted; a live sum can't drift because there's nothing separate to drift from. |
-| 2026-08-28 | Single unified "+" button on Today, opening the Task sheet
-by default with a switcher inside to jump to Habit or (once built) Activity
-sheets, instead of separate FABs stacking up per entity type. Motivated by
-the FAB count growing one-per-entity (Task, then Habit, next would've been
-Activity) — doesn't scale visually. Revisit once Activities (5.4) exist,
-since that's the point a third FAB would actually force the issue.
-| 2026-08-31 | Goal Decomposition Engine rounds daily targets up (ceiling), never down | Rounding down risks the total target being unreachable by the deadline even if every day's rounded target is hit exactly. Ceiling guarantees the sum of daily targets always meets or exceeds the original goal.
+| 2026-07-07 | History is never mutated by engine | Preserves honest log. |
+| 2026-07-07 | Manual reschedule doesn't reset procrastination count | Only completion resets it. |
+| 2026-07-18 | Habits and Events are separate entities, not Task variants | Procrastination/rollover logic doesn't apply to either. |
+| 2026-07-18 | Tags are many-to-many, freeform, Task-first | Matches real categorization need. |
+| 2026-07-18 | Notes replace Journal, with a `scope` field | One entity, multiple cadences, not four features. |
+| 2026-07-18 | Activity is a new entity, not a Habit variant | Habit implies cadence + streak; Activity has neither. |
+| 2026-07-18 | No `status` field for rollover | "Skipped" is computed (past date + incomplete), not stored. |
+| 2026-07-19 | Rollover eligibility depends only on `rolloverEnabled`, not priority | Gating by priority would freeze Low priority `procrastinationCount`, breaking Evolving Priority's premise. |
+| 2026-07-21 | Hybrid subtasks are `parent_id`-linked Task rows | Reuses existing toggle/edit/delete; mixed-type subtasks for free. |
+| 2026-07-21 | `currentProgress` computed live via `SUM(progress_logs)`, never stored | Same "compute don't store" pattern as skip/archive/effective priority; can't go stale. |
+| 2026-08-28 | Single unified "+" button on Today with an in-sheet type switcher | FAB-per-entity doesn't scale visually. |
+| 2026-08-31 | Goal Decomposition Engine rounds daily targets up (ceiling), never down | Guarantees the sum of daily targets always meets or exceeds the original goal. |
+| *this cycle* | Deleted the static/upfront-split monthly→weekly→daily decompose function in favor of the adaptive, recompute-every-call one | Two competing decomposition philosophies existed simultaneously; adaptive is the only one consistent with the "compute don't store" pattern used everywhere else in the app. |
+| *this cycle* | Count-based recurring goals: a missed/deleted occurrence counts against the target; no forced catch-up | A system that guarantees exactly N completions no matter what risks cramming occurrences together near a deadline — feels naggy, not smart. Honest short-of-target ("7/8") beats a false guarantee. |
+| *this cycle* | Pursuits use a nullable `pursuitId` (membership) with `onDelete: set null`, not a cascade-owning relationship, and have no computed completion percentage | Modeled deliberately after MyAnimeList status tracking — status is a personal declaration, not a derived metric; tasks must survive their Pursuit being deleted. |
+| *this cycle* | Renamed "Project" (working name) to "Pursuit" | Avoids colliding with what "Goal" (Progression) already means in this app; reads naturally across non-study domains (gym, hobbies) per explicit confirmation that the entity is domain-agnostic. |
+| *this cycle* | Horizon replaces separate Week/Month/Year screens with one zoomable screen sharing a single `anchorDate` | The three screens had already converged on an identical structural shape (nav header + density grid + tap-cell summary + goal list + selection header) purely because the underlying data model is recursive across scopes — consolidating removed duplicated nav/grid logic rather than adding new complexity. |
+| *this cycle* | Dark mode implemented as a mutated static object + full-tree remount, not a `useTheme()` hook, for now | Every existing component already imports `colors` as a plain static object; a hook-based rewrite touches every file built so far and is explicitly deferred as its own project rather than done piecemeal now. |
+| *this cycle* | "Today" is computed via a configurable `dayBoundaryHour`, not raw calendar midnight | Real usage surfaced that staying up past midnight incorrectly locked "today's" tasks as unfinishable-past-tense; the fix generalizes past this app's own testing to anyone with a late-night schedule. |

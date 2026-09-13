@@ -8,6 +8,9 @@ import m0003 from './0003_dark_apocalypse.sql';
 import m0004 from './0004_romantic_spacker_dave.sql';
 import m0005 from './0005_pink_jubilee.sql';
 import m0006 from './0006_fearless_nomad.sql';
+import m0007 from './0007_famous_rawhide_kid.sql';
+import m0008 from './0008_loose_omega_sentinel.sql';
+import m0009 from './0009_flawless_supernaut.sql';
 
   export default {
     journal,
@@ -18,7 +21,10 @@ m0002,
 m0003,
 m0004,
 m0005,
-m0006
+m0006,
+m0007,
+m0008,
+m0009
     }
   }
   

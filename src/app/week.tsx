@@ -6,7 +6,8 @@ import NewTaskModal from '@/components/new-task';
 import NewActivityModal from '@/components/NewActivityModal';
 import NewEventModal from '@/components/NewEventModal';
 import NewHabitModal from '@/components/NewHabitModal';
-import NewWeeklyTaskModal from '@/components/NewWeeklyTaskModel';
+import NewWeeklyTaskModal from '@/components/NewWeeklyTaskModal';
+import NoteSheet from '@/components/NoteSheet';
 import ProgressLogSheet from '@/components/ProgressLogSheet';
 import { TagFilterBar } from '@/components/TagFilterBar';
 import { TaskCard } from '@/components/TaskCard';
@@ -27,6 +28,7 @@ import {
   TaskRow,
   updateTask
 } from '@/db/queries';
+import { generatePeriodSeed } from '@/engine/notesSeed';
 import { calculatePace, PaceResult } from '@/engine/pace';
 import { ActivityLogWithDetails, useActivityStore } from '@/store/activityStore';
 import { useEventStore } from '@/store/eventStore';
@@ -35,6 +37,7 @@ import { useTagStore } from '@/store/tagStore';
 import { useTaskStore } from '@/store/taskStore';
 import { colors } from '@/theme/colors';
 import { getLocalDateString } from '@/utils/date';
+import { isPeriodEligibleForReflection } from '@/utils/reflections';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { addDays, endOfWeek, format, isSameDay, parseISO, startOfWeek, subDays } from 'date-fns';
@@ -117,6 +120,9 @@ export default function WeekScreen() {
   const weekStartStr = useMemo(() => getLocalDateString(weekStart), [weekStart]);
   const weekEndStr = useMemo(() => getLocalDateString(weekEnd), [weekEnd]);
   const todayStr = useMemo(() => getLocalDateString(new Date()), []);
+
+  const noteSheetRef = useRef<BottomSheet>(null);
+  const isWeekEligible = useMemo(() => isPeriodEligibleForReflection(weekEnd), [weekEnd]);
 
   const daysOfCurrentWeek = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -463,11 +469,23 @@ export default function WeekScreen() {
                   <Ionicons name="chevron-back" size={20} color={colors.textPrimary} />
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => setCurrentPivotDate(new Date())}>
-                  <Text style={styles.rangeText}>
-                    {format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}
-                  </Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TouchableOpacity onPress={() => setCurrentPivotDate(new Date())}>
+                    <Text style={styles.rangeText}>
+                      {format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {isWeekEligible && (
+                    <TouchableOpacity
+                      onPress={() => noteSheetRef.current?.expand()}
+                      hitSlop={8}
+                      style={styles.reflectionBtn}
+                    >
+                      <Ionicons name="document-text-outline" size={18} color={colors.accent} />
+                    </TouchableOpacity>
+                  )}
+                </View>
 
                 <TouchableOpacity onPress={() => setCurrentPivotDate((d) => addDays(d, 7))} style={styles.navBtn}>
                   <Ionicons name="chevron-forward" size={20} color={colors.textPrimary} />
@@ -538,10 +556,11 @@ export default function WeekScreen() {
         onPress={() => {
           if (selectionMode) {
             handleToggleSelectItem('task', task.id);
-          } else {
-            setEditingWeeklyGoal(task);
-            newWeeklySheetRef.current?.expand();
-          }
+          } 
+          //else {
+          //   setEditingWeeklyGoal(task);
+          //   newWeeklySheetRef.current?.expand();
+          // }
         }}
         onLongPress={() => handleLongPressItem('task', task.id)}
       />
@@ -646,6 +665,13 @@ export default function WeekScreen() {
           pace={loggingTask ? paceMap[loggingTask.id] : undefined}
           onLogged={loadWeekData}
           onClose={() => setLoggingTask(null)}
+        />
+        <NoteSheet
+          sheetRef={noteSheetRef}
+          scope="weekly"
+          dateKey={weekStartStr}
+          periodLabel={`${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d')}`}
+          getSeed={() => generatePeriodSeed('weekly', weekStartStr, weekEndStr)}
         />
       </SafeAreaView>
     </GestureHandlerRootView>
@@ -805,5 +831,6 @@ sectionHeaderRow: {
     alignItems: 'center',
     marginBottom: 8,
   },
+  reflectionBtn: {padding: 4}
 });
 

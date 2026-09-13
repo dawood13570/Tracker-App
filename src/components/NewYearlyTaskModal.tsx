@@ -1,8 +1,9 @@
 import { useTagStore } from '@/store/tagStore';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { format, parseISO } from 'date-fns';
+import Slider from '@react-native-community/slider';
+import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Keyboard, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { assignTag, insertSubtask, insertTask, updateTask } from '../db/queries';
 import { colors } from '../theme/colors';
 import { TagPicker } from './TagPicker';
@@ -13,26 +14,26 @@ interface SubTaskDraft {
   isCompleted: boolean;
 }
 
-interface NewWeeklyTaskModalProps {
+interface NewYearlyTaskModalProps {
   sheetRef: React.RefObject<BottomSheet | null>;
-  weekStartDate: string;
-  weekEndDate: string;
+  yearStartDate: string;
+  yearEndDate: string;
   editTask?: any | null;
   onTaskCreated: () => void;
   onClose?: () => void;
 }
 
-const WEEKLY_TASK_TYPES = ['Simple', 'Progression', 'Hybrid'] as const;
+const YEARLY_TASK_TYPES = ['Simple', 'Progression', 'Hybrid'] as const;
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'] as const;
 
-export default function NewWeeklyTaskModal({
+export default function NewYearlyTaskModal({
   sheetRef,
-  weekStartDate,
-  weekEndDate,
+  yearStartDate,
+  yearEndDate,
   editTask,
   onTaskCreated,
   onClose,
-}: NewWeeklyTaskModalProps) {
+}: NewYearlyTaskModalProps) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'Simple' | 'Progression' | 'Hybrid'>('Simple');
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
@@ -42,16 +43,38 @@ export default function NewWeeklyTaskModal({
   const [subtaskInput, setSubtaskInput] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
+  const [isRecurringGoal, setIsRecurringGoal] = useState(false);
+  const [occurrenceCount, setOccurrenceCount] = useState('');
+  const [maxGapDays, setMaxGapDays] = useState(1);
+
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
   const snapPoints = useMemo(() => ['75%', '50%'], []);
 
-  const formattedWeekLabel = useMemo(() => {
+  const formattedYearLabel = useMemo(() => {
     try {
-      return `${format(parseISO(weekStartDate), 'MMM d')} – ${format(parseISO(weekEndDate), 'MMM d')}`;
+      return format(parseISO(yearStartDate), 'yyyy');
     } catch {
-      return `${weekStartDate} – ${weekEndDate}`;
+      return `${yearStartDate} – ${yearEndDate}`;
     }
-  }, [weekStartDate, weekEndDate]);
+  }, [yearStartDate, yearEndDate]);
+
+  const periodLengthDays = useMemo(() => {
+    try {
+      return differenceInCalendarDays(parseISO(yearEndDate), parseISO(yearStartDate)) + 1;
+    } catch {
+      return 365;
+    }
+  }, [yearStartDate, yearEndDate]);
+
+  const maxPossibleGap = useMemo(() => {
+    const n = Number(occurrenceCount);
+    if (!n || n <= 0) return periodLengthDays;
+    return Math.max(1, Math.floor(periodLengthDays / n));
+  }, [occurrenceCount, periodLengthDays]);
+
+  useEffect(() => {
+    setMaxGapDays((prev) => Math.min(prev, maxPossibleGap));
+  }, [maxPossibleGap]);
 
   const resetForm = () => {
     setTitle('');
@@ -62,6 +85,9 @@ export default function NewWeeklyTaskModal({
     setSubtasks([]);
     setSubtaskInput('');
     setSelectedTagIds([]);
+    setIsRecurringGoal(false);
+    setOccurrenceCount('');
+    setMaxGapDays(1);
   };
 
   useEffect(() => {
@@ -73,10 +99,16 @@ export default function NewWeeklyTaskModal({
       setPriority(editTask.priority ?? 'Medium');
       setTargetValue(editTask.totalProgress ? String(editTask.totalProgress) : '');
       setUnit(editTask.progressUnit ?? '');
-    } else {
-      resetForm();
+      // NEW
+      if (editTask.type === 'Simple' && editTask.totalProgress) {
+        setIsRecurringGoal(true);
+        setOccurrenceCount(String(editTask.totalProgress));
+        setMaxGapDays(editTask.maxGapDays ?? 1);
+      } else {
+        setIsRecurringGoal(false);
+      }
     }
-  }, [editTask, weekStartDate]);
+  }, [editTask, yearStartDate]);
 
   const handleAddSubtask = () => {
     if (!subtaskInput.trim()) return;
@@ -95,7 +127,11 @@ export default function NewWeeklyTaskModal({
       return;
     }
     if (type === 'Progression' && (!targetValue || Number(targetValue) <= 0)) {
-      Alert.alert('Target required', 'Please enter a valid target for this weekly goal.');
+      Alert.alert('Target required', 'Please enter a valid target for this yearly goal.');
+      return;
+    }
+    if (type === 'Simple' && isRecurringGoal && (!occurrenceCount || Number(occurrenceCount) <= 0)) {
+      Alert.alert('Count required', 'Enter how many times this year.');
       return;
     }
 
@@ -107,29 +143,34 @@ export default function NewWeeklyTaskModal({
           priority,
           totalProgress: type === 'Progression' ? Number(targetValue) : null,
           progressUnit: type === 'Progression' ? unit.trim() || null : null,
+          maxGapDays: type === 'Simple' && isRecurringGoal ? maxGapDays : null,
         });
       } else {
-        const parentWeekly = await insertTask({
+        const parentYearly = await insertTask({
           title: title.trim(),
           type,
           priority,
-          scheduledDate: weekStartDate,
-          deadline: weekEndDate,
-          scope: 'weekly',
-          totalProgress: type === 'Progression' ? Number(targetValue) : null,
+          scheduledDate: yearStartDate,
+          deadline: yearEndDate,
+          scope: 'yearly',
+          totalProgress:
+            type === 'Progression' ? Number(targetValue)
+            : type === 'Simple' && isRecurringGoal ? Number(occurrenceCount)
+            : null,
           progressUnit: type === 'Progression' ? unit.trim() || null : null,
+          maxGapDays: type === 'Simple' && isRecurringGoal ? maxGapDays : null,
           rolloverEnabled: false,
           subtasksTotal: type === 'Hybrid' ? subtasks.length : 0,
         });
 
-        if (parentWeekly) {
+        if (parentYearly) {
           if (type === 'Hybrid' && subtasks.length > 0) {
             for (const s of subtasks) {
-              await insertSubtask(parentWeekly.id, { title: s.title, scheduledDate: weekStartDate, priority });
+              await insertSubtask(parentYearly.id, { title: s.title, scheduledDate: yearStartDate, priority });
             }
           }
           for (const tagId of selectedTagIds) {
-            await assignTag(parentWeekly.id, tagId);
+            await assignTag(parentYearly.id, tagId);
           }
         }
       }
@@ -139,7 +180,7 @@ export default function NewWeeklyTaskModal({
       if (onClose) onClose();
       sheetRef.current?.close();
     } catch (error) {
-      console.error('Failed to save weekly goal:', error);
+      console.error('Failed to save yearly goal:', error);
     }
   };
 
@@ -158,12 +199,12 @@ export default function NewWeeklyTaskModal({
       }}
     >
       <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-        <Text style={styles.titleText}>{editTask ? 'Edit Weekly Goal' : 'Plan Goal for Week'}</Text>
-        <Text style={styles.subTitleText}>Range: {formattedWeekLabel}</Text>
+        <Text style={styles.titleText}>{editTask ? 'Edit Yearly Goal' : 'Plan Goal for Year'}</Text>
+        <Text style={styles.subTitleText}>Year: {formattedYearLabel}</Text>
 
         <BottomSheetTextInput
           style={styles.input}
-          placeholder="What do you want to accomplish this week?"
+          placeholder="What's the big goal this year?"
           placeholderTextColor={colors.textPlaceholder}
           value={title}
           onChangeText={setTitle}
@@ -172,7 +213,7 @@ export default function NewWeeklyTaskModal({
         <View style={styles.row}>
           <Text style={styles.label}>Type:</Text>
           <View style={styles.selectorGroup}>
-            {WEEKLY_TASK_TYPES.map((t) => (
+            {YEARLY_TASK_TYPES.map((t) => (
               <Pressable key={t} style={[styles.selectorItem, type === t && styles.selectedItem]} onPress={() => setType(t)}>
                 <Text style={type === t ? styles.selectedText : styles.unselectedText}>{t}</Text>
               </Pressable>
@@ -194,12 +235,12 @@ export default function NewWeeklyTaskModal({
         {type === 'Progression' && (
           <View style={styles.dynamicContainer}>
             <View style={styles.row}>
-              <Text style={styles.label}>Target this week:</Text>
+              <Text style={styles.label}>Total Yearly Target:</Text>
               <BottomSheetTextInput
                 style={styles.inputNested}
                 value={targetValue}
                 onChangeText={setTargetValue}
-                placeholder="e.g. 4"
+                placeholder="3000"
                 keyboardType="numeric"
                 placeholderTextColor={colors.textPlaceholder}
               />
@@ -210,13 +251,53 @@ export default function NewWeeklyTaskModal({
                 style={styles.inputNested}
                 value={unit}
                 onChangeText={setUnit}
-                placeholder="times, km, pages"
+                placeholder="pages, km, reps"
                 placeholderTextColor={colors.textPlaceholder}
               />
             </View>
-            <Text style={styles.hintText}>
-              This is split into a daily target automatically — you'll see it decomposed on Today and this week's days.
-            </Text>
+          </View>
+        )}
+
+        {type === 'Simple' && (
+          <View style={styles.dynamicContainer}>
+            <View style={styles.row}>
+              <Text style={styles.label}>Repeat this goal:</Text>
+              <Switch value={isRecurringGoal} onValueChange={setIsRecurringGoal} trackColor={{ false: colors.borderSubtle, true: colors.accent }} />
+            </View>
+
+            {isRecurringGoal && (
+              <>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Times this year:</Text>
+                  <BottomSheetTextInput
+                    style={styles.inputNested}
+                    value={occurrenceCount}
+                    onChangeText={setOccurrenceCount}
+                    placeholder="e.g. 24"
+                    keyboardType="numeric"
+                    placeholderTextColor={colors.textPlaceholder}
+                  />
+                </View>
+
+                <Text style={[styles.label, { marginTop: 8 }]}>
+                  Max gap between occurrences: {maxGapDays} day{maxGapDays > 1 ? 's' : ''}
+                </Text>
+                <Slider
+                  style={{ width: '100%', height: 36 }}
+                  minimumValue={1}
+                  maximumValue={maxPossibleGap}
+                  step={1}
+                  value={maxGapDays}
+                  onValueChange={setMaxGapDays}
+                  minimumTrackTintColor={colors.accent}
+                  maximumTrackTintColor={colors.borderSubtle}
+                  thumbTintColor={colors.accent}
+                />
+                <Text style={styles.hintText}>
+                  Spaced to hit your target by year's end, pulled closer if you fall behind — never more than {maxPossibleGap} day{maxPossibleGap > 1 ? 's' : ''} apart given {occurrenceCount || '—'} times.
+                </Text>
+              </>
+            )}
           </View>
         )}
 
@@ -270,7 +351,7 @@ export default function NewWeeklyTaskModal({
             onPress={handleSubmit}
             style={({ pressed }) => [styles.submitButton, !title.trim() && styles.submitDisabled, pressed && title.trim() ? { opacity: 0.85 } : null]}
           >
-            <Text style={styles.submitButtonText}>{editTask ? 'Save Changes' : 'Schedule Weekly Goal'}</Text>
+            <Text style={styles.submitButtonText}>{editTask ? 'Save Changes' : 'Schedule Yearly Goal'}</Text>
           </Pressable>
         </View>
       </BottomSheetScrollView>

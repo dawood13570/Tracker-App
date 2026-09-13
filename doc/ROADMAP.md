@@ -352,16 +352,16 @@ Added: 2026-07-18
 - [x] 6.2.3 — Tapping a day shows that day's task summary
 
 ### 6.3 — Notes (multi-cadence)
-- [ ] 6.3.1 — Write `notes` schema with a `scope` field: daily | weekly | monthly | yearly (if not already sketched in 2.1.7)
-- [ ] 6.3.2 — Daily note: auto-seed with day's summary ("Completed 4 tasks · Logged 22 pages · 1 task moved")
-- [ ] 6.3.3 — Weekly/monthly/yearly notes: auto-seed with period rollups (completion rate, streaks, procrastination trends)
-- [ ] 6.3.4 — User can add their own reflection text below the auto-seeded summary
-- [ ] 6.3.5 — Browse past notes, filterable by scope
+- [x] 6.3.1 — Write `notes` schema with a `scope` field: daily | weekly | monthly | yearly (if not already sketched in 2.1.7)
+- [x] 6.3.2 — Daily note: auto-seed with day's summary ("Completed 4 tasks · Logged 22 pages · 1 task moved")
+- [x] 6.3.3 — Weekly/monthly/yearly notes: auto-seed with period rollups (completion rate, streaks, procrastination trends)
+- [x] 6.3.4 — User can add their own reflection text below the auto-seeded summary
+- [x] 6.3.5 — Browse past notes, filterable by scope
 
 ### 6.4 — History / Archive
-- [ ] 6.4.1 — Browse any past date's tasks
-- [ ] 6.4.2 — Filter by: completed / skipped / moved
-- [ ] 6.4.3 — See procrastination history for a specific task (how many times it moved, when it was done)
+- [x] 6.4.1 — Browse any past date's tasks
+- [x] 6.4.2 — Filter by: completed / skipped / moved
+- [x] 6.4.3 — See procrastination history for a specific task (how many times it moved, when it was done)
 
 ---
 
@@ -370,8 +370,8 @@ Added: 2026-07-18
 
 - [ ] 7.1 — Morning digest notification
 - [ ] 7.2 — Swipe right to complete, swipe left to skip/postpone on TaskCard
-- [ ] 7.3 — Dark / light mode toggle
-- [ ] 7.4 — Global settings screen (default surplus mode, evolving priority toggle, notification times, etc.)
+- [~] 7.3 — Dark / light mode toggle — palette split (`lightPalette`/`darkPalette`), persisted `themeStore`, full-tree remount via `key` on root layout. Deliberately the "pragmatic" version, not the "correct" one — every component still reads `colors.X` as a mutated static object rather than through a `useTheme()` hook, so a full remount is required per toggle and any local component state not in a store resets on switch. Flagged for a real hook-based rewrite later; not urgent enough to block on now.
+- [x] 7.4 — Global settings screen (`account.tsx`) — evolving priority toggle, auto-archive toggle, day-boundary-hour picker (see 9.1), dark mode toggle. Notification times and default surplus mode still outstanding.
 - [ ] 7.5 — JSON export of all data
 - [ ] 7.6 — Onboarding flow for first-time launch
 
@@ -386,6 +386,114 @@ Added: 2026-07-18
 - [ ] 8.4 — Bidirectional sync: push local changes, pull remote changes
 - [ ] 8.5 — Conflict resolution strategy: last-write-wins with timestamp comparison
 - [ ] 8.6 — Test: uninstall app, reinstall, log in, confirm all data restored
+
+---
+
+## Milestone 9 — Goal Decomposition Engine
+*Added: this cycle — promotes the long-parked VISION.md "big rock" idea to a real milestone.*
+**Done when:** A monthly or yearly goal of any type auto-generates its own next-level-down children with zero manual re-entry, self-heals when occurrences are missed, and every scope (week/month/year) shares one engine.
+
+### 9.1 — Foundations
+- [x] 9.1.1 — `sourceTaskId`-linked children (already existed for weekly→daily; extended to monthly→weekly and yearly→monthly)
+- [x] 9.1.2 — `getEffectiveProgress(taskId)` — recursive live sum over descendant progress, replacing any stored/synced progress field on parent-scope goals
+- [x] 9.1.3 — `getChildTasks` / `getAllDescendantTasks` — generic parent→children and full-tree walks, scope-agnostic
+- [x] 9.1.4 — `ensureDailyDecompositionForDate(dateStr)` — single idempotent entry point, called from every screen's focus effect (Today, Horizon); processes yearly→monthly→weekly→daily in order each call
+- [x] 9.1.5 — In-flight lock + `dedupeDuplicateOccurrences()` safety net — fixes a real race condition where concurrent decomposition calls (mount + focus firing close together) could double-insert the same occurrence
+- [x] 9.1.6 — `deleteTaskCascade(id)` — deleting a parent goal recursively deletes its decomposed children; deleting a leaf never touches its parent (parent progress is always recomputed live, never stale)
+
+### 9.2 — Progression decomposition (quantity-based)
+- [x] 9.2.1 — `decomposeMonthlyProgressionToWeekly` — adaptive: `ceil((total - doneSoFar) / periodsRemaining)`, recomputed every call, updates existing child instead of duplicating
+- [x] 9.2.2 — `decomposeWeeklyProgressionToDaily` — same shape, one level down
+- [x] 9.2.3 — `decomposeYearlyProgressionToMonthly` — same shape, one level up
+- [x] 9.2.4 — Deleted the earlier competing static/upfront-split decompose function (`decomposeMonthlyToWeeklyAndDaily`) — non-adaptive, didn't recompute on overshoot, contradicted the "compute don't store" pattern used everywhere else
+
+### 9.3 — Count-based recurring Simple goals
+- [x] 9.3.1 — `maxGapDays` column on `tasks` — user-set ceiling on spacing between occurrences
+- [x] 9.3.2 — `getCompletedOccurrenceCount(parentId)`
+- [x] 9.3.3 — `decomposeCountGoalToNextOccurrence` — spacing = `min(maxGapDays, floor(daysLeft / remaining))`, recomputed fresh every call so a missed occurrence self-heals by pulling the next one closer, capped by `maxGapDays`; confirmed decision: a missed/deleted occurrence counts against the target (no forced catch-up, ends the period honestly short, e.g. "7/8")
+- [x] 9.3.4 — `previewOccurrenceSchedule` — pure, non-writing projection used for live "on pace you'd see it on: ..." hint text in the creation modals, so the schedule isn't a black box before you even save
+- [x] 9.3.5 — Wired into Monthly, Weekly, and Yearly creation/edit modals — "Repeat this goal" toggle, times-this-period input, max-gap slider (dynamically capped so an impossible combination can't be chosen)
+- [ ] 9.3.6 — Ghost/projected occurrence dots on Horizon's calendar grids (hollow, visually distinct from real scheduled dots) — projection function exists (9.3.4), calendar-rendering wiring not yet built
+
+### 9.4 — Correctness fixes found via real use
+- [x] 9.4.1 — Recurring-task duplicate-on-toggle bug: `nextOccurrenceGenerated` sticky boolean added so done→undone→done can never spawn a second "tomorrow" instance
+- [x] 9.4.2 — Recurring deadline never advanced with the schedule (a task due "tomorrow" stayed permanently due on its original date after regenerating) — fixed by computing the deadline offset once and reapplying it to each new occurrence
+- [x] 9.4.3 — `getAppToday()` / day-boundary setting (see 10.1) — late-night task completion being blocked by a hard midnight cutoff
+- [x] 9.4.4 — Editing a monthly/weekly/yearly count-based recurring goal previously silently dropped the recurring config (UI was gated `!editTask`, and edit-populate never read `occurrenceCount`/`maxGapDays` back out) — fixed across all three modals
+
+---
+
+## Milestone 10 — Settings & Accountability Tuning
+*Added: this cycle*
+
+### 10.1 — Day boundary
+- [x] 10.1.1 — `dayBoundaryHour` setting (`useStore`, persisted) — "today" is computed as `now - boundaryHour` rather than the raw calendar date, so staying up past midnight doesn't lock you out of completing "today's" tasks
+- [x] 10.1.2 — `getAppToday()` utility, swapped in everywhere `getLocalDateString(new Date())` was previously used as "today" (taskStore init, Today/Horizon `todayStr`, rollover cutoff)
+- [x] 10.1.3 — Picker UI in Account settings
+
+### 10.2 — Progression task interaction
+- [x] 10.2.1 — `ProgressionSlider` rebuilt: drag commits to a draft value, explicit Confirm button required to persist (previously committed on release with no undo)
+- [x] 10.2.2 — Tap-to-type exact value instead of only dragging
+- [x] 10.2.3 — Slider gradient (red→green) reflecting percent complete, live while dragging
+- [x] 10.2.4 — Marking a Progression task done asks for confirmation and sets progress to 100% of target; dragging a completed task's slider back down asks for confirmation and un-completes it
+- [x] 10.2.5 — Fixed dead write path: slider/confirm previously called `taskStore.updateProgress`, which wrote to the unused `tasks.currentProgress` column — switched to `setAbsoluteProgress` (diffs against the live `progress_logs` sum and inserts a delta), the only column-of-truth per the Milestone 4 decision
+- [x] 10.2.6 — `updateProgress` removed from `taskStore` entirely — one write path only, no dead code left to accidentally call
+- [ ] 10.2.7 — **Known regression, not yet fixed:** the slider's write path and `ProgressLogSheet`'s write path have diverged — the sheet still checks `getSurplusChoices`/triggers the surplus-mode prompt, the slider does not. Since the slider is the everyday interaction, surplus-mode detection is effectively dead in practice. Needs unifying into one progress-write function that both paths call.
+
+### 10.3 — Today screen restructure
+- [x] 10.3.1 — Sectioned, collapsible layout: Events / Habits / Activities / Tasks / Completed, each independently collapsible, mirroring the old Week-view per-day expand pattern
+- [x] 10.3.2 — "Completed" sub-section collapsed by default
+- [x] 10.3.3 — Focus-reload fix: Today previously only reloaded on mount + AppState-active, so switching tabs to/from Today without a full app close never picked up changes made elsewhere (e.g. a goal created on Horizon). Added `useFocusEffect` calling the same `refreshDashboard`.
+- [ ] 10.3.4 — Quick-nav shortcut below search bar — considered, deferred; nothing to jump to that isn't already one scroll away, revisit only if the new sectioning makes it feel actually necessary in practice
+
+### 10.4 — Notes
+- [x] 10.4.1–10.4.5 — see Milestone 6.3, all done; user subsequently reimplemented and improved their own version, superseding the original `NoteSheet`/`notesSeed.ts` sketch — no further roadmap action needed here
+
+---
+
+## Milestone 11 — Horizon (unified Week/Month/Year)
+*Added: this cycle — replaces separate `week.tsx`, `month.tsx`, `year.tsx` route files with one zoomable screen.*
+**Done when:** One screen covers week/month/year with a single `anchorDate` and a `zoomLevel`, drill-in/drill-out feels natural, and every goal type (Progression, Hybrid, count-based Simple) displays correctly at every zoom level.
+
+- [x] 11.1 — Core architecture: `bounds` derived from `(zoomLevel, anchorDate)` via `startOf*`/`endOf*`, so zooming never resets your place — drill-out preserves context (the month you land on contains the week you were just looking at), not "jump to current period"
+- [x] 11.2 — Week grid (day strip), Month grid (calendar w/ overflow days), Year grid (month cards) — one component branching on `zoomLevel` instead of three separate files
+- [x] 11.3 — Tap-a-cell day/month summary panel
+- [x] 11.4 — `GoalCard` list per period, reused verbatim across all three zoom levels (already scope-agnostic from prior work)
+- [x] 11.5 — Consistent icon-based selection header (select-all / edit-single / delete-cascade) shared across all zoom levels — this also fixed a pre-existing Month-view bug where two different selection headers (an old text-based one and a new icon-based one) were both rendering simultaneously
+- [x] 11.6 — Tap-to-edit removed from `GoalCard` at every zoom level — long-press → selection mode → pencil icon is now the only path to editing, consistent with Today's interaction model (previously Month/Week let a bare tap open the edit sheet, which also caused a "completing" goal card to vanish mid-period)
+- [x] 11.7 — Header redesigned to fix overflow: removed the three-button zoom segment (was pushing content off-screen on longer date ranges like "Sep 7 – Sep 13, 2026"); period label itself is now the zoom-out control (tap to go week→month→year)
+- [x] 11.8 — Zoom-in interactions: tap a month in Year view drills to that Month; a week-number column added alongside each row of the Month grid, tapping it drills to that Week (previously no way to reach Week from Month at all)
+- [x] 11.9 — "Today" button fixed (previously a dead no-op) — now recenters `anchorDate` and `selectedDayStr` to the current app-day
+- [x] 11.10 — Year-view density bug fixed: month cards were grouping by the yearly parent goal's own `scheduledDate` (always Jan 1, since that's where yearly goals are inserted), showing all activity dumped into January regardless of when work actually happened. Fixed via `getAllDescendantTasks` — walks each yearly goal's real daily leaves and buckets by the month they actually landed in.
+- [x] 11.11 — Year-view counts are search/tag-aware for free, since the descendant walk (11.10) only runs over the already-filtered goal list — searching "draw" shows only Draw-related monthly counts, not the total of everything
+- [x] 11.12 — Habits, Events, and Activities restored into the day-focus panel (Habits only for the current app-day, since a habit's "done today" state doesn't mean anything projected onto a past/future date; Events and Activities render for whichever day is selected, same as the old per-scope screens did)
+- [x] 11.13 — Standalone Activity search block (independent of calendar bounds/zoom level) — answers "when did I last do X" directly, since Activity history is inherently not calendar-scoped
+- [ ] 11.14 — Old `week.tsx`, `month.tsx`, `year.tsx`, `explore.tsx`, `goal.tsx` route files and their tab-bar entries to be deleted once Horizon is confirmed fully stable (goals.tsx was never built past the Milestone 1 stub; explore.tsx was an unused starter leftover)
+- [ ] 11.15 — Beyond-Today "add" sheet (Week/Month/Year/Custom-date-range switcher, mirroring Today's Task/Habit/Event/Activity `AddTypeSwitcher`) — deferred until Horizon is fully settled
+
+---
+
+## Milestone 12 — Pursuits
+*Added: this cycle*
+**Done when:** A user can track an open-ended pursuit (gym routine, study topic, creative project — domain-agnostic) with a self-declared status (à la MAL watch-status), free-form notes, and loosely link tasks to it without any completion-percentage math being computed or implied.
+
+- [x] 12.1 — `pursuits` table: title, `status` enum (plan_to_do / active / on_hold / dropped / completed), free-form `description`
+- [x] 12.2 — `pursuitId` nullable column on `tasks`, `onDelete: 'set null'` — membership, not ownership; deleting a Pursuit never deletes or cascades to its linked tasks (deliberately the opposite of `sourceTaskId`'s cascade-delete semantics)
+- [x] 12.3 — CRUD queries: `insertPursuit`, `getAllPursuits`, `updatePursuit`, `deletePursuit`, `getTasksByPursuit`, `setTaskPursuit`
+- [x] 12.4 — `PursuitPicker` component — single-select, create-new-inline, same visual language as the existing `TagPicker`
+- [ ] 12.5 — Wire `PursuitPicker` into all four task creation/edit modals (`new-task.tsx`, Weekly, Monthly, Yearly) — component built, modal integration still mechanical/pending
+- [x] 12.6 — `pursuits.tsx` screen: status-filter chips, card list, create sheet, detail sheet (status switcher, editable notes, linked-task list with tap-through)
+- [x] 12.7 — Deliberately no computed completion percentage anywhere in this feature — status is 100% user-declared, matching the MAL framing explicitly requested; a Pursuit can be "Completed" with unfinished linked tasks, or "Plan to Do" with none yet, without the app treating either as an inconsistency
+- [ ] 12.8 — Tab bar entry / entry point from Account — screen exists, not yet wired into navigation
+
+---
+
+## Milestone 13 — Deferred / Designed-not-built
+> Real design decisions were made on these; recorded here so the "why" survives even though nothing's built yet.
+
+- [ ] 13.1 — **Sequential Hybrid milestones for higher-scope goals.** Hybrid at Week/Month/Year scope currently has no "trickle down" equivalent to Progression's — a 5-milestone yearly Hybrid goal just sits as a flat checklist with no daily presence. Designed direction: mark a Hybrid goal as sequential (ordered) or non-sequential; sequential goals surface only their current unfinished milestone as a real `scope: daily` proxy task (via the same `sourceTaskId`/`ensureDailyDecompositionForDate` engine, a third leaf-kind alongside quantity and count), auto-advancing to the next milestone on completion. Non-sequential goals get no auto-surfacing, stay visible only in the existing expandable checklist. Requires an explicit ordering field on subtasks (currently implicit via `id`/insertion order). Not started.
+- [ ] 13.2 — **Flexible task shape** ("plain task can gain a progress bar, subtasks can gain their own progress bars, sheets become 'Add task' + 'Add more options'") — explicitly acknowledged as a future rigidity-removal pass over the whole task model. Nothing built yet; noted so `getCompletionFraction`-style centralization work (13.1, Pursuits rollups if ever added) is written in a way that survives this later without a second rewrite.
+- [ ] 13.3 — Correct-but-expensive dark mode (per-component `useTheme()` hook instead of the mutated-static-object + full-remount approach in 7.3) — explicitly deferred, not forgotten.
 
 ---
 
@@ -404,3 +512,6 @@ Added: 2026-07-18
 - [x] Milestone 3 — Task Intelligence
 - [x] Milestone 4 — Progression Tasks and Goals
 - [x] Milestone 5 — Habits, Events, Tags
+- [x] Milestone 6 — Views and History
+- [x] Milestone 9 — Goal Decomposition Engine
+- [x] Milestone 11 — Horizon (unified Week/Month/Year)

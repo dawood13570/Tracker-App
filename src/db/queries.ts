@@ -1,6 +1,5 @@
 import { calculateHabitStreak } from '@/engine/streaks';
-// add to date-fns import:
-import { differenceInCalendarDays, differenceInCalendarWeeks, endOfMonth, endOfWeek, format, parseISO, startOfMonth, startOfWeek } from 'date-fns';
+import { addDays, differenceInCalendarDays, differenceInCalendarWeeks, endOfMonth, endOfWeek, endOfYear, format, parseISO, startOfMonth, startOfWeek, startOfYear } from 'date-fns';
 import type { InferInsertModel } from 'drizzle-orm';
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm';
 import { db } from './client';
@@ -14,7 +13,9 @@ import {
   habitLogs,
   habits,
   habitTags,
+  notes,
   progressLogs,
+  projects,
   tags,
   tasks,
   taskTags
@@ -584,6 +585,8 @@ export async function getAllTagAssociations() {
   };
 }
 
+// db/queries.ts
+
 export async function applyRolloverSnapshots(
   actions: Array<{ sourceId: number; newCard: any }>
 ): Promise<void> {
@@ -594,8 +597,27 @@ export async function applyRolloverSnapshots(
       .set({ rolloverEnabled: false })
       .where(eq(tasks.id, action.sourceId));
 
-    // 2. Insert the new active instance for today
-    await db.insert(tasks).values(action.newCard);
+    // 2. Insert the new active instance for today and get its generated ID back
+    const [insertedNewCard] = await db
+      .insert(tasks)
+      .values(action.newCard)
+      .returning();
+
+    // 3. If it's a Hybrid task, copy over its uncompleted subtasks to the new instance
+    if (insertedNewCard && action.newCard.type === 'Hybrid') {
+      const existingSubtasks = await getSubtasksByParent(action.sourceId);
+      for (const sub of existingSubtasks) {
+        if (!sub.isCompleted) {
+          await insertSubtask(insertedNewCard.id, {
+            title: sub.title,
+            type: sub.type,
+            priority: sub.priority,
+            scheduledDate: action.newCard.scheduledDate,
+            isCompleted: false,
+          });
+        }
+      }
+    }
   }
 }
 
@@ -866,27 +888,93 @@ export async function getEffectiveProgress(taskId: number): Promise<number> {
   return childTotals.reduce((sum, v) => sum + v, 0);
 }
 
-export async function ensureDailyDecompositionForDate(dateStr: string): Promise<void> {
-  const dayDate = parseISO(dateStr);
-  const weekStart = format(startOfWeek(dayDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-  const weekEnd = format(endOfWeek(dayDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-  const monthStart = format(startOfMonth(dayDate), 'yyyy-MM-dd');
-  const monthEnd = format(endOfMonth(dayDate), 'yyyy-MM-dd');
+export async function dedupeDuplicateOccurrences(): Promise<void> {
+  const all = await db
+    .select()
+    .from(tasks)
+    .where(isNotNull(tasks.sourceTaskId));
 
-  const monthlyGoals = await getMonthlyTasks(monthStart, monthEnd);
-  for (const monthly of monthlyGoals) {
-    if (monthly.type !== 'Progression') continue;
-    const weeksRemaining = differenceInCalendarWeeks(parseISO(monthEnd), dayDate, { weekStartsOn: 1 }) + 1;
-    await decomposeMonthlyProgressionToWeekly(monthly, weekStart, weeksRemaining);
-  }
+  const seen = new Map<string, TaskRow>();
 
-  const weeklyGoals = await getWeeklyTasks(weekStart, weekEnd);
-  for (const weekly of weeklyGoals) {
-    if (weekly.type !== 'Progression') continue;
-    const daysRemaining = differenceInCalendarDays(parseISO(weekEnd), dayDate) + 1;
-    await decomposeWeeklyProgressionToDaily(weekly, dateStr, daysRemaining);
+  for (const t of all) {
+    const key = `${t.sourceTaskId}:${t.scheduledDate}`;
+    const existing = seen.get(key);
+
+    if (!existing) {
+      seen.set(key, t);
+      continue;
+    }
+
+    // Keep whichever is completed; if neither or both, keep the lower id
+    const keep = existing.isCompleted
+      ? existing
+      : t.isCompleted
+      ? t
+      : existing.id < t.id
+      ? existing
+      : t;
+
+    const drop = keep === existing ? t : existing;
+    await deleteTask(drop.id);
+    seen.set(key, keep);
   }
 }
+
+let decompositionInFlight: Promise<void> | null = null;
+
+export async function ensureDailyDecompositionForDate(dateStr: string): Promise<void> {
+  if (decompositionInFlight) return decompositionInFlight;
+
+  decompositionInFlight = (async () => {
+    const dayDate = parseISO(dateStr);
+    const weekStart = format(startOfWeek(dayDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    const weekEnd = format(endOfWeek(dayDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    const monthStart = format(startOfMonth(dayDate), 'yyyy-MM-dd');
+    const monthEnd = format(endOfMonth(dayDate), 'yyyy-MM-dd');
+    const yearStart = format(startOfYear(dayDate), 'yyyy-MM-dd');
+    const yearEnd = format(endOfYear(dayDate), 'yyyy-MM-dd');
+
+    const yearlyGoals = await getYearlyTasks(yearStart, yearEnd);
+    for (const yearly of yearlyGoals) {
+      if (yearly.type === 'Progression') {
+        const monthsRemaining = 12 - dayDate.getMonth();
+        await decomposeYearlyProgressionToMonthly(yearly, monthStart, monthsRemaining);
+      } else if (yearly.type === 'Simple' && yearly.totalProgress) {
+        await decomposeCountGoalToNextOccurrence(yearly, dateStr, yearEnd);
+      }
+    }
+
+    const monthlyGoals = await getMonthlyTasks(monthStart, monthEnd);
+    for (const monthly of monthlyGoals) {
+      if (monthly.type === 'Progression') {
+        const weeksRemaining = differenceInCalendarWeeks(parseISO(monthEnd), dayDate, { weekStartsOn: 1 }) + 1;
+        await decomposeMonthlyProgressionToWeekly(monthly, weekStart, weeksRemaining);
+      } else if (monthly.type === 'Simple' && monthly.totalProgress) {
+        await decomposeCountGoalToNextOccurrence(monthly, dateStr, monthEnd);
+      }
+    }
+
+    const weeklyGoals = await getWeeklyTasks(weekStart, weekEnd);
+    for (const weekly of weeklyGoals) {
+      if (weekly.type === 'Progression') {
+        const daysRemaining = differenceInCalendarDays(parseISO(weekEnd), dayDate) + 1;
+        await decomposeWeeklyProgressionToDaily(weekly, dateStr, daysRemaining);
+      } else if (weekly.type === 'Simple' && weekly.totalProgress) {
+        await decomposeCountGoalToNextOccurrence(weekly, dateStr, weekEnd);
+      }
+    }
+
+    // Run dedupe at the end of every decomposition cycle
+    await dedupeDuplicateOccurrences();
+  })();
+
+  try {
+    await decompositionInFlight;
+  } finally {
+    decompositionInFlight = null;
+  }
+}
+
 export async function setAbsoluteProgress(taskId: number, targetValue: number): Promise<void> {
   const current = await getCurrentProgress(taskId);
   const delta = targetValue - current;
@@ -900,4 +988,204 @@ export async function deleteTaskCascade(id: number): Promise<void> {
     await deleteTaskCascade(child.id);
   }
   await deleteTask(id);
+}
+
+export async function getCompletedOccurrenceCount(parentId: number): Promise<number> {
+  const children = await getChildTasks(parentId);
+  return children.filter((c) => c.isCompleted).length;
+}
+
+export async function decomposeCountGoalToNextOccurrence(
+  parentTask: TaskRow,
+  todayStr: string,
+  periodEndStr: string
+): Promise<TaskRow | null> {
+  const target = parentTask.totalProgress ?? 0;
+  if (target <= 0) return null;
+
+  const completedCount = await getCompletedOccurrenceCount(parentTask.id);
+  const remaining = target - completedCount;
+  if (remaining <= 0) return null;
+
+  const children = await getChildTasks(parentTask.id);
+
+  // If there's an uncompleted occurrence for today or the future, don't schedule another
+  const pending = children.find((c) => !c.isCompleted && c.scheduledDate >= todayStr);
+  if (pending) return pending;
+
+  const daysLeft = Math.max(1, differenceInCalendarDays(parseISO(periodEndStr), parseISO(todayStr)) + 1);
+  const idealSpacing = Math.floor(daysLeft / remaining);
+  const cappedSpacing = Math.max(1, Math.min(parentTask.maxGapDays ?? idealSpacing, idealSpacing || 1));
+
+  const mostRecent = children.length > 0
+    ? children.reduce((latest, c) => (c.scheduledDate > latest.scheduledDate ? c : latest))
+    : null;
+
+  let nextDateStr: string;
+  if (!mostRecent) {
+    nextDateStr = todayStr;
+  } else {
+    const candidate = format(addDays(parseISO(mostRecent.scheduledDate), cappedSpacing), 'yyyy-MM-dd');
+    nextDateStr = candidate < todayStr ? todayStr : candidate;
+  }
+
+  if (nextDateStr > periodEndStr) return null;
+
+  const [created] = await db
+    .insert(tasks)
+    .values({
+      title: parentTask.title,
+      type: 'Simple',
+      priority: parentTask.priority,
+      scheduledDate: nextDateStr,
+      scope: 'daily',
+      sourceTaskId: parentTask.id,
+      rolloverEnabled: false,
+    })
+    .returning();
+
+  return created;
+}
+
+export async function getYearlyTasks(yearStartDate: string, yearEndDate: string): Promise<TaskRow[]> {
+  return db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.scope, 'yearly'),
+        isNull(tasks.parentId),
+        gte(tasks.scheduledDate, yearStartDate),
+        lte(tasks.scheduledDate, yearEndDate)
+      )
+    )
+    .orderBy(tasks.id);
+}
+
+export async function decomposeYearlyProgressionToMonthly(
+  yearlyTask: TaskRow,
+  monthStartDate: string,
+  monthsRemaining: number
+): Promise<TaskRow> {
+  const currentDone = await getEffectiveProgress(yearlyTask.id);
+  const totalNeeded = yearlyTask.totalProgress ?? 0;
+  const remainingTarget = Math.max(0, totalNeeded - currentDone);
+  const monthlyTarget = Math.ceil(remainingTarget / Math.max(1, monthsRemaining));
+
+  const [existingMonthly] = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.sourceTaskId, yearlyTask.id), eq(tasks.scheduledDate, monthStartDate), eq(tasks.scope, 'monthly')));
+
+  if (existingMonthly) {
+    const [updated] = await db.update(tasks).set({ totalProgress: monthlyTarget }).where(eq(tasks.id, existingMonthly.id)).returning();
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(tasks)
+    .values({
+      title: `${yearlyTask.title} (Monthly)`,
+      type: 'Progression',
+      priority: yearlyTask.priority,
+      scheduledDate: monthStartDate,
+      scope: 'monthly',
+      sourceTaskId: yearlyTask.id,
+      totalProgress: monthlyTarget,
+      progressUnit: yearlyTask.progressUnit,
+      deadline: yearlyTask.deadline,
+      rolloverEnabled: false,
+    })
+    .returning();
+  return created;
+}
+
+export async function getNotesByScope(scope: 'daily' | 'weekly' | 'monthly' | 'yearly') {
+  return db.select().from(notes).where(eq(notes.scope, scope)).orderBy(desc(notes.dateKey));
+}
+
+export async function getNotesForScope(
+  scope: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom',
+  dateKey: string
+) {
+  return db
+    .select()
+    .from(notes)
+    .where(and(eq(notes.scope, scope), eq(notes.dateKey, dateKey)))
+    .orderBy(desc(notes.createdAt));
+}
+
+export async function createNote(
+  scope: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom',
+  dateKey: string,
+  content: string = '',
+  title?: string
+) {
+  const [created] = await db
+    .insert(notes)
+    .values({ scope, dateKey, content })
+    .returning();
+  return created;
+}
+
+export async function updateNoteContent(id: number, content: string) {
+  const [updated] = await db
+    .update(notes)
+    .set({ content, updatedAt: sql`(CURRENT_TIMESTAMP)` })
+    .where(eq(notes.id, id))
+    .returning();
+  return updated;
+}
+
+export async function deleteNote(id: number) {
+  const [deleted] = await db.delete(notes).where(eq(notes.id, id)).returning();
+  return deleted;
+}
+
+export async function getProgressLoggedForDate(dateStr: string): Promise<number> {
+  const result = await db.get<{ total: number | null }>(
+    sql`SELECT SUM(amount) as total FROM progress_logs WHERE date(logged_at) = ${dateStr}`
+  );
+  return result?.total ?? 0;
+}
+
+export type ProjectRow = typeof projects.$inferSelect;
+
+export async function insertProject(data: { title: string; status?: ProjectRow['status']; description?: string | null }) {
+  const [inserted] = await db.insert(projects).values(data).returning();
+  return inserted;
+}
+
+export async function getAllProjects(): Promise<ProjectRow[]> {
+  return db.select().from(projects).orderBy(desc(projects.updatedAt));
+}
+
+export async function getProjectsByStatus(status: ProjectRow['status']): Promise<ProjectRow[]> {
+  return db.select().from(projects).where(eq(projects.status, status)).orderBy(desc(projects.updatedAt));
+}
+
+export async function updateProject(id: number, data: Partial<{ title: string; status: ProjectRow['status']; description: string | null }>) {
+  const [updated] = await db.update(projects).set({ ...data, updatedAt: sql`(CURRENT_TIMESTAMP)` }).where(eq(projects.id, id)).returning();
+  return updated;
+}
+
+export async function deleteProject(id: number) {
+  const [deleted] = await db.delete(projects).where(eq(projects.id, id)).returning();
+  return deleted;
+}
+
+export async function getTasksByProject(projectId: number): Promise<TaskRow[]> {
+  return db.select().from(tasks).where(eq(tasks.projectId, projectId));
+}
+
+export async function setTaskProject(taskId: number, projectId: number | null) {
+  return updateTask(taskId, { projectId });
+}
+export async function getAllDescendantTasks(parentId: number): Promise<TaskRow[]> {
+  const direct = await getChildTasks(parentId);
+  let all: TaskRow[] = [...direct];
+  for (const child of direct) {
+    all = all.concat(await getAllDescendantTasks(child.id));
+  }
+  return all;
 }
