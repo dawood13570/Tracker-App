@@ -1,10 +1,26 @@
-//TaskCard.tsx
+// TaskCard.tsx
 import type { PaceResult } from '@/engine/pace';
 import { getEffectivePriority } from '@/engine/priority';
+import { taskHasProgress } from '@/engine/taskShape';
 import { useTagStore } from '@/store/tagStore';
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getSubtasksByParent, getTagsForTask, setAbsoluteProgress } from '../db/queries';
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import {
+  getSubtasksByParent,
+  getTagsForTask,
+  revertToPreviousProgress,
+  setAbsoluteProgress,
+} from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
 import { useStore } from '../store/useStore';
 import { colors } from '../theme/colors';
@@ -27,7 +43,6 @@ interface TaskCardProps {
   isSelected: boolean;
   onLongPressCard: () => void;
   onToggleSelect: () => void;
-
 }
 
 function getPriorityAccentColor(priority: 'Low' | 'Medium' | 'High') {
@@ -56,12 +71,21 @@ export function TaskCard({
   onLongPressCard,
   onToggleSelect,
 }: TaskCardProps) {
-  const { evolvingPriorityEnabled } = useStore();
+  const {
+    evolvingPriorityEnabled,
+    skipProgressionAlerts,
+    setSkipProgressionAlerts,
+  } = useStore();
   const { toggleTask } = useTaskStore();
   const tagVersion = useTagStore((state) => state.tagVersion);
 
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [taskTags, setTaskTags] = useState<{ id: number; name: string; color: string | null }[]>([]);
+  const [editingSubtaskId, setEditingSubtaskId] = useState<number | null>(null);
+  const [subtaskInputText, setSubtaskInputText] = useState<string>('');
+  const [localSubtaskProg, setLocalSubtaskProg] = useState<Record<number, number>>({});
+
+  const isSubmittingSubtask = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -75,24 +99,102 @@ export function TaskCard({
 
   useEffect(() => {
     let active = true;
-    if (task.type === 'Hybrid' && isExpanded) {
+    if (isExpanded) {
       getSubtasksByParent(task.id).then((items) => {
-        if (active) setSubtasks(items ?? []);
+        if (active) {
+          setSubtasks(items ?? []);
+          const initialMap: Record<number, number> = {};
+          (items ?? []).forEach((st) => {
+            initialMap[st.id] = st.currentProgress ?? 0;
+          });
+          setLocalSubtaskProg((prev) => ({ ...initialMap, ...prev }));
+        }
       });
     }
     return () => {
       active = false;
     };
-  }, [task.id, task.isCompleted, isExpanded, task.type]);
+  }, [task.id, task.isCompleted, isExpanded]);
 
   const handleToggleSubtask = async (subtaskId: number) => {
-    const updated = subtasks.map((s) => (s.id === subtaskId ? { ...s, isCompleted: !s.isCompleted } : s));
+    const sub = subtasks.find((s) => s.id === subtaskId);
+    if (!sub) return;
+
+    const nextCompleted = !sub.isCompleted;
+    const total = sub.totalProgress ?? 0;
+
+    let nextProg = localSubtaskProg[subtaskId] ?? sub.currentProgress ?? 0;
+
+    if (taskHasProgress(sub)) {
+      if (nextCompleted) {
+        nextProg = total > 0 ? total : nextProg;
+        await setAbsoluteProgress(subtaskId, nextProg);
+      } else {
+        nextProg = await revertToPreviousProgress(subtaskId);
+      }
+      setLocalSubtaskProg((prev) => ({ ...prev, [subtaskId]: nextProg }));
+    }
+
+    const updated = subtasks.map((s) =>
+      s.id === subtaskId
+        ? { ...s, isCompleted: nextCompleted, currentProgress: nextProg }
+        : s
+    );
     setSubtasks(updated);
+
     const completed = updated.filter((s) => s.isCompleted).length;
     if (onSubtasksCountUpdate) {
       onSubtasksCountUpdate(task.id, completed, updated.length);
     }
+
     await toggleTask(subtaskId);
+    onProgressChanged?.();
+  };
+
+  const handleSubtaskProgressSubmit = async (subtaskId: number, total: number, rawVal: string) => {
+    if (isSubmittingSubtask.current) return;
+    isSubmittingSubtask.current = true;
+
+    const parsed = Number(rawVal);
+    const sub = subtasks.find((s) => s.id === subtaskId);
+
+    setEditingSubtaskId(null);
+    Keyboard.dismiss();
+
+    if (Number.isNaN(parsed) || !sub) {
+      isSubmittingSubtask.current = false;
+      return;
+    }
+
+    const clamped = Math.max(0, Math.round(parsed));
+
+    setLocalSubtaskProg((prev) => ({ ...prev, [subtaskId]: clamped }));
+    await setAbsoluteProgress(subtaskId, clamped);
+
+    const shouldComplete = total > 0 && clamped >= total;
+    const needsStatusToggle = sub.isCompleted !== shouldComplete;
+
+    if (needsStatusToggle) {
+      await toggleTask(subtaskId);
+    }
+
+    const updated = subtasks.map((s) =>
+      s.id === subtaskId
+        ? { ...s, currentProgress: clamped, isCompleted: shouldComplete }
+        : s
+    );
+    setSubtasks(updated);
+
+    const completedCount = updated.filter((s) => s.isCompleted).length;
+    if (onSubtasksCountUpdate) {
+      onSubtasksCountUpdate(task.id, completedCount, updated.length);
+    }
+
+    onProgressChanged?.();
+
+    setTimeout(() => {
+      isSubmittingSubtask.current = false;
+    }, 100);
   };
 
   const effectivePriority = evolvingPriorityEnabled
@@ -103,64 +205,176 @@ export function TaskCard({
     : task.priority;
 
   const displayedProgress = currentProgress ?? task.currentProgress ?? 0;
+  const hasSubtasks = Boolean(subtaskCount && subtaskCount.total > 0);
+
+  const executeComplete = async () => {
+    const total = task.totalProgress ?? 1;
+    await setAbsoluteProgress(task.id, total);
+    onToggle(task.id, false);
+    onProgressChanged?.();
+  };
+
+  const executeUndo = async () => {
+    await revertToPreviousProgress(task.id);
+    onToggle(task.id, true);
+    onProgressChanged?.();
+  };
 
   const handleProgressionToggle = () => {
-  if (!task.isCompleted) {
-    Alert.alert(
-      'Mark as done?',
-      `This sets progress to ${task.totalProgress}/${task.totalProgress} ${task.progressUnit ?? ''}.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Mark Done',
-          onPress: async () => {
-            if (task.totalProgress != null) {
-              await setAbsoluteProgress(task.id, task.totalProgress);
-            }
-            onToggle(task.id, task.isCompleted);
-            onProgressChanged?.();
-          },
-        },
-      ]
-    );
-  } else {
-    Alert.alert('Undo completion?', 'This will mark the task as not done.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Undo', style: 'destructive', onPress: () => onToggle(task.id, task.isCompleted) },
-    ]);
-  }
-};
+    const total = task.totalProgress ?? 1;
 
-const handleSliderUpdate = async (taskId: number, val: number) => {
-  const total = task.totalProgress ?? 0;
-  if (task.isCompleted && val < total) {
-    Alert.alert('Undo completion?', 'Reducing progress will mark this task as not done.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Continue',
-        style: 'destructive',
-        onPress: async () => {
-          await setAbsoluteProgress(taskId, val);
-          onToggle(taskId, task.isCompleted);
-          onProgressChanged?.();
-        },
-      },
-    ]);
-  } else {
+    if (skipProgressionAlerts) {
+      if (!task.isCompleted) {
+        executeComplete();
+      } else {
+        executeUndo();
+      }
+      return;
+    }
+
+    if (!task.isCompleted) {
+      Alert.alert(
+        'Mark as done?',
+        `This sets progress to ${total}/${total} ${task.progressUnit ?? ''}.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: "Don't Ask Again",
+            onPress: async () => {
+              setSkipProgressionAlerts(true);
+              await executeComplete();
+            },
+          },
+          {
+            text: 'Mark Done',
+            style: 'default',
+            onPress: executeComplete,
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Undo completion?',
+        'This will revert to your last recorded milestone and mark the task as incomplete.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: "Don't Ask Again",
+            onPress: async () => {
+              setSkipProgressionAlerts(true);
+              await executeUndo();
+            },
+          },
+          {
+            text: 'Undo',
+            style: 'destructive',
+            onPress: executeUndo,
+          },
+        ]
+      );
+    }
+  };
+
+  const handleSliderUpdate = async (taskId: number, val: number) => {
+    const total = task.totalProgress ?? 0;
+
+    if (!task.isCompleted && val >= total && total > 0) {
+      await setAbsoluteProgress(taskId, val);
+      onToggle(taskId, false);
+      onProgressChanged?.();
+      return;
+    }
+
+    if (task.isCompleted && val < total) {
+      const dropDown = async () => {
+        await setAbsoluteProgress(taskId, val);
+        onToggle(taskId, true);
+        onProgressChanged?.();
+      };
+
+      if (skipProgressionAlerts) {
+        await dropDown();
+        return;
+      }
+
+      Alert.alert(
+        'Undo completion?',
+        'Reducing progress below the target will mark this task as not done.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: "Don't Ask Again",
+            onPress: async () => {
+              setSkipProgressionAlerts(true);
+              await dropDown();
+            },
+          },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: dropDown,
+          },
+        ]
+      );
+      return;
+    }
+
     await setAbsoluteProgress(taskId, val);
     onProgressChanged?.();
-  }
-};
+  };
 
-const handlePress = () => {
-  if (selectionMode) {
-    onToggleSelect();
-  } else if (task.type === 'Progression' && task.totalProgress != null) {
-    handleProgressionToggle();
-  } else {
-    onToggle(task.id, task.isCompleted);
-  }
-};
+  // Normal Parent Toggle + Auto-adjust subtask progress to target
+  const handleParentToggle = async () => {
+    const nextCompleted = !task.isCompleted;
+
+    // 1. Let your store toggle the parent task exactly as it always does
+    await onToggle(task.id, task.isCompleted);
+
+    // 2. Fetch children and adjust progression subtasks
+    if (hasSubtasks) {
+      const items = await getSubtasksByParent(task.id);
+      const progSubtasks = (items ?? []).filter(taskHasProgress);
+
+      if (nextCompleted) {
+        // Completing parent -> bump subtasks below target to totalProgress
+        for (const sub of progSubtasks) {
+          const total = sub.totalProgress ?? 0;
+          const current = sub.currentProgress ?? 0;
+          if (total > 0 && current < total) {
+            await setAbsoluteProgress(sub.id, total);
+          }
+        }
+      } else {
+        // Uncompleting parent -> revert subtasks back to prior milestone
+        for (const sub of progSubtasks) {
+          await revertToPreviousProgress(sub.id);
+        }
+      }
+
+      // Refresh subtasks list in memory if open
+      if (isExpanded) {
+        const refreshed = await getSubtasksByParent(task.id);
+        setSubtasks(refreshed ?? []);
+        const newMap: Record<number, number> = {};
+        (refreshed ?? []).forEach((s) => {
+          newMap[s.id] = s.currentProgress ?? 0;
+        });
+        setLocalSubtaskProg(newMap);
+      }
+    }
+
+    onProgressChanged?.();
+  };
+
+  const handlePress = () => {
+    if (selectionMode) {
+      onToggleSelect();
+    } else if (taskHasProgress(task)) {
+      handleProgressionToggle();
+    } else {
+      handleParentToggle();
+    }
+  };
 
   const handleLongPress = () => {
     if (!selectionMode) {
@@ -173,7 +387,7 @@ const handlePress = () => {
       style={[
         styles.taskCard,
         task.isCompleted && styles.completedCard,
-        isSelected && styles.taskCard,
+        isSelected && styles.selectedCard,
       ]}
       collapsable={false}
     >
@@ -190,9 +404,10 @@ const handlePress = () => {
           <Pressable
             onPress={handlePress}
             onLongPress={handleLongPress}
-            style={({ pressed }) => [styles.pressableRow, pressed && styles.cardPressed]}
+            style={({ pressed }) => [styles.pressableBlock, pressed && styles.cardPressed]}
           >
-            <View style={styles.cardRow}>
+            {/* Top Row: Checkbox + Title/Badges + Arrow */}
+            <View style={styles.headerRow}>
               <View style={styles.leadSlot}>
                 <View
                   style={[styles.leadOverlay, { opacity: selectionMode ? 1 : 0 }]}
@@ -211,16 +426,55 @@ const handlePress = () => {
                 </View>
               </View>
 
-              <View style={styles.cardContent}>
+              <View style={styles.titleSlot}>
                 <Text
                   style={[styles.taskTitle, task.isCompleted && styles.completedText]}
                   numberOfLines={2}
                 >
                   {task.title || 'Untitled Task'}
                 </Text>
+              </View>
 
-                {taskTags.length > 0 && (
+              {/* Trailing Slot: Subtask Count & Expand Arrow */}
+              <View style={styles.trailingSlot}>
+                {hasSubtasks && (
+                  <View style={styles.hybridBadge}>
+                    <Text style={styles.hybridBadgeText}>
+                      {subtaskCount?.completed ?? 0}/{subtaskCount?.total ?? 0}
+                    </Text>
+                  </View>
+                )}
+
+                {hasSubtasks && (
+                  <View
+                    style={{ opacity: selectionMode ? 0 : 1 }}
+                    pointerEvents={selectionMode ? 'none' : 'auto'}
+                  >
+                    <TouchableOpacity
+                      style={styles.expandButton}
+                      onPress={onToggleExpand}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    >
+                      <Text style={[styles.arrowIcon, isExpanded && styles.arrowIconExpanded]}>
+                        {isExpanded ? '▲' : '▼'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Bottom Meta & Sliders */}
+            {(taskTags.length > 0 ||
+              Boolean(task.procrastinationCount && task.procrastinationCount > 0) ||
+              taskHasProgress(task)) && (
+              <View style={styles.detailsBlock}>
+                {(taskTags.length > 0 ||
+                  Boolean(task.procrastinationCount && task.procrastinationCount > 0)) && (
                   <View style={styles.tagRow}>
+                    {Boolean(task.procrastinationCount && task.procrastinationCount > 0) && (
+                      <ProcrastinationBadge count={task.procrastinationCount!} />
+                    )}
                     {taskTags.map((tag) => (
                       <View
                         key={tag.id}
@@ -232,68 +486,34 @@ const handlePress = () => {
                   </View>
                 )}
 
-                {Boolean(task.procrastinationCount && task.procrastinationCount > 0) && (
-                  <View style={styles.metaRow}>
-                    <ProcrastinationBadge count={task.procrastinationCount!} />
-                  </View>
-                )}
+                {taskHasProgress(task) && (
+                  <View style={styles.progressContainer}>
+                    <ProgressionSlider
+                      taskId={task.id}
+                      current={displayedProgress}
+                      total={task.totalProgress!}
+                      unit={task.progressUnit}
+                      onUpdate={handleSliderUpdate}
+                    />
 
-                {task.type === 'Hybrid' && Boolean(subtaskCount) && (
-                  <View style={styles.hybridBadge}>
-                    <Text style={styles.hybridBadgeText}>
-                      {subtaskCount?.completed ?? 0}/{subtaskCount?.total ?? 0} done
-                    </Text>
-                  </View>
-                )}
-
-                {task.type === 'Progression' &&
-  task.totalProgress !== null &&
-  task.totalProgress !== undefined && (
-    <View style={{ marginTop: 6, width: '100%' }}>
-      <ProgressionSlider
-        taskId={task.id}
-        current={displayedProgress}
-        total={task.totalProgress}
-        unit={task.progressUnit}
-        onUpdate={handleSliderUpdate}
-      />
-      {task.surplusMode === 'bank_it' && (task.bufferDays ?? 0) > 0 && (
-        <View style={styles.bankedBadge}>
-          <Text style={styles.bankedBadgeText}>
-            {task.bufferDays} {task.bufferDays === 1 ? 'day' : 'days'} banked
-          </Text>
-        </View>
-      )}
-    </View>
-  )}
-
-                {task.type === 'Progression' && Boolean(pace) && (
-                  <View style={{ marginTop: 4 }}>
-                    <PaceIndicator status={pace!.status} />
+                    <View style={styles.progressMetaRow}>
+                      {Boolean(pace) && <PaceIndicator status={pace!.status} />}
+                      {task.surplusMode === 'bank_it' && (task.bufferDays ?? 0) > 0 && (
+                        <View style={styles.bankedBadge}>
+                          <Text style={styles.bankedBadgeText}>
+                            {task.bufferDays} {task.bufferDays === 1 ? 'day' : 'days'} banked
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 )}
               </View>
-
-              {task.type === 'Hybrid' && (
-                <View
-                  style={{ opacity: selectionMode ? 0 : 1 }}
-                  pointerEvents={selectionMode ? 'none' : 'auto'}
-                >
-                  <TouchableOpacity
-                    style={styles.expandButton}
-                    onPress={onToggleExpand}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Text style={[styles.arrowIcon, isExpanded && styles.arrowIconExpanded]}>
-                      {isExpanded ? '▲' : '▼'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+            )}
           </Pressable>
 
-          {!selectionMode && task.type === 'Hybrid' && isExpanded && (
+          {/* Subtasks Accordion */}
+          {!selectionMode && hasSubtasks && isExpanded && (
             <View style={styles.inlineSubtaskContainer}>
               <View style={styles.inlineDivider} />
               {subtasks.length === 0 ? (
@@ -301,32 +521,86 @@ const handlePress = () => {
                   No subtasks. Hold and edit task to add subtasks.
                 </Text>
               ) : (
-                subtasks.map((sub) => (
-                  <View key={sub.id} style={styles.subtaskItemRow}>
-                    <TouchableOpacity
-                      style={styles.subtaskCheckRow}
-                      onPress={() => handleToggleSubtask(sub.id)}
-                    >
-                      <View
-                        style={[
-                          styles.subtaskCheckbox,
-                          sub.isCompleted && styles.subtaskCheckboxChecked,
-                        ]}
+                subtasks.map((sub) => {
+                  const isProgSubtask = taskHasProgress(sub);
+                  const subProg = localSubtaskProg[sub.id] ?? sub.currentProgress ?? 0;
+                  const subTotal = sub.totalProgress ?? 0;
+                  const isEditingThisSubtask = editingSubtaskId === sub.id;
+
+                  return (
+                    <View key={sub.id} style={styles.subtaskItemRow}>
+                      <TouchableOpacity
+                        style={styles.subtaskCheckRow}
+                        onPress={() => handleToggleSubtask(sub.id)}
                       >
-                        {sub.isCompleted && <Text style={styles.checkmark}>✓</Text>}
-                      </View>
-                      <Text
-                        style={[
-                          styles.subtaskTitleText,
-                          sub.isCompleted && styles.subtaskCompletedText,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {sub.title}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
+                        <View
+                          style={[
+                            styles.subtaskCheckbox,
+                            sub.isCompleted && styles.subtaskCheckboxChecked,
+                          ]}
+                        >
+                          {sub.isCompleted && <Text style={styles.checkmark}>✓</Text>}
+                        </View>
+                        <Text
+                          style={[
+                            styles.subtaskTitleText,
+                            sub.isCompleted && styles.subtaskCompletedText,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {sub.title}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Tap-to-type Progress Box for Subtasks */}
+                      {isProgSubtask && (
+                        <View style={styles.subtaskProgressSlot}>
+                          {isEditingThisSubtask ? (
+                            <View style={styles.subtaskInputWrapper}>
+                              <TextInput
+                                style={styles.subtaskInputBox}
+                                value={subtaskInputText}
+                                onChangeText={setSubtaskInputText}
+                                keyboardType="numeric"
+                                selectTextOnFocus
+                                autoFocus
+                                onSubmitEditing={() =>
+                                  handleSubtaskProgressSubmit(sub.id, subTotal, subtaskInputText)
+                                }
+                              />
+                              <TouchableOpacity
+                                style={styles.confirmSubtaskBtn}
+                                onPress={() =>
+                                  handleSubtaskProgressSubmit(sub.id, subTotal, subtaskInputText)
+                                }
+                              >
+                                <Ionicons name="checkmark-circle" size={18} color={colors.accent} />
+                              </TouchableOpacity>
+                            </View>
+                          ) : (
+                            <Pressable
+                              style={styles.subtaskValueBadge}
+                              onPress={() => {
+                                const currentVal = localSubtaskProg[sub.id] ?? subProg;
+                                setEditingSubtaskId(sub.id);
+                                setSubtaskInputText(String(currentVal));
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.subtaskValueBadgeText,
+                                  sub.isCompleted && styles.subtaskValueBadgeDone,
+                                ]}
+                              >
+                                {localSubtaskProg[sub.id] ?? subProg}/{subTotal} {sub.progressUnit ?? ''}
+                              </Text>
+                            </Pressable>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
               )}
             </View>
           )}
@@ -340,12 +614,12 @@ export const styles = StyleSheet.create({
   taskCard: {
     backgroundColor: colors.surface,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 10,
     elevation: 2,
-    minHeight: 60,
     width: '100%',
     overflow: 'hidden',
-    borderWidth: 1.5,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
   },
   selectedCard: {
     borderColor: colors.accent,
@@ -354,7 +628,6 @@ export const styles = StyleSheet.create({
   cardInner: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    minHeight: 60,
     width: '100%',
   },
   priorityAccent: { width: 4 },
@@ -363,21 +636,21 @@ export const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  pressableRow: {
+  pressableBlock: {
+    padding: 12,
     width: '100%',
   },
-  cardRow: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
     width: '100%',
   },
   leadSlot: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
     position: 'relative',
   },
   checkbox: {
@@ -398,39 +671,144 @@ export const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  cardContent: {
+  titleSlot: {
     flex: 1,
     minWidth: 0,
     justifyContent: 'center',
   },
-  expandButton: { paddingLeft: 12, paddingVertical: 8, justifyContent: 'center', alignItems: 'center' },
-  arrowIcon: { fontSize: 14, color: colors.textMuted },
-  arrowIconExpanded: { color: colors.accent },
-  completedCard: { backgroundColor: colors.completedBg },
-  completedText: { textDecorationLine: 'line-through', color: colors.completedText },
   taskTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.textPrimary,
+    lineHeight: 20,
   },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  hybridBadge: { marginTop: 8, backgroundColor: colors.hybridBadgeBg, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  hybridBadgeText: { fontSize: 11, fontWeight: '600', color: colors.hybridBadgeText },
-  bankedBadge: { marginTop: 6, backgroundColor: colors.bankedBadgeBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
-  bankedBadgeText: { fontSize: 11, fontWeight: '600', color: colors.bankedBadgeText },
-  inlineSubtaskContainer: { marginTop: 10, paddingHorizontal: 16, paddingBottom: 12 },
-  inlineDivider: { height: 1, backgroundColor: colors.borderSubtle, marginBottom: 8 },
+  completedCard: { backgroundColor: colors.completedBg },
+  completedText: { textDecorationLine: 'line-through', color: colors.completedText },
+  trailingSlot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 8,
+  },
+  hybridBadge: {
+    backgroundColor: colors.hybridBadgeBg,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  hybridBadgeText: { fontSize: 11, fontWeight: '700', color: colors.hybridBadgeText },
+  expandButton: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arrowIcon: { fontSize: 11, color: colors.textMuted },
+  arrowIconExpanded: { color: colors.accent },
+  detailsBlock: {
+    marginTop: 8,
+    paddingLeft: 32,
+    width: '100%',
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  tagChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  tagChipText: { fontSize: 10, fontWeight: '600', color: colors.textPrimary },
+  progressContainer: {
+    width: '100%',
+    marginTop: 4,
+  },
+  progressMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  bankedBadge: {
+    backgroundColor: colors.bankedBadgeBg,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  bankedBadgeText: { fontSize: 10, fontWeight: '600', color: colors.bankedBadgeText },
+  inlineSubtaskContainer: {
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    paddingLeft: 44,
+  },
+  inlineDivider: { height: 1, backgroundColor: colors.borderSubtle, marginBottom: 6 },
   emptySubtasksText: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', paddingVertical: 4 },
-  subtaskItemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  subtaskItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+    gap: 8,
+  },
   subtaskCheckRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  subtaskCheckbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: colors.accent, justifyContent: 'center', alignItems: 'center', marginRight: 8, backgroundColor: colors.surface },
+  subtaskCheckbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+    backgroundColor: colors.surface,
+  },
   subtaskCheckboxChecked: { backgroundColor: colors.accent },
   subtaskTitleText: { fontSize: 13, color: colors.textPrimary, flex: 1 },
   subtaskCompletedText: { textDecorationLine: 'line-through', color: colors.textMuted },
-  cardPressed: { opacity: 0.7 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  tagChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  tagChipText: { fontSize: 10, fontWeight: '600', color: colors.textPrimary },
+  subtaskProgressSlot: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  subtaskInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  confirmSubtaskBtn: {
+    padding: 4,
+  },
+  subtaskValueBadge: {
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  subtaskValueBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  subtaskValueBadgeDone: {
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
+  },
+  subtaskInputBox: {
+    minWidth: 50,
+    height: 26,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 6,
+    backgroundColor: colors.surfaceSubtle,
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
+    paddingVertical: 0,
+    paddingHorizontal: 6,
+    textAlign: 'center',
+  },
+  cardPressed: { opacity: 0.8 },
   leadOverlay: {
     position: 'absolute',
     width: '100%',

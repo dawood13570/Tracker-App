@@ -16,6 +16,7 @@ import {
   notes,
   progressLogs,
   projects,
+  pursuits,
   tags,
   tasks,
   taskTags
@@ -251,7 +252,7 @@ export async function decomposeWeeklyProgressionToDaily(
       sourceTaskId: weeklyTask.id,
       totalProgress: dailyTarget,
       progressUnit: weeklyTask.progressUnit,
-      deadline: weeklyTask.deadline,
+      deadline: targetDate,
       rolloverEnabled: false,
     })
     .returning();
@@ -865,7 +866,7 @@ export async function decomposeMonthlyProgressionToWeekly(
       sourceTaskId: monthlyTask.id,
       totalProgress: weeklyTarget,
       progressUnit: monthlyTask.progressUnit,
-      deadline: monthlyTask.deadline,
+      deadline: format(endOfWeek(parseISO(weekStartDate), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
       rolloverEnabled: false,
     })
     .returning();
@@ -937,30 +938,49 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
     const yearlyGoals = await getYearlyTasks(yearStart, yearEnd);
     for (const yearly of yearlyGoals) {
       if (yearly.type === 'Progression') {
-        const monthsRemaining = 12 - dayDate.getMonth();
-        await decomposeYearlyProgressionToMonthly(yearly, monthStart, monthsRemaining);
-      } else if (yearly.type === 'Simple' && yearly.totalProgress) {
+        if (yearly.occurrenceTarget) {
+          await decomposeProgressionCountGoal(yearly, dateStr, yearEnd);
+        } else {
+          const monthsRemaining = 12 - dayDate.getMonth();
+          await decomposeYearlyProgressionToMonthly(yearly, monthStart, monthsRemaining);
+        }
+      } else if (yearly.type === 'Simple' && yearly.occurrenceTarget) {
         await decomposeCountGoalToNextOccurrence(yearly, dateStr, yearEnd);
+      } else if (yearly.type === 'Hybrid') {
+        await decomposeSequentialHybridMilestone(yearly, dateStr, yearEnd);
       }
+      
     }
 
     const monthlyGoals = await getMonthlyTasks(monthStart, monthEnd);
     for (const monthly of monthlyGoals) {
       if (monthly.type === 'Progression') {
-        const weeksRemaining = differenceInCalendarWeeks(parseISO(monthEnd), dayDate, { weekStartsOn: 1 }) + 1;
-        await decomposeMonthlyProgressionToWeekly(monthly, weekStart, weeksRemaining);
-      } else if (monthly.type === 'Simple' && monthly.totalProgress) {
+        if (monthly.occurrenceTarget) {
+          await decomposeProgressionCountGoal(monthly, dateStr, monthEnd);
+        } else {
+          const weeksRemaining = differenceInCalendarWeeks(parseISO(monthEnd), dayDate, { weekStartsOn: 1 }) + 1;
+          await decomposeMonthlyProgressionToWeekly(monthly, weekStart, weeksRemaining);
+        }
+      } else if (monthly.type === 'Simple' && monthly.occurrenceTarget) {
         await decomposeCountGoalToNextOccurrence(monthly, dateStr, monthEnd);
+      } else if (monthly.type === 'Hybrid') {
+        await decomposeSequentialHybridMilestone(monthly, dateStr, monthEnd);
       }
     }
 
     const weeklyGoals = await getWeeklyTasks(weekStart, weekEnd);
     for (const weekly of weeklyGoals) {
       if (weekly.type === 'Progression') {
+        if (weekly.occurrenceTarget) {
+          await decomposeProgressionCountGoal(weekly, dateStr, weekEnd);
+        } else {
         const daysRemaining = differenceInCalendarDays(parseISO(weekEnd), dayDate) + 1;
         await decomposeWeeklyProgressionToDaily(weekly, dateStr, daysRemaining);
-      } else if (weekly.type === 'Simple' && weekly.totalProgress) {
+        }
+      } else if (weekly.type === 'Simple' && weekly.occurrenceTarget) {
         await decomposeCountGoalToNextOccurrence(weekly, dateStr, weekEnd);
+      } else if (weekly.type === 'Hybrid') {
+        await decomposeSequentialHybridMilestone(weekly, dateStr, weekEnd);
       }
     }
 
@@ -981,7 +1001,13 @@ export async function setAbsoluteProgress(taskId: number, targetValue: number): 
   if (delta !== 0) {
     await insertProgressLog({ taskId, amount: delta });
   }
+  // Keep the task row's currentProgress column synced with the logs:
+  await db
+    .update(tasks)
+    .set({ currentProgress: targetValue, updatedAt: sql`(CURRENT_TIMESTAMP)` })
+    .where(eq(tasks.id, taskId));
 }
+
 export async function deleteTaskCascade(id: number): Promise<void> {
   const children = await getChildTasks(id);
   for (const child of children) {
@@ -1000,7 +1026,7 @@ export async function decomposeCountGoalToNextOccurrence(
   todayStr: string,
   periodEndStr: string
 ): Promise<TaskRow | null> {
-  const target = parentTask.totalProgress ?? 0;
+  const target = parentTask.occurrenceTarget ?? 0;
   if (target <= 0) return null;
 
   const completedCount = await getCompletedOccurrenceCount(parentTask.id);
@@ -1093,7 +1119,7 @@ export async function decomposeYearlyProgressionToMonthly(
       sourceTaskId: yearlyTask.id,
       totalProgress: monthlyTarget,
       progressUnit: yearlyTask.progressUnit,
-      deadline: yearlyTask.deadline,
+      deadline: format(endOfMonth(parseISO(monthStartDate)), 'yyyy-MM-dd'),
       rolloverEnabled: false,
     })
     .returning();
@@ -1188,4 +1214,194 @@ export async function getAllDescendantTasks(parentId: number): Promise<TaskRow[]
     all = all.concat(await getAllDescendantTasks(child.id));
   }
   return all;
+}
+
+export type PursuitRow = typeof pursuits.$inferSelect;
+
+export async function insertPursuit(data: { title: string; status?: PursuitRow['status']; description?: string | null }) {
+  const [inserted] = await db.insert(pursuits).values(data).returning();
+  return inserted;
+}
+
+export async function getAllPursuits(): Promise<PursuitRow[]> {
+  return db.select().from(pursuits).orderBy(desc(pursuits.updatedAt));
+}
+
+export async function updatePursuit(id: number, data: Partial<{ title: string; status: PursuitRow['status']; description: string | null }>) {
+  const [updated] = await db.update(pursuits).set({ ...data, updatedAt: sql`(CURRENT_TIMESTAMP)` }).where(eq(pursuits.id, id)).returning();
+  return updated;
+}
+
+export async function deletePursuit(id: number) {
+  const [deleted] = await db.delete(pursuits).where(eq(pursuits.id, id)).returning();
+  return deleted;
+}
+
+export async function getTasksByPursuit(pursuitId: number): Promise<TaskRow[]> {
+  return db.select().from(tasks).where(eq(tasks.pursuitId, pursuitId)).orderBy(desc(tasks.scheduledDate));
+}
+
+export async function setTaskPursuit(taskId: number, pursuitId: number | null) {
+  return updateTask(taskId, { pursuitId });
+}
+
+export async function getSubtaskCountsForTaskIds(
+  parentIds: number[]
+): Promise<Record<number, { completed: number; total: number }>> {
+  if (parentIds.length === 0) return {};
+  const rows = await db.select().from(tasks).where(inArray(tasks.parentId, parentIds));
+  const map: Record<number, { completed: number; total: number }> = {};
+  for (const row of rows) {
+    if (row.parentId == null) continue;
+    if (!map[row.parentId]) map[row.parentId] = { completed: 0, total: 0 };
+    map[row.parentId].total += 1;
+    if (row.isCompleted) map[row.parentId].completed += 1;
+  }
+  return map;
+}
+
+export async function decomposeProgressionCountGoal(
+  parentTask: TaskRow,
+  todayStr: string,
+  periodEndStr: string
+): Promise<TaskRow | null> {
+  const occurrenceTarget = parentTask.occurrenceTarget ?? 0;
+  const totalQuantity = parentTask.totalProgress ?? 0;
+  if (occurrenceTarget <= 0 || totalQuantity <= 0) return null;
+
+  const completedCount = await getCompletedOccurrenceCount(parentTask.id);
+  const remainingOccurrences = occurrenceTarget - completedCount;
+  if (remainingOccurrences <= 0) return null;
+
+  const children = await getChildTasks(parentTask.id);
+  const pending = children.find((c) => !c.isCompleted && c.scheduledDate >= todayStr);
+  if (pending) return pending;
+
+  const quantityDoneSoFar = await getEffectiveProgress(parentTask.id);
+  const remainingQuantity = Math.max(0, totalQuantity - quantityDoneSoFar);
+  const perOccurrenceQuantity = Math.ceil(remainingQuantity / remainingOccurrences);
+
+  const daysLeft = Math.max(1, differenceInCalendarDays(parseISO(periodEndStr), parseISO(todayStr)) + 1);
+  const idealSpacing = Math.floor(daysLeft / remainingOccurrences);
+  const cappedSpacing = Math.max(1, Math.min(parentTask.maxGapDays ?? idealSpacing, idealSpacing || 1));
+
+  const mostRecent = children.length > 0
+    ? children.reduce((latest, c) => (c.scheduledDate > latest.scheduledDate ? c : latest))
+    : null;
+
+  // First-occurrence placement is deliberately isolated here — a future
+  // smarter/random placement only needs to replace this one branch.
+  let nextDateStr: string;
+  if (!mostRecent) {
+    nextDateStr = todayStr;
+  } else {
+    const candidate = format(addDays(parseISO(mostRecent.scheduledDate), cappedSpacing), 'yyyy-MM-dd');
+    nextDateStr = candidate < todayStr ? todayStr : candidate;
+  }
+  if (nextDateStr > periodEndStr) return null;
+
+  const [created] = await db
+    .insert(tasks)
+    .values({
+      title: parentTask.title,
+      type: 'Progression',
+      priority: parentTask.priority,
+      scheduledDate: nextDateStr,
+      deadline: nextDateStr,
+      scope: 'daily',
+      sourceTaskId: parentTask.id,
+      totalProgress: perOccurrenceQuantity,
+      progressUnit: parentTask.progressUnit,
+      rolloverEnabled: false,
+    })
+    .returning();
+
+  return created;
+}
+
+
+export async function revertToPreviousProgress(taskId: number): Promise<number> {
+  // 1. Grab the single latest log entry (the one that pushed it to completion)
+  const [latestLog] = await db
+    .select()
+    .from(progressLogs)
+    .where(eq(progressLogs.taskId, taskId))
+    .orderBy(desc(progressLogs.id))
+    .limit(1);
+
+  // 2. Delete that log entry
+  if (latestLog) {
+    await db.delete(progressLogs).where(eq(progressLogs.id, latestLog.id));
+  }
+
+  // 3. Get the real accumulated total after deleting the completion log
+  const [result] = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${progressLogs.amount}), 0)`,
+    })
+    .from(progressLogs)
+    .where(eq(progressLogs.taskId, taskId));
+
+  const restoredProgress = Math.max(0, Number(result?.total ?? 0));
+
+  // 4. Update the task row directly so getSubtasksByParent stays in sync
+  await db
+    .update(tasks)
+    .set({ currentProgress: restoredProgress, updatedAt: sql`(CURRENT_TIMESTAMP)` })
+    .where(eq(tasks.id, taskId));
+
+  return restoredProgress;
+}
+
+export async function getTaskById(id: number): Promise<TaskRow | null> {
+  const [row] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+  return row ?? null;
+}
+
+export async function getSubtasksByParentOrdered(parentId: number): Promise<TaskRow[]> {
+  return db.select().from(tasks).where(eq(tasks.parentId, parentId)).orderBy(tasks.subtaskOrder, tasks.id);
+}
+
+// Sequential Hybrid goal → surfaces ONLY the current unfinished milestone as a
+// real daily task (proxy), via sourceTaskId pointing at the milestone itself,
+// not the goal. Non-sequential Hybrid goals never call this — they stay a
+// flat checklist, per the earlier design (no auto-surfacing, on purpose).
+export async function decomposeSequentialHybridMilestone(
+  goal: TaskRow,
+  todayStr: string,
+  periodEndStr: string
+): Promise<TaskRow | null> {
+  if (!goal.isSequential) return null;
+
+  const milestones = await getSubtasksByParentOrdered(goal.id);
+  const current = milestones.find((m) => !m.isCompleted);
+  if (!current) return null; // all done, or none exist yet
+
+  const existingProxies = await getChildTasks(current.id);
+  const pending = existingProxies.find((p) => !p.isCompleted && p.scheduledDate >= todayStr);
+  if (pending) return pending; // already surfaced (possibly rolled forward), don't duplicate
+
+  if (todayStr > periodEndStr) return null;
+
+  const [created] = await db
+    .insert(tasks)
+    .values({
+      title: current.title,
+      type: current.totalProgress != null ? 'Progression' : 'Simple',
+      priority: goal.priority,
+      scheduledDate: todayStr,
+      deadline: current.totalProgress != null ? todayStr : null,
+      scope: 'daily',
+      sourceTaskId: current.id,
+      totalProgress: current.totalProgress ?? null,
+      progressUnit: current.progressUnit ?? null,
+      // Deliberately NOT the self-healing occurrence-spacing model — a milestone
+      // has no target count or max-gap, it's just "the current thing to work
+      // on." Ordinary rollover (procrastination count climbing, evolving
+      // priority eligible) is the honest behavior if it sits untouched.
+      rolloverEnabled: true,
+    })
+    .returning();
+
+  return created;
 }

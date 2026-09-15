@@ -140,6 +140,26 @@ function MainTabs() {
       />
 
       <Tabs.Screen
+        name="horizon"
+        options={{
+          title: 'Horizon',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="pursuits"
+        options={{
+          title: 'Pursuits',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="grid-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* <Tabs.Screen
         name="week"
         options={{
           title: 'Week',
@@ -166,7 +186,7 @@ function MainTabs() {
             <Ionicons name="calendar-outline" size={size} color={color} />
           ),
         }}
-      />
+      /> */}
       <Tabs.Screen
         name="account"
         options={{

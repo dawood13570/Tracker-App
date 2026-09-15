@@ -9,6 +9,7 @@ export const tasks = sqliteTable('tasks', {
   isCompleted: integer('is_completed', { mode: 'boolean' }).default(false).notNull(),
   scheduledDate: text('scheduled_date').notNull(),
   nextOccurrenceGenerated: integer('next_occurrence_generated', { mode: 'boolean' }).notNull().default(false),
+  pursuitId: integer('pursuit_id').references((): any => pursuits.id, { onDelete: 'set null' }),
 
   // Scope & Decomposition
   scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly'] }).default('daily').notNull(),
@@ -37,6 +38,11 @@ export const tasks = sqliteTable('tasks', {
   rolloverEnabled: integer('rollover_enabled', { mode: 'boolean' }).notNull().default(true),
 
   maxGapDays: integer('max_gaps_days'),
+
+  occurrenceTarget: integer('occurrence_target'),
+
+  isSequential: integer('is_sequential', { mode: 'boolean' }).notNull().default(false), // goal-level flag
+  subtaskOrder: integer('subtask_order'), // milestone-level ordering, set at creation
 
   surplusMode: text('surplus_mode', { enum: ['breathing_room', 'raise_bar', 'bank_it', 'none'] }),
   bufferDays: integer('buffer_days').default(0),
@@ -150,12 +156,20 @@ export const activityLogTags = sqliteTable('activity_log_tags', {
   pk: primaryKey({ columns: [table.logId, table.tagId] }),
 }));
 
-// schema.ts — new table
 export const projects = sqliteTable('projects', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   title: text('title').notNull(),
   status: text('status', { enum: ['plan_to_do', 'active', 'on_hold', 'dropped', 'completed'] }).notNull().default('plan_to_do'),
   description: text('description'), // free-form — the "details" you write
+  createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text('updated_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+export const pursuits = sqliteTable('pursuits', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  status: text('status', { enum: ['plan_to_do', 'active', 'on_hold', 'dropped', 'completed'] }).notNull().default('plan_to_do'),
+  description: text('description'),
   createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text('updated_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });

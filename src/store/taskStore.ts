@@ -5,18 +5,20 @@ import { InferSelectModel } from 'drizzle-orm';
 import { create, type StoreApi } from 'zustand';
 import {
   deleteTask,
+  ensureDailyDecompositionForDate,
   getSubtasksByParent,
   getTaskByDate,
+  getTaskById,
   insertSubtask,
   insertTask,
   NewTask,
   setAllSubtasksStatus,
   toggleTaskStatus,
   updateTask,
-  UpdateTask as UpdateTaskQuery,
+  UpdateTask as UpdateTaskQuery
 } from '../db/queries';
 import { tasks as tasksTable } from '../db/schema';
-import { getLocalDateString } from '../utils/date';
+import { getAppToday, getLocalDateString } from '../utils/date';
 
 export type Task = InferSelectModel<typeof tasksTable>;
 export type { NewTask };
@@ -70,23 +72,41 @@ async function handleCompletionSideEffects(
       const newParent = await get().addTask(newTaskPayload);
 
       if (newParent) {
-        await get().updateTask(oldId, { nextOccurrenceGenerated: true });
-
-        if (updated.type === 'Hybrid') {
-          const existingSubtasks = await getSubtasksByParent(oldId);
-          for (const sub of existingSubtasks) {
-            await insertSubtask(newParent.id, {
-              title: sub.title,
-              type: sub.type,
-              priority: sub.priority,
-              scheduledDate: scheduledDateStr,
-              isCompleted: false,
-            });
-          }
+        const existingSubtasks = await getSubtasksByParent(oldId);
+        for (const sub of existingSubtasks) {
+          await insertSubtask(newParent.id, {
+            title: sub.title,
+            type: sub.type,
+            priority: sub.priority,
+            scheduledDate: scheduledDateStr,
+            isCompleted: false,
+            totalProgress: sub.totalProgress,   
+            progressUnit: sub.progressUnit,
+          });
         }
       }
     }
   }
+}
+
+async function syncMilestoneFromProxy(get: StoreApi<TaskState>['getState'], proxy: Task) {
+  if (proxy.sourceTaskId == null) return;
+  const milestone = await getTaskById(proxy.sourceTaskId);
+  if (!milestone || milestone.parentId == null) return; // not a milestone proxy — sourceTaskId can also point at a period-scoped Progression/count goal
+
+  const updatedMilestone = await updateTask(milestone.id, { isCompleted: proxy.isCompleted });
+  if (!updatedMilestone) return;
+
+  const siblings = await getSubtasksByParent(milestone.parentId);
+  const allCompleted = siblings.length > 0 && siblings.every((s) => s.isCompleted);
+  if (allCompleted) await get().completeTask(milestone.parentId);
+  else await get().uncompleteTask(milestone.parentId);
+
+  // Immediately try to surface the next milestone's proxy in this same
+  // session, rather than waiting for the next tab switch — matches the
+  // "seamlessly smart" bar rather than the existing focus-only reload.
+  await ensureDailyDecompositionForDate(getAppToday());
+  await get().loadTasks();
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -165,6 +185,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             await get().uncompleteTask(updated.parentId);
           }
         }
+
+        await syncMilestoneFromProxy(get, updated);
 
         await handleCompletionSideEffects(get, updated);
       }

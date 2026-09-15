@@ -14,11 +14,13 @@ import {
   getAllTagAssociations,
   getCurrentProgress,
   getProgressLogsByTask,
-  getSubtaskCounts,
+  getSubtaskCountsForTaskIds
 } from '@/db/queries';
 import { generateDailySeed } from '@/engine/notesSeed';
 import { calculatePace, PaceResult } from '@/engine/pace';
+import { shouldShowPaceStatus } from '@/engine/paceConfidence';
 import { getEffectivePriority, shouldArchiveTask } from '@/engine/priority';
+import { taskHasProgress } from '@/engine/taskShape';
 import { ActivityLogWithDetails, useActivityStore } from '@/store/activityStore';
 import { EventRow, useEventStore } from '@/store/eventStore';
 import { HabitWithStatus, useHabitStore } from '@/store/habitStore';
@@ -234,7 +236,7 @@ export default function AppDashboard() {
   }, [tagVersion, refreshTagMap]);
 
   useEffect(() => {
-    const progressionTasks = tasks.filter((t) => t.type === 'Progression');
+    const progressionTasks = tasks.filter(taskHasProgress);
     if (progressionTasks.length === 0) {
       setProgressMap({});
       setPaceMap({});
@@ -247,30 +249,32 @@ export default function AppDashboard() {
           getCurrentProgress(t.id),
           getProgressLogsByTask(t.id),
         ]);
+
+        if (!shouldShowPaceStatus(t, logs)) {
+          return [t.id, currentProgress, undefined] as const;
+        }
+
         const pace = calculatePace({ ...t, currentProgress }, logs);
         return [t.id, currentProgress, pace] as const;
       })
     ).then((entries) => {
       setProgressMap(Object.fromEntries(entries.map(([id, cp]) => [id, cp])));
-      setPaceMap(Object.fromEntries(entries.map(([id, , pace]) => [id, pace])));
+      setPaceMap(
+        Object.fromEntries(
+          entries
+            .filter(([, , pace]) => pace !== undefined)
+            .map(([id, , pace]) => [id, pace!])
+        )
+      );
     });
   }, [tasks]);
 
   useEffect(() => {
-    const hybridTasks = tasks.filter((t) => t.type === 'Hybrid');
-    if (hybridTasks.length === 0) {
+    if (tasks.length === 0) {
       setSubtaskMap({});
       return;
     }
-
-    Promise.all(
-      hybridTasks.map(async (t) => {
-        const counts = await getSubtaskCounts(t.id);
-        return [t.id, counts] as const;
-      })
-    ).then((entries) => {
-      setSubtaskMap(Object.fromEntries(entries));
-    });
+    getSubtaskCountsForTaskIds(tasks.map((t) => t.id)).then(setSubtaskMap);
   }, [tasks]);
 
   const handleFinalizeDay = async () => {

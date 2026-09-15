@@ -21,6 +21,9 @@ interface AppState {
 
   manualDayOverrideDate: string | null; // Set when user manually clicks "Finalize Day"
   setManualDayOverrideDate: (date: string | null) => void;
+
+  skipProgressionAlerts: boolean;
+  setSkipProgressionAlerts: (skip: boolean) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -43,4 +46,8 @@ export const useStore = create<AppState>((set) => ({
 
   manualDayOverrideDate: null,
   setManualDayOverrideDate: (date: string | null) => set({ manualDayOverrideDate: date }),
+
+  skipProgressionAlerts: false,
+setSkipProgressionAlerts: (skip: boolean) => set({ skipProgressionAlerts: skip }),
 }));
+

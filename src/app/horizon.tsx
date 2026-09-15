@@ -1,4 +1,5 @@
 // src/app/(tabs)/horizon.tsx
+import { ActivityCard } from '@/components/ActivityCard';
 import { GoalCard } from '@/components/GoalCard';
 import NewMonthlyTaskModal from '@/components/NewMonthlyTaskModal';
 import NewWeeklyTaskModal from '@/components/NewWeeklyTaskModal';
@@ -8,22 +9,27 @@ import ProgressLogSheet from '@/components/ProgressLogSheet';
 import { TagFilterBar } from '@/components/TagFilterBar';
 import { TaskCard } from '@/components/TaskCard';
 import {
-    deleteTaskCascade,
-    ensureDailyDecompositionForDate,
-    getAllDescendantTasks,
-    getAllTagAssociations,
-    getCompletedOccurrenceCount,
-    getEffectiveProgress,
-    getMonthlyTasks,
-    getProgressLogsByTask,
-    getSubtaskCounts,
-    getTasksForDateRange,
-    getWeeklyTasks,
-    getYearlyTasks,
-    TaskRow,
+  deleteTaskCascade,
+  ensureDailyDecompositionForDate,
+  getActivityLogsForDateRange,
+  getAllDescendantTasks,
+  getAllTagAssociations,
+  getCompletedOccurrenceCount,
+  getEffectiveProgress,
+  getMonthlyTasks,
+  getProgressLogsByTask,
+  getSubtaskCounts,
+  getSubtaskCountsForTaskIds,
+  getTasksForDateRange,
+  getWeeklyTasks,
+  getYearlyTasks,
+  TaskRow,
 } from '@/db/queries';
 import { generatePeriodSeed } from '@/engine/notesSeed';
 import { calculatePace, PaceResult } from '@/engine/pace';
+import { shouldShowPaceStatus } from '@/engine/paceConfidence';
+import { taskHasProgress } from '@/engine/taskShape';
+import { ActivityLogWithDetails } from '@/store/activityStore';
 import { useTagStore } from '@/store/tagStore';
 import { useTaskStore } from '@/store/taskStore';
 import { colors } from '@/theme/colors';
@@ -32,37 +38,37 @@ import { isPeriodEligibleForReflection } from '@/utils/reflections';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import {
-    addMonths,
-    addWeeks,
-    addYears,
-    eachDayOfInterval,
-    eachMonthOfInterval,
-    endOfMonth,
-    endOfWeek,
-    endOfYear,
-    format,
-    getISOWeek,
-    isSameDay,
-    isSameMonth,
-    parseISO,
-    startOfMonth,
-    startOfWeek,
-    startOfYear,
-    subMonths,
-    subWeeks,
-    subYears,
+  addMonths,
+  addWeeks,
+  addYears,
+  eachDayOfInterval,
+  eachMonthOfInterval,
+  endOfMonth,
+  endOfWeek,
+  endOfYear,
+  format,
+  getISOWeek,
+  isSameDay,
+  isSameMonth,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
+  startOfYear,
+  subMonths,
+  subWeeks,
+  subYears,
 } from 'date-fns';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Alert,
-    Pressable,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -94,6 +100,7 @@ export default function HorizonScreen() {
 
   const [periodGoals, setPeriodGoals] = useState<TaskRow[]>([]);
   const [periodRangeTasks, setPeriodRangeTasks] = useState<TaskRow[]>([]);
+  const [periodActivities, setPeriodActivities] = useState<ActivityLogWithDetails[]>([]);
   const [goalProgress, setGoalProgress] = useState<Record<number, number>>({});
   const [goalSubtasks, setGoalSubtasks] = useState<Record<number, { completed: number; total: number }>>({});
   const [goalOccurrences, setGoalOccurrences] = useState<Record<number, number>>({});
@@ -111,7 +118,7 @@ export default function HorizonScreen() {
   const [selectedTaskToEdit, setSelectedTaskToEdit] = useState<TaskRow | null>(null);
 
   const { toggleTask } = useTaskStore();
-  const { loadTags, loadMostUsedTags, tagVersion } = useTagStore();
+  const { tags: allTags, loadTags, loadMostUsedTags, tagVersion } = useTagStore();
 
   const bounds = useMemo(() => {
     if (zoomLevel === 'week') {
@@ -135,7 +142,6 @@ export default function HorizonScreen() {
     return eachDayOfInterval({ start: calStart, end: calEnd });
   }, [zoomLevel, bounds]);
 
-  // NEW — month grid chunked into week-rows, each row gets a week-number column
   const monthWeeks = useMemo(() => {
     if (zoomLevel !== 'month') return [];
     const weeks: Date[][] = [];
@@ -164,13 +170,14 @@ export default function HorizonScreen() {
   const loadData = useCallback(async () => {
     await ensureDailyDecompositionForDate(todayStr);
 
-    const [rangeTasks, scopedGoals] = await Promise.all([
+    const [rangeTasks, scopedGoals, rangeActivities] = await Promise.all([
       getTasksForDateRange(startStr, endStr),
       zoomLevel === 'week'
         ? getWeeklyTasks(startStr, endStr)
         : zoomLevel === 'month'
         ? getMonthlyTasks(startStr, endStr)
         : getYearlyTasks(startStr, endStr),
+      getActivityLogsForDateRange(startStr, endStr),
       loadTags(),
       loadMostUsedTags(),
       refreshTagMap(),
@@ -178,10 +185,11 @@ export default function HorizonScreen() {
 
     setPeriodRangeTasks(rangeTasks);
     setPeriodGoals(scopedGoals);
+    setPeriodActivities(rangeActivities);
 
     const progressionGoals = scopedGoals.filter((t) => t.type === 'Progression');
     const hybridGoals = scopedGoals.filter((t) => t.type === 'Hybrid');
-    const countGoals = scopedGoals.filter((t) => t.type === 'Simple' && t.totalProgress);
+    const countGoals = scopedGoals.filter((t) => t.occurrenceTarget != null && t.occurrenceTarget > 0);
 
     const [progressEntries, subtaskEntries, countEntries] = await Promise.all([
       Promise.all(progressionGoals.map(async (t) => [t.id, await getEffectiveProgress(t.id)] as const)),
@@ -192,27 +200,40 @@ export default function HorizonScreen() {
     setGoalSubtasks(Object.fromEntries(subtaskEntries));
     setGoalOccurrences(Object.fromEntries(countEntries));
 
-    const progDaily = rangeTasks.filter((t) => t.type === 'Progression');
-    const hybDaily = rangeTasks.filter((t) => t.type === 'Hybrid');
+    // Data-driven progress check instead of rigid type check
+    const progDaily = rangeTasks.filter(taskHasProgress);
 
     if (progDaily.length > 0) {
       Promise.all(
         progDaily.map(async (t) => {
           const current = await getEffectiveProgress(t.id);
           const logs = await getProgressLogsByTask(t.id);
+
+          if (!shouldShowPaceStatus(t, logs)) {
+            return [t.id, current, undefined] as const;
+          }
+
           const pace = calculatePace({ ...t, currentProgress: current }, logs);
           return [t.id, current, pace] as const;
         })
       ).then((res) => {
         setProgressMap(Object.fromEntries(res.map(([id, c]) => [id, c])));
-        setPaceMap(Object.fromEntries(res.map(([id, , p]) => [id, p])));
+        setPaceMap(
+          Object.fromEntries(
+            res
+              .filter(([, , p]) => p !== undefined)
+              .map(([id, , p]) => [id, p!])
+          )
+        );
       });
     }
 
-    if (hybDaily.length > 0) {
-      Promise.all(hybDaily.map(async (t) => [t.id, await getSubtaskCounts(t.id)] as const)).then((res) =>
-        setSubtaskMap(Object.fromEntries(res))
-      );
+    // Batch fetch subtask counts for all range tasks directly
+    if (rangeTasks.length > 0) {
+      const countsMap = await getSubtaskCountsForTaskIds(rangeTasks.map((t) => t.id));
+      setSubtaskMap(countsMap);
+    } else {
+      setSubtaskMap({});
     }
   }, [zoomLevel, startStr, endStr, todayStr, loadTags, loadMostUsedTags, refreshTagMap]);
 
@@ -241,7 +262,6 @@ export default function HorizonScreen() {
   const filteredGoals = useMemo(() => filterItems(periodGoals), [filterItems, periodGoals]);
   const filteredRangeTasks = useMemo(() => filterItems(periodRangeTasks), [filterItems, periodRangeTasks]);
 
-  // Week/Month density — already search/tag-aware since it derives from filteredRangeTasks
   const densityMap = useMemo(() => {
     const map: Record<string, { total: number; completed: number }> = {};
     for (const t of filteredRangeTasks) {
@@ -252,9 +272,6 @@ export default function HorizonScreen() {
     return map;
   }, [filteredRangeTasks]);
 
-  // NEW — Year density: walk each (already-filtered) yearly goal's real daily
-  // descendants and bucket by the month they actually land in, instead of the
-  // parent's own Jan-1 scheduledDate. Search/tag-aware because filteredGoals is.
   useEffect(() => {
     let active = true;
     if (zoomLevel !== 'year') return;
@@ -289,6 +306,11 @@ export default function HorizonScreen() {
     [filteredRangeTasks, selectedDayStr]
   );
 
+  const singleDayActivities = useMemo(
+    () => periodActivities.filter((a) => a.date === selectedDayStr),
+    [periodActivities, selectedDayStr]
+  );
+
   const navPrev = () => {
     setAnchorDate((d) => (zoomLevel === 'week' ? subWeeks(d, 1) : zoomLevel === 'month' ? subMonths(d, 1) : subYears(d, 1)));
   };
@@ -300,13 +322,11 @@ export default function HorizonScreen() {
     setSelectedDayStr(todayStr);
   };
 
-  // Zoom OUT — tapping the period label itself
   const handleZoomOut = () => {
     if (zoomLevel === 'week') setZoomLevel('month');
     else if (zoomLevel === 'month') setZoomLevel('year');
   };
 
-  // Zoom IN — year grid: tap a month. month grid: tap a week-number column.
   const handleDrillToMonth = (monthDate: Date) => {
     setAnchorDate(monthDate);
     setZoomLevel('month');
@@ -637,7 +657,24 @@ export default function HorizonScreen() {
                   )}
                 </View>
 
-                {singleDayTasks.length === 0 ? (
+                {singleDayActivities.length > 0 && (
+                  <View style={{ marginBottom: 10, gap: 8 }}>
+                    {singleDayActivities.map((entry) => (
+                      <ActivityCard
+                        key={`activity-${entry.id}`}
+                        entry={entry}
+                        tags={allTags?.filter((t) => entry.tagIds.includes(t.id)) ?? []}
+                        selectionMode={false}
+                        isSelected={false}
+                        onPressCard={() => {}}
+                        onLongPressCard={() => {}}
+                        onToggleSelect={() => {}}
+                      />
+                    ))}
+                  </View>
+                )}
+
+                {singleDayTasks.length === 0 && singleDayActivities.length === 0 ? (
                   <Text style={styles.emptyNotice}>Nothing scheduled for this day.</Text>
                 ) : (
                   <View style={{ gap: 8 }}>
@@ -721,7 +758,7 @@ const styles = StyleSheet.create({
   addBtn: { backgroundColor: colors.accent, width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   navRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
   navBtn: { padding: 4 },
-  todayBtnText: { fontSize: 12, fontWeight: '700', color: colors.accent },
+  todayBtnText: { fontSize: 18, fontWeight: '700', color: colors.accent },
   selectionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
   selectionCountText: { fontSize: 15, color: colors.textPrimary, fontWeight: '700' },
   selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },

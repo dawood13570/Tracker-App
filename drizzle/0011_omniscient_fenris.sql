@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `occurrence_target` integer;

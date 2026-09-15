@@ -1,5 +1,5 @@
 import Slider from '@react-native-community/slider';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 interface ProgressionSliderProps {
@@ -10,24 +10,14 @@ interface ProgressionSliderProps {
   onUpdate: (taskId: number, val: number) => void;
 }
 
-// ProgressionSlider.tsx — add above the component
 function interpolateProgressColor(percent: number): string {
   const p = Math.max(0, Math.min(1, percent));
-  const start = { r: 217, g: 83, b: 79 };   // muted red
-  const end = { r: 46, g: 204, b: 113 };    // green
-  const r = Math.round(start.r + (end.r - start.r) * p);
-  const g = Math.round(start.g + (end.g - start.g) * p);
-  const b = Math.round(start.b + (end.b - start.b) * p);
-  return `rgb(${r}, ${g}, ${b})`;
+  const start = { r: 217, g: 83, b: 79 };
+  const end = { r: 46, g: 204, b: 113 };
+  return `rgb(${Math.round(start.r + (end.r - start.r) * p)}, ${Math.round(start.g + (end.g - start.g) * p)}, ${Math.round(start.b + (end.b - start.b) * p)})`;
 }
 
-export const ProgressionSlider: React.FC<ProgressionSliderProps> = ({
-  taskId,
-  current,
-  total,
-  unit,
-  onUpdate,
-}) => {
+export const ProgressionSlider: React.FC<ProgressionSliderProps> = ({ taskId, current, total, unit, onUpdate }) => {
   const [draftVal, setDraftVal] = useState(current);
   const [isEditingText, setIsEditingText] = useState(false);
   const [textValue, setTextValue] = useState(String(current));
@@ -38,17 +28,24 @@ export const ProgressionSlider: React.FC<ProgressionSliderProps> = ({
   }, [current]);
 
   const isDirty = draftVal !== current;
-  const clamp = (val: number) => Math.max(0, Math.min(total, Math.round(val)));
+  const clampNonNegative = (val: number) => Math.max(0, Math.round(val));
+
+  // The slider is anchored strictly to `total`.
+  // If `current` was already saved above `total` (via manual input),
+  // we scale to `current` so the initial thumb position is not off-canvas.
+  // Importantly, this NEVER depends on `draftVal`, preventing thumb runaway while dragging.
+  const sliderMax = useMemo(() => Math.max(total, current, 1), [total, current]);
 
   const handleTextSubmit = () => {
     const parsed = Number(textValue);
-    setDraftVal(Number.isNaN(parsed) ? draftVal : clamp(parsed));
+    setDraftVal(Number.isNaN(parsed) ? draftVal : clampNonNegative(parsed));
     setIsEditingText(false);
     Keyboard.dismiss();
   };
 
-
-  const trackColor = interpolateProgressColor(draftVal / (total || 1));
+  const percent = draftVal / (total || 1);
+  const trackColor = interpolateProgressColor(percent);
+  const isOverTarget = draftVal > total;
 
   return (
     <View style={styles.container}>
@@ -65,21 +62,21 @@ export const ProgressionSlider: React.FC<ProgressionSliderProps> = ({
           />
         ) : (
           <Pressable onPress={() => { setTextValue(String(draftVal)); setIsEditingText(true); }}>
-            <Text style={styles.progressText}>
-              {draftVal} / {total} {unit ?? ''}
-            </Text>
+            <Text style={styles.progressText}>{draftVal} / {total} {unit ?? ''}</Text>
           </Pressable>
         )}
-        <Text style={styles.percentageText}>{Math.round((draftVal / (total || 1)) * 100)}%</Text>
+        <Text style={[styles.percentageText, isOverTarget && styles.percentageOver]}>
+          {Math.round(percent * 100)}%
+        </Text>
       </View>
 
       <Slider
         style={styles.slider}
         minimumValue={0}
-        maximumValue={total}
+        maximumValue={sliderMax}
         step={1}
-        value={draftVal}
-        onValueChange={(val) => setDraftVal(clamp(val))}
+        value={Math.min(draftVal, sliderMax)}
+        onValueChange={(val) => setDraftVal(Math.round(val))}
         minimumTrackTintColor={trackColor}
         maximumTrackTintColor="#333338"
         thumbTintColor={trackColor}
@@ -104,10 +101,8 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   progressText: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
   percentageText: { color: '#888', fontSize: 12 },
-  textInput: {
-    color: '#ffffff', fontSize: 14, fontWeight: '600', borderBottomWidth: 1, borderBottomColor: '#d4af37',
-    minWidth: 60, paddingVertical: 0,
-  },
+  percentageOver: { color: '#d4af37', fontWeight: '700' },
+  textInput: { color: '#ffffff', fontSize: 14, fontWeight: '600', borderBottomWidth: 1, borderBottomColor: '#d4af37', minWidth: 60, paddingVertical: 0 },
   slider: { width: '100%', height: 40 },
   confirmRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
   revertBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },

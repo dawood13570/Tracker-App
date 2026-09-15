@@ -11,6 +11,9 @@ import m0006 from './0006_fearless_nomad.sql';
 import m0007 from './0007_famous_rawhide_kid.sql';
 import m0008 from './0008_loose_omega_sentinel.sql';
 import m0009 from './0009_flawless_supernaut.sql';
+import m0010 from './0010_harsh_magik.sql';
+import m0011 from './0011_omniscient_fenris.sql';
+import m0012 from './0012_naive_beyonder.sql';
 
   export default {
     journal,
@@ -24,7 +27,10 @@ m0005,
 m0006,
 m0007,
 m0008,
-m0009
+m0009,
+m0010,
+m0011,
+m0012
     }
   }
   

@@ -18,19 +18,27 @@ export function GoalCard({ task, scopeLabel, effectiveProgress = 0, completedOcc
   const isDone = Boolean(task.isCompleted);
   let metaLine = `${task.priority} priority`;
   let percent = 0;
+  const hasProgress = task.totalProgress != null && task.totalProgress > 0;
+  const hasOccurrenceTarget = task.occurrenceTarget != null && task.occurrenceTarget > 0;
 
-  if (task.type === 'Progression') {
-    const target = task.totalProgress ?? 0;
+  if (hasProgress && hasOccurrenceTarget) {
+    // Progression + occurrence-repeat combo
+    percent = task.occurrenceTarget! > 0 ? Math.min(1, completedOccurrences / task.occurrenceTarget!) : 0;
+    metaLine = `${effectiveProgress}/${task.totalProgress} ${task.progressUnit ?? ''} · ${completedOccurrences}/${task.occurrenceTarget} runs this ${scopeLabel} · ${task.priority}`;
+  } else if (hasProgress) {
+    const target = task.totalProgress!;
     percent = target > 0 ? Math.min(1, effectiveProgress / target) : 0;
-    metaLine = `${effectiveProgress}/${target} ${task.progressUnit ?? ''} this ${scopeLabel} • ${task.priority}`;
-  } else if (task.type === 'Hybrid' && subtaskCounts) {
+    metaLine = `${effectiveProgress}/${target} ${task.progressUnit ?? ''} this ${scopeLabel} · ${task.priority}`;
+  } else if (subtaskCounts && subtaskCounts.total > 0) {
     percent = subtaskCounts.total > 0 ? subtaskCounts.completed / subtaskCounts.total : 0;
-    metaLine = `${subtaskCounts.completed}/${subtaskCounts.total} milestones • ${task.priority}`;
-  } else if (task.type === 'Simple' && task.totalProgress) {
-    const target = task.totalProgress;
+    metaLine = `${subtaskCounts.completed}/${subtaskCounts.total} milestones · ${task.priority}`;
+  } else if (hasOccurrenceTarget) {
+    const target = task.occurrenceTarget!;
     percent = target > 0 ? Math.min(1, completedOccurrences / target) : 0;
-    metaLine = `${completedOccurrences}/${target} times this ${scopeLabel} • ${task.priority}`;
+    metaLine = `${completedOccurrences}/${target} times this ${scopeLabel} · ${task.priority}`;
   }
+
+  const showBar = hasProgress || hasOccurrenceTarget || Boolean(subtaskCounts && subtaskCounts.total > 0);
 
   return (
     <TouchableOpacity style={[styles.card, isSelected && styles.cardSelected]} onPress={onPress} onLongPress={onLongPress}>
@@ -43,7 +51,7 @@ export function GoalCard({ task, scopeLabel, effectiveProgress = 0, completedOcc
         <View style={{ flex: 1, marginLeft: selectionMode ? 10 : 0 }}>
           <Text style={[styles.title, isDone && styles.titleDone]}>{isDone ? '✓ ' : '• '}{task.title}</Text>
           <Text style={styles.meta}>{metaLine}</Text>
-          {(task.type !== 'Simple' || task.totalProgress) && (
+          {showBar && (
             <View style={styles.barTrack}>
               <View style={[styles.barFill, { width: `${Math.round(percent * 100)}%` }]} />
             </View>

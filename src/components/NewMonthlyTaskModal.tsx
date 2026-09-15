@@ -1,21 +1,90 @@
 // src/components/NewMonthlyTaskModal.tsx
 import { useTagStore } from '@/store/tagStore';
+import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import Slider from '@react-native-community/slider';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Keyboard,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { assignTag, insertSubtask, insertTask, updateTask } from '../db/queries';
+import { assignTag, getAllPursuits, insertPursuit, insertSubtask, insertTask, PursuitRow, updateTask } from '../db/queries';
 import { colors } from '../theme/colors';
 import { TagPicker } from './TagPicker';
+
+interface PursuitPickerProps {
+  selectedPursuitId: number | null;
+  onSelect: (id: number | null) => void;
+}
+
+function PursuitPicker({ selectedPursuitId, onSelect }: PursuitPickerProps) {
+  const [pursuits, setPursuits] = useState<PursuitRow[]>([]);
+  const [newTitle, setNewTitle] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+
+  useEffect(() => {
+    getAllPursuits().then(setPursuits);
+  }, []);
+
+  const handleCreate = async () => {
+    if (!newTitle.trim()) return;
+    const created = await insertPursuit({ title: newTitle.trim(), status: 'active' });
+    setPursuits((prev) => [created, ...prev]);
+    onSelect(created.id);
+    setNewTitle('');
+    setShowCreate(false);
+  };
+
+  return (
+    <View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+        <Pressable
+          style={[styles.chip, selectedPursuitId === null && styles.chipSelected]}
+          onPress={() => onSelect(null)}
+        >
+          <Text style={selectedPursuitId === null ? styles.chipTextSelected : styles.chipText}>None</Text>
+        </Pressable>
+        {pursuits.map((p) => (
+          <Pressable
+            key={p.id}
+            style={[styles.chip, selectedPursuitId === p.id && styles.chipSelected]}
+            onPress={() => onSelect(p.id)}
+          >
+            <Text style={selectedPursuitId === p.id ? styles.chipTextSelected : styles.chipText}>{p.title}</Text>
+          </Pressable>
+        ))}
+        <Pressable style={styles.chipCreate} onPress={() => setShowCreate((s) => !s)}>
+          <Text style={styles.chipCreateText}>+ New</Text>
+        </Pressable>
+      </ScrollView>
+
+      {showCreate && (
+        <View style={styles.createRow}>
+          <TextInput
+            style={styles.createInput}
+            value={newTitle}
+            onChangeText={setNewTitle}
+            placeholder="New pursuit title..."
+            placeholderTextColor={colors.textPlaceholder}
+            onSubmitEditing={handleCreate}
+          />
+          <Pressable style={styles.createBtn} onPress={handleCreate}>
+            <Text style={styles.createBtnText}>Add</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
 
 interface SubTaskDraft {
   id: string;
@@ -32,7 +101,6 @@ interface NewMonthlyTaskModalProps {
   onClose?: () => void;
 }
 
-const MONTHLY_TASK_TYPES = ['Simple', 'Progression', 'Hybrid'] as const;
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'] as const;
 
 export default function NewMonthlyTaskModal({
@@ -44,20 +112,26 @@ export default function NewMonthlyTaskModal({
   onClose,
 }: NewMonthlyTaskModalProps) {
   const [title, setTitle] = useState('');
-  const [type, setType] = useState<'Simple' | 'Progression' | 'Hybrid'>('Simple');
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
+  const [selectedPursuitId, setSelectedPursuitId] = useState<number | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const [hasProgress, setHasProgress] = useState(false);
   const [targetValue, setTargetValue] = useState('');
   const [unit, setUnit] = useState('');
+
+  const [hasMilestones, setHasMilestones] = useState(false);
+  const [isSequential, setIsSequential] = useState(true);
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
-  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
-  const [isRecurringGoal, setIsRecurringGoal] = useState(false);
+  const [isRecurringGoal, setIsRecurringGoal] = useState(true);
   const [occurrenceCount, setOccurrenceCount] = useState('');
   const [maxGapDays, setMaxGapDays] = useState(1);
 
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
-  const snapPoints = useMemo(() => ['75%', '50%'], []);
+  const snapPoints = useMemo(() => ['85%', '55%'], []);
 
   const formattedMonthLabel = useMemo(() => {
     try {
@@ -85,18 +159,51 @@ export default function NewMonthlyTaskModal({
     setMaxGapDays((prev) => Math.min(prev, maxPossibleGap));
   }, [maxPossibleGap]);
 
+  const hasAnyMilestones = subtasks.length > 0;
+
+  const handleToggleProgress = (value: boolean) => {
+    if (value && (hasMilestones || hasAnyMilestones)) {
+      Alert.alert('Choose one', 'A goal can track progress or have milestones, not both.');
+      return;
+    }
+    setHasProgress(value);
+  };
+
+  const handleToggleMilestones = (value: boolean) => {
+    if (value && hasProgress) {
+      Alert.alert('Choose one', 'Turn off progress tracking to use milestones instead.');
+      return;
+    }
+    setHasMilestones(value);
+    if (!value) setSubtasks([]);
+  };
+
+  const moveSubtask = (index: number, direction: -1 | 1) => {
+    setSubtasks((prev) => {
+      const next = [...prev];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
   const resetForm = () => {
     setTitle('');
-    setType('Simple');
     setPriority('Medium');
+    setSelectedPursuitId(null);
+    setShowAdvanced(false);
+    setHasProgress(false);
     setTargetValue('');
     setUnit('');
+    setHasMilestones(false);
+    setIsSequential(true);
     setSubtasks([]);
     setSubtaskInput('');
-    setSelectedTagIds([]);
-    setIsRecurringGoal(false);
+    setIsRecurringGoal(true);
     setOccurrenceCount('');
     setMaxGapDays(1);
+    setSelectedTagIds([]);
   };
 
   useEffect(() => {
@@ -104,18 +211,24 @@ export default function NewMonthlyTaskModal({
     loadMostUsedTags();
     if (editTask) {
       setTitle(editTask.title ?? '');
-      setType(editTask.type ?? 'Simple');
       setPriority(editTask.priority ?? 'Medium');
-      setTargetValue(editTask.totalProgress ? String(editTask.totalProgress) : '');
+      setSelectedPursuitId(editTask.pursuitId ?? null);
+
+      const hasProg = editTask.totalProgress != null && editTask.totalProgress > 0 && editTask.type === 'Progression';
+      setHasProgress(hasProg);
+      setTargetValue(hasProg ? String(editTask.totalProgress) : '');
       setUnit(editTask.progressUnit ?? '');
-      // NEW
-      if (editTask.type === 'Simple' && editTask.totalProgress) {
-        setIsRecurringGoal(true);
-        setOccurrenceCount(String(editTask.totalProgress));
-        setMaxGapDays(editTask.maxGapDays ?? 1);
-      } else {
-        setIsRecurringGoal(false);
-      }
+      setHasMilestones(editTask.type === 'Hybrid');
+      setIsSequential(Boolean(editTask.isSequential));
+
+      const hasOcc = editTask.occurrenceTarget != null && editTask.occurrenceTarget > 0;
+      setIsRecurringGoal(hasOcc);
+      setOccurrenceCount(hasOcc ? String(editTask.occurrenceTarget) : '');
+      setMaxGapDays(editTask.maxGapDays ?? 1);
+
+      setShowAdvanced(true);
+    } else {
+      resetForm();
     }
   }, [editTask, monthStartDate]);
 
@@ -138,50 +251,56 @@ export default function NewMonthlyTaskModal({
       Alert.alert('Title required', 'Please enter a task title.');
       return;
     }
-    if (type === 'Progression' && (!targetValue || Number(targetValue) <= 0)) {
-      Alert.alert('Target required', 'Please enter a valid target for this monthly progression task.');
+    if (hasProgress && (!targetValue || Number(targetValue) <= 0)) {
+      Alert.alert('Target required', 'Please enter a valid target for this monthly goal.');
       return;
     }
-    if (type === 'Simple' && isRecurringGoal && (!occurrenceCount || Number(occurrenceCount) <= 0)) {
+    if (isRecurringGoal && (!occurrenceCount || Number(occurrenceCount) <= 0)) {
       Alert.alert('Count required', 'Enter how many times this month.');
       return;
     }
 
     try {
+      const inferredType = hasMilestones ? 'Hybrid' : hasProgress ? 'Progression' : 'Simple';
+
       if (editTask) {
         await updateTask(editTask.id, {
           title: title.trim(),
-          type,
+          type: inferredType,
           priority,
-          totalProgress: type === 'Progression' ? Number(targetValue) : null,
-          progressUnit: type === 'Progression' ? unit.trim() || null : null,
-          maxGapDays: type === 'Simple' && isRecurringGoal ? maxGapDays : null,
+          totalProgress: hasProgress ? Number(targetValue) : null,
+          progressUnit: hasProgress ? unit.trim() || null : null,
+          occurrenceTarget: isRecurringGoal ? Number(occurrenceCount) : null,
+          maxGapDays: isRecurringGoal ? maxGapDays : null,
+          pursuitId: selectedPursuitId,
+          isSequential: hasMilestones ? isSequential : false,
         });
       } else {
         const parentGoal = await insertTask({
           title: title.trim(),
-          type,
+          type: inferredType,
           priority,
           scheduledDate: monthStartDate,
           deadline: monthEndDate,
           scope: 'monthly',
-          totalProgress:
-            type === 'Progression' ? Number(targetValue)
-            : type === 'Simple' && isRecurringGoal ? Number(occurrenceCount)
-            : null,
-          progressUnit: type === 'Progression' ? unit.trim() || null : null,
-          maxGapDays: type === 'Simple' && isRecurringGoal ? maxGapDays : null,
+          totalProgress: hasProgress ? Number(targetValue) : null,
+          progressUnit: hasProgress ? unit.trim() || null : null,
+          occurrenceTarget: isRecurringGoal ? Number(occurrenceCount) : null,
+          maxGapDays: isRecurringGoal ? maxGapDays : null,
           rolloverEnabled: false,
-          subtasksTotal: type === 'Hybrid' ? subtasks.length : 0,
+          subtasksTotal: hasMilestones ? subtasks.length : 0,
+          pursuitId: selectedPursuitId,
+          isSequential: hasMilestones ? isSequential : false,
         });
 
         if (parentGoal) {
-          if (type === 'Hybrid' && subtasks.length > 0) {
-            for (const s of subtasks) {
+          if (hasMilestones && subtasks.length > 0) {
+            for (let i = 0; i < subtasks.length; i++) {
               await insertSubtask(parentGoal.id, {
-                title: s.title,
+                title: subtasks[i].title,
                 scheduledDate: monthStartDate,
                 priority,
+                subtaskOrder: i,
               });
             }
           }
@@ -227,168 +346,215 @@ export default function NewMonthlyTaskModal({
         />
 
         <View style={styles.row}>
-          <Text style={styles.label}>Type:</Text>
-          <View style={styles.selectorGroup}>
-            {MONTHLY_TASK_TYPES.map((t) => {
-              const isSelected = type === t;
-              return (
-                <Pressable
-                  key={t}
-                  style={[styles.selectorItem, isSelected && styles.selectedItem]}
-                  onPress={() => setType(t)}
-                >
-                  <Text style={isSelected ? styles.selectedText : styles.unselectedText}>{t}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.row}>
           <Text style={styles.label}>Priority:</Text>
           <View style={styles.selectorGroup}>
-            {PRIORITY_OPTIONS.map((p) => {
-              const isSelected = priority === p;
-              return (
-                <Pressable
-                  key={p}
-                  style={[styles.selectorItem, isSelected && styles.selectedItem]}
-                  onPress={() => setPriority(p)}
-                >
-                  <Text style={isSelected ? styles.selectedText : styles.unselectedText}>{p}</Text>
-                </Pressable>
-              );
-            })}
+            {PRIORITY_OPTIONS.map((p) => (
+              <Pressable
+                key={p}
+                style={[styles.selectorItem, priority === p && styles.selectedItem]}
+                onPress={() => setPriority(p)}
+              >
+                <Text style={priority === p ? styles.selectedText : styles.unselectedText}>{p}</Text>
+              </Pressable>
+            ))}
           </View>
         </View>
 
-        {type === 'Simple' && (
-          <View style={styles.dynamicContainer}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Repeat this goal:</Text>
-              <Switch
-                value={isRecurringGoal}
-                onValueChange={setIsRecurringGoal}
-                trackColor={{ false: colors.borderSubtle, true: colors.accent }}
-              />
+        <TouchableOpacity style={styles.advancedToggleRow} onPress={() => setShowAdvanced((s) => !s)}>
+          <Text style={styles.advancedToggleText}>Advanced Options</Text>
+          <Ionicons name={showAdvanced ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
+        </TouchableOpacity>
+
+        {showAdvanced && (
+          <>
+
+            <View style={[styles.dynamicContainer, { marginTop: 6 }]}>
+              <Text style={styles.subSectionTitle}>Pursuit</Text>
+              <PursuitPicker selectedPursuitId={selectedPursuitId} onSelect={setSelectedPursuitId} />
+            </View>
+            <View style={styles.dynamicContainer}>
+              <View style={styles.row}>
+                <Text style={styles.label}>Track progress (units):</Text>
+                <Switch
+                  value={hasProgress}
+                  onValueChange={handleToggleProgress}
+                  disabled={hasMilestones}
+                  trackColor={{ false: colors.borderSubtle, true: colors.accent }}
+                />
+              </View>
+              {hasProgress && (
+                <>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Target this month:</Text>
+                    <BottomSheetTextInput
+                      style={styles.inputNested}
+                      value={targetValue}
+                      onChangeText={setTargetValue}
+                      placeholder="e.g. 300"
+                      keyboardType="numeric"
+                      placeholderTextColor={colors.textPlaceholder}
+                    />
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Unit:</Text>
+                    <BottomSheetTextInput
+                      style={styles.inputNested}
+                      value={unit}
+                      onChangeText={setUnit}
+                      placeholder="pages, chapters, km"
+                      placeholderTextColor={colors.textPlaceholder}
+                    />
+                  </View>
+                </>
+              )}
             </View>
 
-            {isRecurringGoal && (
-              <>
-                <View style={styles.row}>
-                  <Text style={styles.label}>Times this month:</Text>
-                  <BottomSheetTextInput
-                    style={styles.inputNested}
-                    value={occurrenceCount}
-                    onChangeText={setOccurrenceCount}
-                    placeholder="e.g. 8"
-                    keyboardType="numeric"
-                    placeholderTextColor={colors.textPlaceholder}
+            <View style={styles.dynamicContainer}>
+              <View style={styles.row}>
+                <Text style={styles.label}>Repeat as multiple occurrences:</Text>
+                <Switch
+                  value={isRecurringGoal}
+                  onValueChange={setIsRecurringGoal}
+                  disabled={hasMilestones}
+                  trackColor={{ false: colors.borderSubtle, true: colors.accent }}
+                />
+              </View>
+              {isRecurringGoal && (
+                <>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Times this month:</Text>
+                    <BottomSheetTextInput
+                      style={styles.inputNested}
+                      value={occurrenceCount}
+                      onChangeText={setOccurrenceCount}
+                      placeholder="e.g. 8"
+                      keyboardType="numeric"
+                      placeholderTextColor={colors.textPlaceholder}
+                    />
+                  </View>
+
+                  <Text style={[styles.label, { marginTop: 8 }]}>
+                    Max gap: {maxGapDays} day{maxGapDays > 1 ? 's' : ''}
+                  </Text>
+                  <Slider
+                    style={{ width: '100%', height: 36 }}
+                    minimumValue={1}
+                    maximumValue={maxPossibleGap}
+                    step={1}
+                    value={maxGapDays}
+                    onValueChange={setMaxGapDays}
+                    minimumTrackTintColor={colors.accent}
+                    maximumTrackTintColor={colors.borderSubtle}
+                    thumbTintColor={colors.accent}
+                  />
+                  <Text style={styles.hintText}>
+                    {hasProgress
+                      ? `Splits ${targetValue || 'the target'} ${unit} across ${occurrenceCount || '—'} runs, spaced up to ${maxPossibleGap} day${maxPossibleGap > 1 ? 's' : ''} apart, pulled closer if you fall behind.`
+                      : `Spaced up to ${maxPossibleGap} day${maxPossibleGap > 1 ? 's' : ''} apart given ${occurrenceCount || '—'} times, pulled closer if you miss one.`}
+                  </Text>
+                </>
+              )}
+            </View>
+
+            <View style={styles.dynamicContainer}>
+              <View style={styles.row}>
+                <Text style={styles.label}>Milestones (checklist):</Text>
+                <Switch
+                  value={hasMilestones}
+                  onValueChange={handleToggleMilestones}
+                  disabled={hasProgress}
+                  trackColor={{ false: colors.borderSubtle, true: colors.accent }}
+                />
+              </View>
+
+              {hasMilestones && (
+                <View style={[styles.row, { alignItems: 'flex-start', marginTop: 4 }]}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.label}>Sequential order</Text>
+                    <Text style={styles.hintText}>
+                      Only the current milestone shows up on Today; the next unlocks once it&apos;s done.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={isSequential}
+                    onValueChange={setIsSequential}
+                    trackColor={{ false: colors.borderSubtle, true: colors.accent }}
                   />
                 </View>
+              )}
 
-                <View style={styles.row}>
-                  <Text style={styles.label}>Max gap between occurrences:</Text>
-                  <View style={styles.stepperContainer}>
-                    <TouchableOpacity
-                      style={styles.stepperButton}
-                      onPress={() => setMaxGapDays((prev) => Math.max(1, prev - 1))}
-                    >
-                      <Text style={styles.stepperButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.stepperValueText}>
-                      {maxGapDays} day{maxGapDays > 1 ? 's' : ''}
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.stepperButton}
-                      onPress={() => setMaxGapDays((prev) => Math.min(maxPossibleGap, prev + 1))}
-                    >
-                      <Text style={styles.stepperButtonText}>+</Text>
+              {hasMilestones && !editTask && (
+                <>
+                  <View style={styles.addSubtaskRow}>
+                    <BottomSheetTextInput
+                      style={styles.subtaskInput}
+                      value={subtaskInput}
+                      onChangeText={setSubtaskInput}
+                      placeholder="Enter milestone title..."
+                      placeholderTextColor={colors.textPlaceholder}
+                      onSubmitEditing={handleAddSubtask}
+                    />
+                    <TouchableOpacity style={styles.addBtn} onPress={handleAddSubtask}>
+                      <Text style={styles.addBtnText}>Add</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
 
-                <Text style={styles.hintText}>
-                  The app spaces occurrences to hit your target by month end, and pulls the next one closer if you miss one — never more than {maxPossibleGap} day{maxPossibleGap > 1 ? 's' : ''} apart given {occurrenceCount || '—'} times.
-                </Text>
-              </>
-            )}
-          </View>
-        )}
-
-        {type === 'Progression' && (
-          <View style={styles.dynamicContainer}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Total Monthly Target:</Text>
-              <BottomSheetTextInput
-                style={styles.inputNested}
-                value={targetValue}
-                onChangeText={setTargetValue}
-                placeholder="300"
-                keyboardType="numeric"
-                placeholderTextColor={colors.textPlaceholder}
-              />
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Unit:</Text>
-              <BottomSheetTextInput
-                style={styles.inputNested}
-                value={unit}
-                onChangeText={setUnit}
-                placeholder="pages, chapters, km"
-                placeholderTextColor={colors.textPlaceholder}
-              />
-            </View>
-          </View>
-        )}
-
-        {type === 'Hybrid' && !editTask && (
-          <View style={styles.dynamicContainer}>
-            <Text style={styles.subSectionTitle}>Milestone Subtasks</Text>
-            <View style={styles.addSubtaskRow}>
-              <BottomSheetTextInput
-                style={styles.subtaskInput}
-                value={subtaskInput}
-                onChangeText={setSubtaskInput}
-                placeholder="Enter milestone title..."
-                placeholderTextColor={colors.textPlaceholder}
-                onSubmitEditing={handleAddSubtask}
-              />
-              <TouchableOpacity style={styles.addBtn} onPress={handleAddSubtask}>
-                <Text style={styles.addBtnText}>Add</Text>
-              </TouchableOpacity>
+                  {subtasks.map((s, idx) => (
+                    <View key={s.id} style={styles.subtaskItem}>
+                      <Text style={styles.subtaskTitle}>
+                        {idx + 1}. {s.title}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        {isSequential && (
+                          <>
+                            <TouchableOpacity onPress={() => moveSubtask(idx, -1)} disabled={idx === 0}>
+                              <Ionicons
+                                name="chevron-up"
+                                size={16}
+                                color={idx === 0 ? colors.textMuted : colors.accent}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => moveSubtask(idx, 1)}
+                              disabled={idx === subtasks.length - 1}
+                            >
+                              <Ionicons
+                                name="chevron-down"
+                                size={16}
+                                color={idx === subtasks.length - 1 ? colors.textMuted : colors.accent}
+                              />
+                            </TouchableOpacity>
+                          </>
+                        )}
+                        <TouchableOpacity onPress={() => handleRemoveSubtask(s.id)}>
+                          <Text style={styles.removeText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )}
             </View>
 
-            {subtasks.map((s, idx) => (
-              <View key={s.id} style={styles.subtaskItem}>
-                <Text style={styles.subtaskTitle}>{idx + 1}. {s.title}</Text>
-                <TouchableOpacity onPress={() => handleRemoveSubtask(s.id)}>
-                  <Text style={styles.removeText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {!editTask && (
-          <View style={styles.dynamicContainer}>
-            <Text style={styles.subSectionTitle}>Tags</Text>
-            <TagPicker
-              allTags={allTags}
-              mostUsedTags={mostUsedTags}
-              selectedTagIds={selectedTagIds}
-              onToggleTag={(tagId) =>
-                setSelectedTagIds((prev) =>
-                  prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
-                )
-              }
-              onCreateTag={(name) => addTag({ name })}
-              onDeleteTag={(tagId) => {
-                setSelectedTagIds((prev) => prev.filter((id) => id !== tagId));
-                removeTag(tagId);
-              }}
-            />
-          </View>
+            <View style={styles.dynamicContainer}>
+              <Text style={styles.subSectionTitle}>Tags</Text>
+              <TagPicker
+                allTags={allTags}
+                mostUsedTags={mostUsedTags}
+                selectedTagIds={selectedTagIds}
+                onToggleTag={(tagId) =>
+                  setSelectedTagIds((prev) =>
+                    prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+                  )
+                }
+                onCreateTag={(name) => addTag({ name })}
+                onDeleteTag={(tagId) => {
+                  setSelectedTagIds((prev) => prev.filter((id) => id !== tagId));
+                  removeTag(tagId);
+                }}
+              />
+            </View>
+          </>
         )}
 
         <View style={{ marginTop: 24, width: '100%', paddingBottom: 40 }}>
@@ -437,6 +603,14 @@ const styles = StyleSheet.create({
   selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
   unselectedText: { color: colors.textSecondary, fontSize: 12 },
   selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 12 },
+  advancedToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+  },
+  advancedToggleText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.3 },
   dynamicContainer: {
     marginTop: 10,
     padding: 12,
@@ -457,35 +631,9 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     color: colors.textPrimary,
   },
-  stepperContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  stepperButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.surfaceElevated,
-  },
-  stepperButtonText: {
-    color: colors.accent,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  stepperValueText: {
-    paddingHorizontal: 10,
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-  hintText: { fontSize: 11, color: colors.textMuted, marginTop: 8, fontStyle: 'italic' },
+  hintText: { fontSize: 11, color: colors.textMuted, marginTop: 4, fontStyle: 'italic' },
   subSectionTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
-  addSubtaskRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  addSubtaskRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 6 },
   subtaskInput: {
     flex: 1,
     borderWidth: 1,
@@ -500,10 +648,45 @@ const styles = StyleSheet.create({
   },
   addBtn: { backgroundColor: colors.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
   addBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
-  subtaskItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
-  subtaskTitle: { color: colors.textPrimary, fontSize: 13 },
+  subtaskItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+  subtaskTitle: { color: colors.textPrimary, fontSize: 13, flex: 1, marginRight: 8 },
   removeText: { color: colors.danger, fontWeight: 'bold' },
   submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
   submitDisabled: { backgroundColor: colors.surfaceElevated },
   submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '700' },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+    marginRight: 6,
+  },
+  chipSelected: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
+  chipText: { fontSize: 12, color: colors.textSecondary },
+  chipTextSelected: { fontSize: 12, fontWeight: '600', color: colors.selectedText },
+  chipCreate: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.accent,
+  },
+  chipCreateText: { fontSize: 12, color: colors.accent, fontWeight: '600' },
+  createRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  createInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 13,
+    backgroundColor: colors.surfaceSubtle,
+    color: colors.textPrimary,
+  },
+  createBtn: { backgroundColor: colors.accent, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 6 },
+  createBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
 });
