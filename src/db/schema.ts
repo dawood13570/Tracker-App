@@ -15,8 +15,6 @@ export const tasks = sqliteTable('tasks', {
   scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly'] }).default('daily').notNull(),
   sourceTaskId: integer('source_task_id'),
 
-  projectId: integer('project_id').references((): any => projects.id, { onDelete: 'set null' }),
-
   // Progression fields
   currentProgress: integer('current_progress').default(0),
   totalProgress: integer('total_progress').default(0),
@@ -156,14 +154,6 @@ export const activityLogTags = sqliteTable('activity_log_tags', {
   pk: primaryKey({ columns: [table.logId, table.tagId] }),
 }));
 
-export const projects = sqliteTable('projects', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  title: text('title').notNull(),
-  status: text('status', { enum: ['plan_to_do', 'active', 'on_hold', 'dropped', 'completed'] }).notNull().default('plan_to_do'),
-  description: text('description'), // free-form — the "details" you write
-  createdAt: text('created_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
-  updatedAt: text('updated_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
-});
 
 export const pursuits = sqliteTable('pursuits', {
   id: integer('id').primaryKey({ autoIncrement: true }),

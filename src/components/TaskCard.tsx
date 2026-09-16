@@ -79,6 +79,9 @@ export function TaskCard({
   const { toggleTask } = useTaskStore();
   const tagVersion = useTagStore((state) => state.tagVersion);
 
+  // If this task is a daily portal to a macro goal, pull subtasks from the master source
+  const targetParentId = (task as any).sourceTaskId ?? task.id;
+
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [taskTags, setTaskTags] = useState<{ id: number; name: string; color: string | null }[]>([]);
   const [editingSubtaskId, setEditingSubtaskId] = useState<number | null>(null);
@@ -100,7 +103,7 @@ export function TaskCard({
   useEffect(() => {
     let active = true;
     if (isExpanded) {
-      getSubtasksByParent(task.id).then((items) => {
+      getSubtasksByParent(targetParentId).then((items) => {
         if (active) {
           setSubtasks(items ?? []);
           const initialMap: Record<number, number> = {};
@@ -114,9 +117,23 @@ export function TaskCard({
     return () => {
       active = false;
     };
-  }, [task.id, task.isCompleted, isExpanded]);
+  }, [targetParentId, task.isCompleted, isExpanded]);
 
-  const handleToggleSubtask = async (subtaskId: number) => {
+  const isSubtaskLocked = (index: number): boolean => {
+    if (!task.isSequential) return false;
+    // Locked if any prior subtask in the sequence is incomplete
+    for (let i = 0; i < index; i++) {
+      if (!subtasks[i].isCompleted) return true;
+    }
+    return false;
+  };
+
+  const handleToggleSubtask = async (subtaskId: number, index: number) => {
+    if (isSubtaskLocked(index)) {
+      Alert.alert('Sequential task', 'Complete the previous milestone first.');
+      return;
+    }
+
     const sub = subtasks.find((s) => s.id === subtaskId);
     if (!sub) return;
 
@@ -323,20 +340,15 @@ export function TaskCard({
     onProgressChanged?.();
   };
 
-  // Normal Parent Toggle + Auto-adjust subtask progress to target
   const handleParentToggle = async () => {
     const nextCompleted = !task.isCompleted;
-
-    // 1. Let your store toggle the parent task exactly as it always does
     await onToggle(task.id, task.isCompleted);
 
-    // 2. Fetch children and adjust progression subtasks
     if (hasSubtasks) {
-      const items = await getSubtasksByParent(task.id);
+      const items = await getSubtasksByParent(targetParentId);
       const progSubtasks = (items ?? []).filter(taskHasProgress);
 
       if (nextCompleted) {
-        // Completing parent -> bump subtasks below target to totalProgress
         for (const sub of progSubtasks) {
           const total = sub.totalProgress ?? 0;
           const current = sub.currentProgress ?? 0;
@@ -345,15 +357,13 @@ export function TaskCard({
           }
         }
       } else {
-        // Uncompleting parent -> revert subtasks back to prior milestone
         for (const sub of progSubtasks) {
           await revertToPreviousProgress(sub.id);
         }
       }
 
-      // Refresh subtasks list in memory if open
       if (isExpanded) {
-        const refreshed = await getSubtasksByParent(task.id);
+        const refreshed = await getSubtasksByParent(targetParentId);
         setSubtasks(refreshed ?? []);
         const newMap: Record<number, number> = {};
         (refreshed ?? []).forEach((s) => {
@@ -435,7 +445,6 @@ export function TaskCard({
                 </Text>
               </View>
 
-              {/* Trailing Slot: Subtask Count & Expand Arrow */}
               <View style={styles.trailingSlot}>
                 {hasSubtasks && (
                   <View style={styles.hybridBadge}>
@@ -521,30 +530,41 @@ export function TaskCard({
                   No subtasks. Hold and edit task to add subtasks.
                 </Text>
               ) : (
-                subtasks.map((sub) => {
+                subtasks.map((sub, idx) => {
                   const isProgSubtask = taskHasProgress(sub);
                   const subProg = localSubtaskProg[sub.id] ?? sub.currentProgress ?? 0;
                   const subTotal = sub.totalProgress ?? 0;
                   const isEditingThisSubtask = editingSubtaskId === sub.id;
+                  const locked = isSubtaskLocked(idx);
 
                   return (
-                    <View key={sub.id} style={styles.subtaskItemRow}>
+                    <View
+                      key={sub.id}
+                      style={[styles.subtaskItemRow, locked && styles.subtaskLockedRow]}
+                    >
                       <TouchableOpacity
                         style={styles.subtaskCheckRow}
-                        onPress={() => handleToggleSubtask(sub.id)}
+                        onPress={() => handleToggleSubtask(sub.id, idx)}
+                        disabled={locked}
                       >
                         <View
                           style={[
                             styles.subtaskCheckbox,
                             sub.isCompleted && styles.subtaskCheckboxChecked,
+                            locked && styles.subtaskCheckboxLocked,
                           ]}
                         >
-                          {sub.isCompleted && <Text style={styles.checkmark}>✓</Text>}
+                          {locked ? (
+                            <Ionicons name="lock-closed" size={10} color={colors.textMuted} />
+                          ) : (
+                            sub.isCompleted && <Text style={styles.checkmark}>✓</Text>
+                          )}
                         </View>
                         <Text
                           style={[
                             styles.subtaskTitleText,
                             sub.isCompleted && styles.subtaskCompletedText,
+                            locked && styles.subtaskLockedText,
                           ]}
                           numberOfLines={2}
                         >
@@ -552,7 +572,6 @@ export function TaskCard({
                         </Text>
                       </TouchableOpacity>
 
-                      {/* Tap-to-type Progress Box for Subtasks */}
                       {isProgSubtask && (
                         <View style={styles.subtaskProgressSlot}>
                           {isEditingThisSubtask ? (
@@ -579,7 +598,11 @@ export function TaskCard({
                             </View>
                           ) : (
                             <Pressable
-                              style={styles.subtaskValueBadge}
+                              disabled={locked}
+                              style={[
+                                styles.subtaskValueBadge,
+                                locked && { opacity: 0.5 },
+                              ]}
                               onPress={() => {
                                 const currentVal = localSubtaskProg[sub.id] ?? subProg;
                                 setEditingSubtaskId(sub.id);
@@ -590,6 +613,7 @@ export function TaskCard({
                                 style={[
                                   styles.subtaskValueBadgeText,
                                   sub.isCompleted && styles.subtaskValueBadgeDone,
+                                  locked && { color: colors.textMuted },
                                 ]}
                               >
                                 {localSubtaskProg[sub.id] ?? subProg}/{subTotal} {sub.progressUnit ?? ''}
@@ -750,6 +774,9 @@ export const styles = StyleSheet.create({
     paddingVertical: 5,
     gap: 8,
   },
+  subtaskLockedRow: {
+    opacity: 0.45,
+  },
   subtaskCheckRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   subtaskCheckbox: {
     width: 16,
@@ -763,8 +790,10 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   subtaskCheckboxChecked: { backgroundColor: colors.accent },
+  subtaskCheckboxLocked: { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceElevated },
   subtaskTitleText: { fontSize: 13, color: colors.textPrimary, flex: 1 },
   subtaskCompletedText: { textDecorationLine: 'line-through', color: colors.textMuted },
+  subtaskLockedText: { color: colors.textMuted },
   subtaskProgressSlot: {
     alignItems: 'flex-end',
     justifyContent: 'center',

@@ -9,87 +9,29 @@ import {
   Alert,
   Keyboard,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { assignTag, getAllPursuits, insertPursuit, insertSubtask, insertTask, PursuitRow, updateTask } from '../db/queries';
+import {
+  assignTag,
+  deleteTask,
+  getSubtasksByParent,
+  insertSubtask,
+  insertTask,
+  updateTask,
+} from '../db/queries';
 import { colors } from '../theme/colors';
+import { PursuitPicker } from './PursuitPicker';
 import { TagPicker } from './TagPicker';
-
-interface PursuitPickerProps {
-  selectedPursuitId: number | null;
-  onSelect: (id: number | null) => void;
-}
-
-export function PursuitPicker({ selectedPursuitId, onSelect }: PursuitPickerProps) {
-  const [pursuits, setPursuits] = useState<PursuitRow[]>([]);
-  const [newTitle, setNewTitle] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
-
-  useEffect(() => {
-    getAllPursuits().then(setPursuits);
-  }, []);
-
-  const handleCreate = async () => {
-    if (!newTitle.trim()) return;
-    const created = await insertPursuit({ title: newTitle.trim(), status: 'active' });
-    setPursuits((prev) => [created, ...prev]);
-    onSelect(created.id);
-    setNewTitle('');
-    setShowCreate(false);
-  };
-
-  return (
-    <View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-        <Pressable
-          style={[styles.chip, selectedPursuitId === null && styles.chipSelected]}
-          onPress={() => onSelect(null)}
-        >
-          <Text style={selectedPursuitId === null ? styles.chipTextSelected : styles.chipText}>None</Text>
-        </Pressable>
-        {pursuits.map((p) => (
-          <Pressable
-            key={p.id}
-            style={[styles.chip, selectedPursuitId === p.id && styles.chipSelected]}
-            onPress={() => onSelect(p.id)}
-          >
-            <Text style={selectedPursuitId === p.id ? styles.chipTextSelected : styles.chipText}>{p.title}</Text>
-          </Pressable>
-        ))}
-        <Pressable style={styles.chipCreate} onPress={() => setShowCreate((s) => !s)}>
-          <Text style={styles.chipCreateText}>+ New</Text>
-        </Pressable>
-      </ScrollView>
-
-      {showCreate && (
-        <View style={styles.createRow}>
-          <TextInput
-            style={styles.createInput}
-            value={newTitle}
-            onChangeText={setNewTitle}
-            placeholder="New pursuit title..."
-            placeholderTextColor={colors.textPlaceholder}
-            onSubmitEditing={handleCreate}
-          />
-          <Pressable style={styles.createBtn} onPress={handleCreate}>
-            <Text style={styles.createBtnText}>Add</Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
-  );
-}
 
 interface SubTaskDraft {
   id: string;
   title: string;
   isCompleted: boolean;
+  isNew?: boolean;
 }
 
 interface NewYearlyTaskModalProps {
@@ -123,6 +65,7 @@ export default function NewYearlyTaskModal({
   const [hasMilestones, setHasMilestones] = useState(false);
   const [isSequential, setIsSequential] = useState(true);
   const [subtasks, setSubtasks] = useState<SubTaskDraft[]>([]);
+  const [deletedSubtaskIds, setDeletedSubtaskIds] = useState<number[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
 
   const [isRecurringGoal, setIsRecurringGoal] = useState(true);
@@ -175,7 +118,9 @@ export default function NewYearlyTaskModal({
       return;
     }
     setHasMilestones(value);
-    if (!value) setSubtasks([]);
+    if (!value) {
+      setSubtasks([]);
+    }
   };
 
   const moveSubtask = (index: number, direction: -1 | 1) => {
@@ -199,6 +144,7 @@ export default function NewYearlyTaskModal({
     setHasMilestones(false);
     setIsSequential(true);
     setSubtasks([]);
+    setDeletedSubtaskIds([]);
     setSubtaskInput('');
     setIsRecurringGoal(true);
     setOccurrenceCount('');
@@ -218,7 +164,9 @@ export default function NewYearlyTaskModal({
       setHasProgress(hasProg);
       setTargetValue(hasProg ? String(editTask.totalProgress) : '');
       setUnit(editTask.progressUnit ?? '');
-      setHasMilestones(editTask.type === 'Hybrid');
+
+      const isHybrid = editTask.type === 'Hybrid';
+      setHasMilestones(isHybrid);
       setIsSequential(Boolean(editTask.isSequential));
 
       const hasOcc = editTask.occurrenceTarget != null && editTask.occurrenceTarget > 0;
@@ -227,6 +175,20 @@ export default function NewYearlyTaskModal({
       setMaxGapDays(editTask.maxGapDays ?? 1);
 
       setShowAdvanced(true);
+
+      if (isHybrid) {
+        getSubtasksByParent(editTask.id).then((items) => {
+          setSubtasks(
+            (items ?? []).map((s) => ({
+              id: String(s.id),
+              title: s.title,
+              isCompleted: Boolean(s.isCompleted),
+              isNew: false,
+            }))
+          );
+        });
+      }
+      setDeletedSubtaskIds([]);
     } else {
       resetForm();
     }
@@ -234,11 +196,18 @@ export default function NewYearlyTaskModal({
 
   const handleAddSubtask = () => {
     if (!subtaskInput.trim()) return;
-    setSubtasks((prev) => [...prev, { id: `temp-${Date.now()}`, title: subtaskInput.trim(), isCompleted: false }]);
+    setSubtasks((prev) => [
+      ...prev,
+      { id: `temp-${Date.now()}`, title: subtaskInput.trim(), isCompleted: false, isNew: true },
+    ]);
     setSubtaskInput('');
   };
 
   const handleRemoveSubtask = (id: string) => {
+    if (!id.startsWith('temp-')) {
+      const numId = Number(id);
+      if (!isNaN(numId)) setDeletedSubtaskIds((prev) => [...prev, numId]);
+    }
     setSubtasks((prev) => prev.filter((s) => s.id !== id));
   };
 
@@ -259,6 +228,7 @@ export default function NewYearlyTaskModal({
 
     try {
       const inferredType = hasMilestones ? 'Hybrid' : hasProgress ? 'Progression' : 'Simple';
+      const shouldSaveRecurrence = isRecurringGoal;
 
       if (editTask) {
         await updateTask(editTask.id, {
@@ -267,11 +237,33 @@ export default function NewYearlyTaskModal({
           priority,
           totalProgress: hasProgress ? Number(targetValue) : null,
           progressUnit: hasProgress ? unit.trim() || null : null,
-          occurrenceTarget: isRecurringGoal ? Number(occurrenceCount) : null,
-          maxGapDays: isRecurringGoal ? maxGapDays : null,
+          occurrenceTarget: shouldSaveRecurrence ? Number(occurrenceCount) : null,
+          maxGapDays: shouldSaveRecurrence ? maxGapDays : null,
           pursuitId: selectedPursuitId,
           isSequential: hasMilestones ? isSequential : false,
+          subtasksTotal: hasMilestones ? subtasks.length : 0,
         } as any);
+
+        for (const delId of deletedSubtaskIds) {
+          await deleteTask(delId);
+        }
+
+        for (let i = 0; i < subtasks.length; i++) {
+          const s = subtasks[i];
+          if (s.isNew) {
+            await insertSubtask(editTask.id, {
+              title: s.title,
+              scheduledDate: yearStartDate,
+              priority,
+              subtaskOrder: i,
+            });
+          } else {
+            await updateTask(Number(s.id), {
+              title: s.title,
+              subtaskOrder: i,
+            } as any);
+          }
+        }
       } else {
         const parentYearly = await insertTask({
           title: title.trim(),
@@ -282,8 +274,8 @@ export default function NewYearlyTaskModal({
           scope: 'yearly',
           totalProgress: hasProgress ? Number(targetValue) : null,
           progressUnit: hasProgress ? unit.trim() || null : null,
-          occurrenceTarget: isRecurringGoal ? Number(occurrenceCount) : null,
-          maxGapDays: isRecurringGoal ? maxGapDays : null,
+          occurrenceTarget: shouldSaveRecurrence ? Number(occurrenceCount) : null,
+          maxGapDays: shouldSaveRecurrence ? maxGapDays : null,
           rolloverEnabled: false,
           subtasksTotal: hasMilestones ? subtasks.length : 0,
           pursuitId: selectedPursuitId,
@@ -357,8 +349,6 @@ export default function NewYearlyTaskModal({
           </View>
         </View>
 
-        
-
         <TouchableOpacity style={styles.advancedToggleRow} onPress={() => setShowAdvanced((s) => !s)}>
           <Text style={styles.advancedToggleText}>Advanced Options</Text>
           <Ionicons name={showAdvanced ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
@@ -366,11 +356,11 @@ export default function NewYearlyTaskModal({
 
         {showAdvanced && (
           <>
-          
             <View style={[styles.dynamicContainer, { marginTop: 6 }]}>
               <Text style={styles.subSectionTitle}>Pursuit</Text>
               <PursuitPicker selectedPursuitId={selectedPursuitId} onSelect={setSelectedPursuitId} />
             </View>
+
             <View style={styles.dynamicContainer}>
               <View style={styles.row}>
                 <Text style={styles.label}>Track progress (units):</Text>
@@ -414,7 +404,6 @@ export default function NewYearlyTaskModal({
                 <Switch
                   value={isRecurringGoal}
                   onValueChange={setIsRecurringGoal}
-                  disabled={hasMilestones}
                   trackColor={{ false: colors.borderSubtle, true: colors.accent }}
                 />
               </View>
@@ -482,7 +471,7 @@ export default function NewYearlyTaskModal({
                 </View>
               )}
 
-              {hasMilestones && !editTask && (
+              {hasMilestones && (
                 <>
                   <View style={styles.addSubtaskRow}>
                     <BottomSheetTextInput
@@ -500,7 +489,12 @@ export default function NewYearlyTaskModal({
 
                   {subtasks.map((s, idx) => (
                     <View key={s.id} style={styles.subtaskItem}>
-                      <Text style={styles.subtaskTitle}>
+                      <Text
+                        style={[
+                          styles.subtaskTitle,
+                          s.isCompleted && { textDecorationLine: 'line-through', color: colors.textMuted },
+                        ]}
+                      >
                         {idx + 1}. {s.title}
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -653,39 +647,4 @@ const styles = StyleSheet.create({
   submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
   submitDisabled: { backgroundColor: colors.surfaceElevated },
   submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '700' },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-    marginRight: 6,
-  },
-  chipSelected: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
-  chipText: { fontSize: 12, color: colors.textSecondary },
-  chipTextSelected: { fontSize: 12, fontWeight: '600', color: colors.selectedText },
-  chipCreate: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.accent,
-  },
-  chipCreateText: { fontSize: 12, color: colors.accent, fontWeight: '600' },
-  createRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  createInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    fontSize: 13,
-    backgroundColor: colors.surfaceSubtle,
-    color: colors.textPrimary,
-  },
-  createBtn: { backgroundColor: colors.accent, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 6 },
-  createBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
 });

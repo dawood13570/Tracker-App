@@ -11,11 +11,14 @@ import { TaskCard } from '@/components/TaskCard';
 import {
   deleteTaskCascade,
   ensureDailyDecompositionForDate,
+  EventRow,
   getActivityLogsForDateRange,
   getAllDescendantTasks,
   getAllTagAssociations,
   getCompletedOccurrenceCount,
   getEffectiveProgress,
+  getEventsForDateRange,
+  getHabitsByDate,
   getMonthlyTasks,
   getProgressLogsByTask,
   getSubtaskCounts,
@@ -23,6 +26,8 @@ import {
   getTasksForDateRange,
   getWeeklyTasks,
   getYearlyTasks,
+  HabitWithStatus,
+  logHabitCompletion,
   TaskRow,
 } from '@/db/queries';
 import { generatePeriodSeed } from '@/engine/notesSeed';
@@ -101,6 +106,9 @@ export default function HorizonScreen() {
   const [periodGoals, setPeriodGoals] = useState<TaskRow[]>([]);
   const [periodRangeTasks, setPeriodRangeTasks] = useState<TaskRow[]>([]);
   const [periodActivities, setPeriodActivities] = useState<ActivityLogWithDetails[]>([]);
+  const [periodEvents, setPeriodEvents] = useState<EventRow[]>([]);
+  const [dayHabits, setDayHabits] = useState<HabitWithStatus[]>([]);
+
   const [goalProgress, setGoalProgress] = useState<Record<number, number>>({});
   const [goalSubtasks, setGoalSubtasks] = useState<Record<number, { completed: number; total: number }>>({});
   const [goalOccurrences, setGoalOccurrences] = useState<Record<number, number>>({});
@@ -170,7 +178,7 @@ export default function HorizonScreen() {
   const loadData = useCallback(async () => {
     await ensureDailyDecompositionForDate(todayStr);
 
-    const [rangeTasks, scopedGoals, rangeActivities] = await Promise.all([
+    const [rangeTasks, scopedGoals, rangeActivities, rangeEvents, currentDayHabits] = await Promise.all([
       getTasksForDateRange(startStr, endStr),
       zoomLevel === 'week'
         ? getWeeklyTasks(startStr, endStr)
@@ -178,6 +186,8 @@ export default function HorizonScreen() {
         ? getMonthlyTasks(startStr, endStr)
         : getYearlyTasks(startStr, endStr),
       getActivityLogsForDateRange(startStr, endStr),
+      getEventsForDateRange(startStr, endStr),
+      getHabitsByDate(selectedDayStr),
       loadTags(),
       loadMostUsedTags(),
       refreshTagMap(),
@@ -186,6 +196,8 @@ export default function HorizonScreen() {
     setPeriodRangeTasks(rangeTasks);
     setPeriodGoals(scopedGoals);
     setPeriodActivities(rangeActivities);
+    setPeriodEvents(rangeEvents);
+    setDayHabits(currentDayHabits);
 
     const progressionGoals = scopedGoals.filter((t) => t.type === 'Progression');
     const hybridGoals = scopedGoals.filter((t) => t.type === 'Hybrid');
@@ -200,7 +212,6 @@ export default function HorizonScreen() {
     setGoalSubtasks(Object.fromEntries(subtaskEntries));
     setGoalOccurrences(Object.fromEntries(countEntries));
 
-    // Data-driven progress check instead of rigid type check
     const progDaily = rangeTasks.filter(taskHasProgress);
 
     if (progDaily.length > 0) {
@@ -228,14 +239,13 @@ export default function HorizonScreen() {
       });
     }
 
-    // Batch fetch subtask counts for all range tasks directly
     if (rangeTasks.length > 0) {
       const countsMap = await getSubtaskCountsForTaskIds(rangeTasks.map((t) => t.id));
       setSubtaskMap(countsMap);
     } else {
       setSubtaskMap({});
     }
-  }, [zoomLevel, startStr, endStr, todayStr, loadTags, loadMostUsedTags, refreshTagMap]);
+  }, [zoomLevel, startStr, endStr, todayStr, selectedDayStr, loadTags, loadMostUsedTags, refreshTagMap]);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
@@ -244,23 +254,26 @@ export default function HorizonScreen() {
   }, [tagVersion, refreshTagMap]);
 
   const filterItems = useCallback(
-    <T extends { id: number; title: string }>(items: T[]): T[] => {
+    <T extends { id: number; title?: string | null }>(items: T[], type: 'tasks' | 'habits' | 'events' | 'activities'): T[] => {
       const q = searchQuery.trim().toLowerCase();
       return items.filter((item) => {
-        const matchesText = !q || item.title.toLowerCase().includes(q);
-        const itemTags = tagAssociations.tasks[item.id] ?? [];
+        const itemTitle = item.title ?? '';
+        const matchesText = !q || itemTitle.toLowerCase().includes(q);
+        const itemTags = tagAssociations[type][item.id] ?? [];
         const matchesTags =
           selectedFilterTagIds.length === 0 || selectedFilterTagIds.some((id) => itemTags.includes(id));
         return matchesText && matchesTags;
       });
     },
-    [searchQuery, selectedFilterTagIds, strictTagFilter, tagAssociations.tasks]
+    [searchQuery, selectedFilterTagIds, tagAssociations]
   );
 
   const isFilterActive = Boolean(searchQuery.trim()) || selectedFilterTagIds.length > 0;
 
-  const filteredGoals = useMemo(() => filterItems(periodGoals), [filterItems, periodGoals]);
-  const filteredRangeTasks = useMemo(() => filterItems(periodRangeTasks), [filterItems, periodRangeTasks]);
+  const filteredGoals = useMemo(() => filterItems(periodGoals, 'tasks'), [filterItems, periodGoals]);
+  const filteredRangeTasks = useMemo(() => filterItems(periodRangeTasks, 'tasks'), [filterItems, periodRangeTasks]);
+  const filteredEvents = useMemo(() => filterItems(periodEvents, 'events'), [filterItems, periodEvents]);
+  const filteredHabits = useMemo(() => filterItems(dayHabits, 'habits'), [filterItems, dayHabits]);
 
   const densityMap = useMemo(() => {
     const map: Record<string, { total: number; completed: number }> = {};
@@ -292,14 +305,22 @@ export default function HorizonScreen() {
     return () => { active = false; };
   }, [zoomLevel, filteredGoals]);
 
-  const groupedSearchDailyTasks = useMemo(() => {
-    const groups: Record<string, TaskRow[]> = {};
-    for (const task of filteredRangeTasks) {
-      if (!groups[task.scheduledDate]) groups[task.scheduledDate] = [];
-      groups[task.scheduledDate].push(task);
-    }
-    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredRangeTasks]);
+  const searchDateKeys = useMemo(() => {
+    if (!isFilterActive) return [];
+    const set = new Set<string>();
+    filteredRangeTasks.forEach((t) => set.add(t.scheduledDate));
+    filteredEvents.forEach((e) => set.add(e.startTime.split('T')[0]));
+    periodActivities.forEach((a) => {
+      const matchesSearch =
+        !searchQuery.trim() ||
+        a.activityTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (a.note ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesTags =
+        selectedFilterTagIds.length === 0 || selectedFilterTagIds.some((id) => a.tagIds.includes(id));
+      if (matchesSearch && matchesTags) set.add(a.date);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [isFilterActive, filteredRangeTasks, filteredEvents, periodActivities, searchQuery, selectedFilterTagIds]);
 
   const singleDayTasks = useMemo(
     () => filteredRangeTasks.filter((t) => t.scheduledDate === selectedDayStr),
@@ -309,6 +330,11 @@ export default function HorizonScreen() {
   const singleDayActivities = useMemo(
     () => periodActivities.filter((a) => a.date === selectedDayStr),
     [periodActivities, selectedDayStr]
+  );
+
+  const singleDayEvents = useMemo(
+    () => filteredEvents.filter((e) => e.startTime.startsWith(selectedDayStr)),
+    [filteredEvents, selectedDayStr]
   );
 
   const navPrev = () => {
@@ -339,8 +365,12 @@ export default function HorizonScreen() {
   };
 
   const handleToggleTask = async (taskId: number) => {
-    if (selectedDayStr !== todayStr) return;
     await toggleTask(taskId);
+    await loadData();
+  };
+
+  const handleToggleHabit = async (habitId: number) => {
+    await logHabitCompletion(habitId, selectedDayStr);
     await loadData();
   };
 
@@ -599,44 +629,91 @@ export default function HorizonScreen() {
             <View style={styles.sectionBlock}>
               <View style={styles.sectionHeaderLine}>
                 <Text style={styles.sectionHeaderTitle}>MATCHING DAYS IN SCOPE</Text>
-                <Text style={styles.sectionItemCount}>{filteredRangeTasks.length}</Text>
+                <Text style={styles.sectionItemCount}>{searchDateKeys.length}</Text>
               </View>
-              {groupedSearchDailyTasks.length === 0 ? (
-                <Text style={styles.emptyNotice}>No daily tasks match your search in this {zoomLevel}.</Text>
+              {searchDateKeys.length === 0 ? (
+                <Text style={styles.emptyNotice}>No items match your search in this {zoomLevel}.</Text>
               ) : (
-                groupedSearchDailyTasks.map(([dateKey, tasksOnDay]) => (
-                  <View key={dateKey} style={styles.dayGroupContainer}>
-                    <View style={styles.dayGroupHeader}>
-                      <Text style={styles.dayGroupTitle}>{format(parseISO(dateKey), 'EEEE, MMM d, yyyy')}</Text>
-                      {zoomLevel === 'month' && (
-                        <TouchableOpacity style={styles.drillWeekBtn} onPress={() => handleDrillToWeek(dateKey)}>
-                          <Text style={styles.drillWeekBtnText}>Open Week</Text>
-                          <Ionicons name="arrow-forward" size={12} color={colors.accent} />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                    <View style={{ gap: 8 }}>
-                      {tasksOnDay.map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          task={task as any}
-                          onToggle={() => { if (dateKey === todayStr) handleToggleTask(task.id); }}
-                          onProgressChanged={loadData}
-                          currentProgress={progressMap[task.id]}
-                          pace={paceMap[task.id]}
-                          subtaskCount={subtaskMap[task.id]}
-                          isExpanded={Boolean(expandedTaskIds[task.id])}
-                          onToggleExpand={() => setExpandedTaskIds((prev) => ({ ...prev, [task.id]: !prev[task.id] }))}
-                          onSubtasksCountUpdate={(taskId, comp, tot) => setSubtaskMap((prev) => ({ ...prev, [taskId]: { completed: comp, total: tot } }))}
-                          selectionMode={selectionMode}
-                          isSelected={selectedIds.includes(task.id)}
-                          onLongPressCard={() => handleLongPressTask(task)}
-                          onToggleSelect={() => toggleSelectTask(task.id)}
+                searchDateKeys.map((dateKey) => {
+                  const tasksOnDay = filteredRangeTasks.filter((t) => t.scheduledDate === dateKey);
+                  const eventsOnDay = filteredEvents.filter((e) => e.startTime.startsWith(dateKey));
+                  const activitiesOnDay = periodActivities.filter((a) => {
+                    const matchesDate = a.date === dateKey;
+                    const matchesSearch =
+                      !searchQuery.trim() ||
+                      a.activityTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (a.note ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+                    const matchesTags =
+                      selectedFilterTagIds.length === 0 || selectedFilterTagIds.some((id) => a.tagIds.includes(id));
+                    return matchesDate && matchesSearch && matchesTags;
+                  });
+
+                  return (
+                    <View key={dateKey} style={styles.dayGroupContainer}>
+                      <View style={styles.dayGroupHeader}>
+                        <Text style={styles.dayGroupTitle}>{format(parseISO(dateKey), 'EEEE, MMM d, yyyy')}</Text>
+                        {zoomLevel === 'month' && (
+                          <TouchableOpacity style={styles.drillWeekBtn} onPress={() => handleDrillToWeek(dateKey)}>
+                            <Text style={styles.drillWeekBtnText}>Open Week</Text>
+                            <Ionicons name="arrow-forward" size={12} color={colors.accent} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {/* Matching Events */}
+                      {eventsOnDay.map((evt) => (
+                        <View key={`event-search-${evt.id}`} style={styles.eventRowCard}>
+                          <Ionicons name="calendar-outline" size={16} color={colors.accent} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.eventTitle}>{evt.title}</Text>
+                            <Text style={styles.eventMeta}>
+                              {evt.startTime.split('T')[1]?.slice(0, 5) ?? 'All Day'}
+                              {evt.location ? ` · ${evt.location}` : ''}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+
+                      {/* Matching Activities */}
+                      {activitiesOnDay.map((entry) => (
+                        <ActivityCard
+                          key={`activity-search-${entry.id}`}
+                          entry={entry}
+                          tags={allTags?.filter((t) => entry.tagIds.includes(t.id)) ?? []}
+                          selectionMode={false}
+                          isSelected={false}
+                          onPressCard={() => {}}
+                          onLongPressCard={() => {}}
+                          onToggleSelect={() => {}}
                         />
                       ))}
+
+                      {/* Matching Tasks */}
+                      {tasksOnDay.length > 0 && (
+                        <View style={{ gap: 8, marginTop: eventsOnDay.length > 0 || activitiesOnDay.length > 0 ? 6 : 0 }}>
+                          {tasksOnDay.map((task) => (
+                            <TaskCard
+                              key={task.id}
+                              task={task as any}
+                              onToggle={() => handleToggleTask(task.id)}
+                              onProgressChanged={loadData}
+                              currentProgress={progressMap[task.id]}
+                              pace={paceMap[task.id]}
+                              subtaskCount={subtaskMap[task.id]}
+                              isExpanded={Boolean(expandedTaskIds[task.id])}
+                              onToggleExpand={() => setExpandedTaskIds((prev) => ({ ...prev, [task.id]: !prev[task.id] }))}
+                              onSubtasksCountUpdate={(taskId, comp, tot) => setSubtaskMap((prev) => ({ ...prev, [taskId]: { completed: comp, total: tot } }))}
+                              selectionMode={selectionMode}
+                              isSelected={selectedIds.includes(task.id)}
+                              onLongPressCard={() => handleLongPressTask(task)}
+                              onToggleSelect={() => toggleSelectTask(task.id)}
+                            />
+                          ))}
+                        </View>
+                      )}
                     </View>
-                  </View>
-                ))
+                  );
+                })
               )}
             </View>
           ) : (
@@ -657,8 +734,54 @@ export default function HorizonScreen() {
                   )}
                 </View>
 
+                {/* Events Section */}
+                {singleDayEvents.length > 0 && (
+                  <View style={{ marginBottom: 12 }}>
+                    <Text style={styles.subCategoryTitle}>EVENTS</Text>
+                    {singleDayEvents.map((evt) => (
+                      <View key={`event-${evt.id}`} style={styles.eventRowCard}>
+                        <Ionicons name="calendar-outline" size={16} color={colors.accent} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.eventTitle}>{evt.title}</Text>
+                          <Text style={styles.eventMeta}>
+                            {evt.startTime.split('T')[1]?.slice(0, 5) ?? 'All Day'}
+                            {evt.location ? ` · ${evt.location}` : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Habits Section */}
+                {filteredHabits.length > 0 && (
+                  <View style={{ marginBottom: 12 }}>
+                    <Text style={styles.subCategoryTitle}>HABITS</Text>
+                    {filteredHabits.map((habit) => (
+                      <TouchableOpacity
+                        key={`habit-${habit.id}`}
+                        style={styles.habitRowCard}
+                        onPress={() => handleToggleHabit(habit.id)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={habit.isCompletedToday ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={18}
+                          color={habit.isCompletedToday ? colors.accent : colors.textMuted}
+                        />
+                        <Text style={[styles.habitTitle, habit.isCompletedToday && styles.habitDone]}>
+                          {habit.title}
+                        </Text>
+                        <Text style={styles.habitStreak}>🔥 {habit.streak}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {/* Activities Section */}
                 {singleDayActivities.length > 0 && (
-                  <View style={{ marginBottom: 10, gap: 8 }}>
+                  <View style={{ marginBottom: 12, gap: 8 }}>
+                    <Text style={styles.subCategoryTitle}>ACTIVITIES</Text>
                     {singleDayActivities.map((entry) => (
                       <ActivityCard
                         key={`activity-${entry.id}`}
@@ -674,30 +797,34 @@ export default function HorizonScreen() {
                   </View>
                 )}
 
-                {singleDayTasks.length === 0 && singleDayActivities.length === 0 ? (
-                  <Text style={styles.emptyNotice}>Nothing scheduled for this day.</Text>
-                ) : (
-                  <View style={{ gap: 8 }}>
-                    {singleDayTasks.map((task) => (
-                      <TaskCard
-                        key={task.id}
-                        task={task as any}
-                        onToggle={() => handleToggleTask(task.id)}
-                        onProgressChanged={loadData}
-                        currentProgress={progressMap[task.id]}
-                        pace={paceMap[task.id]}
-                        subtaskCount={subtaskMap[task.id]}
-                        isExpanded={Boolean(expandedTaskIds[task.id])}
-                        onToggleExpand={() => setExpandedTaskIds((prev) => ({ ...prev, [task.id]: !prev[task.id] }))}
-                        onSubtasksCountUpdate={(taskId, comp, tot) => setSubtaskMap((prev) => ({ ...prev, [taskId]: { completed: comp, total: tot } }))}
-                        selectionMode={selectionMode}
-                        isSelected={selectedIds.includes(task.id)}
-                        onLongPressCard={() => handleLongPressTask(task)}
-                        onToggleSelect={() => toggleSelectTask(task.id)}
-                      />
-                    ))}
-                  </View>
-                )}
+                {/* Tasks Section */}
+                <View>
+                  <Text style={styles.subCategoryTitle}>TASKS</Text>
+                  {singleDayTasks.length === 0 ? (
+                    <Text style={styles.emptyNotice}>No tasks scheduled for this day.</Text>
+                  ) : (
+                    <View style={{ gap: 8 }}>
+                      {singleDayTasks.map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task as any}
+                          onToggle={() => handleToggleTask(task.id)}
+                          onProgressChanged={loadData}
+                          currentProgress={progressMap[task.id]}
+                          pace={paceMap[task.id]}
+                          subtaskCount={subtaskMap[task.id]}
+                          isExpanded={Boolean(expandedTaskIds[task.id])}
+                          onToggleExpand={() => setExpandedTaskIds((prev) => ({ ...prev, [task.id]: !prev[task.id] }))}
+                          onSubtasksCountUpdate={(taskId, comp, tot) => setSubtaskMap((prev) => ({ ...prev, [taskId]: { completed: comp, total: tot } }))}
+                          selectionMode={selectionMode}
+                          isSelected={selectedIds.includes(task.id)}
+                          onLongPressCard={() => handleLongPressTask(task)}
+                          onToggleSelect={() => toggleSelectTask(task.id)}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </View>
               </View>
             )
           )}
@@ -805,4 +932,32 @@ const styles = StyleSheet.create({
   dayGroupContainer: { marginBottom: 14 },
   dayGroupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingBottom: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSubtle },
   dayGroupTitle: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+  subCategoryTitle: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.6, marginBottom: 6, marginTop: 4 },
+  eventRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.surfaceElevated,
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  eventTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
+  eventMeta: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  habitRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.surfaceElevated,
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  habitTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary, flex: 1 },
+  habitDone: { textDecorationLine: 'line-through', color: colors.textMuted },
+  habitStreak: { fontSize: 12, fontWeight: '700', color: colors.accent },
 });

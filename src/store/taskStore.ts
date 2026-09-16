@@ -89,22 +89,42 @@ async function handleCompletionSideEffects(
   }
 }
 
+// in src/store/taskStore.ts
+
 async function syncMilestoneFromProxy(get: StoreApi<TaskState>['getState'], proxy: Task) {
   if (proxy.sourceTaskId == null) return;
-  const milestone = await getTaskById(proxy.sourceTaskId);
-  if (!milestone || milestone.parentId == null) return; // not a milestone proxy — sourceTaskId can also point at a period-scoped Progression/count goal
+  const source = await getTaskById(proxy.sourceTaskId);
+  if (!source) return;
 
-  const updatedMilestone = await updateTask(milestone.id, { isCompleted: proxy.isCompleted });
-  if (!updatedMilestone) return;
+  // Case A: Proxy points to a milestone (which itself has a parent goal)
+  if (source.parentId != null) {
+    await updateTask(source.id, { isCompleted: proxy.isCompleted });
+    const siblings = await getSubtasksByParent(source.parentId);
+    const completedCount = siblings.filter((s) => s.isCompleted).length;
+    await updateTask(source.parentId, { subtasksCompleted: completedCount });
 
-  const siblings = await getSubtasksByParent(milestone.parentId);
-  const allCompleted = siblings.length > 0 && siblings.every((s) => s.isCompleted);
-  if (allCompleted) await get().completeTask(milestone.parentId);
-  else await get().uncompleteTask(milestone.parentId);
+    if (siblings.length > 0 && completedCount === siblings.length) {
+      await get().completeTask(source.parentId);
+    } else {
+      await get().uncompleteTask(source.parentId);
+    }
+  }
 
-  // Immediately try to surface the next milestone's proxy in this same
-  // session, rather than waiting for the next tab switch — matches the
-  // "seamlessly smart" bar rather than the existing focus-only reload.
+  // Case B: Proxy points directly to a period-scoped goal (Hybrid or Occurrence)
+  if (source.parentId == null && source.scope !== 'daily') {
+    // If it's a Hybrid goal occurrence, sync its subtasksCompleted count
+    const subtasks = await getSubtasksByParent(source.id);
+    if (subtasks.length > 0) {
+      const completedCount = subtasks.filter((s) => s.isCompleted).length;
+      await updateTask(source.id, { subtasksCompleted: completedCount });
+      if (completedCount === subtasks.length) {
+        await get().completeTask(source.id);
+      } else {
+        await get().uncompleteTask(source.id);
+      }
+    }
+  }
+
   await ensureDailyDecompositionForDate(getAppToday());
   await get().loadTasks();
 }

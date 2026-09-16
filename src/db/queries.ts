@@ -15,7 +15,6 @@ import {
   habitTags,
   notes,
   progressLogs,
-  projects,
   pursuits,
   tags,
   tasks,
@@ -947,7 +946,7 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
       } else if (yearly.type === 'Simple' && yearly.occurrenceTarget) {
         await decomposeCountGoalToNextOccurrence(yearly, dateStr, yearEnd);
       } else if (yearly.type === 'Hybrid') {
-        await decomposeSequentialHybridMilestone(yearly, dateStr, yearEnd);
+        await decomposeHybridGoal(yearly, dateStr, yearEnd);
       }
       
     }
@@ -964,7 +963,7 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
       } else if (monthly.type === 'Simple' && monthly.occurrenceTarget) {
         await decomposeCountGoalToNextOccurrence(monthly, dateStr, monthEnd);
       } else if (monthly.type === 'Hybrid') {
-        await decomposeSequentialHybridMilestone(monthly, dateStr, monthEnd);
+        await decomposeHybridGoal(monthly, dateStr, monthEnd);
       }
     }
 
@@ -980,7 +979,7 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
       } else if (weekly.type === 'Simple' && weekly.occurrenceTarget) {
         await decomposeCountGoalToNextOccurrence(weekly, dateStr, weekEnd);
       } else if (weekly.type === 'Hybrid') {
-        await decomposeSequentialHybridMilestone(weekly, dateStr, weekEnd);
+        await decomposeHybridGoal(weekly, dateStr, weekEnd);
       }
     }
 
@@ -1016,9 +1015,11 @@ export async function deleteTaskCascade(id: number): Promise<void> {
   await deleteTask(id);
 }
 
-export async function getCompletedOccurrenceCount(parentId: number): Promise<number> {
-  const children = await getChildTasks(parentId);
-  return children.filter((c) => c.isCompleted).length;
+export async function getCompletedOccurrenceCount(goalId: number): Promise<number> {
+  const result = await db.get<{ total: number }>(
+    sql`SELECT COUNT(*) as total FROM tasks WHERE source_task_id = ${goalId} AND is_completed = 1`
+  );
+  return result?.total ?? 0;
 }
 
 export async function decomposeCountGoalToNextOccurrence(
@@ -1175,38 +1176,6 @@ export async function getProgressLoggedForDate(dateStr: string): Promise<number>
   return result?.total ?? 0;
 }
 
-export type ProjectRow = typeof projects.$inferSelect;
-
-export async function insertProject(data: { title: string; status?: ProjectRow['status']; description?: string | null }) {
-  const [inserted] = await db.insert(projects).values(data).returning();
-  return inserted;
-}
-
-export async function getAllProjects(): Promise<ProjectRow[]> {
-  return db.select().from(projects).orderBy(desc(projects.updatedAt));
-}
-
-export async function getProjectsByStatus(status: ProjectRow['status']): Promise<ProjectRow[]> {
-  return db.select().from(projects).where(eq(projects.status, status)).orderBy(desc(projects.updatedAt));
-}
-
-export async function updateProject(id: number, data: Partial<{ title: string; status: ProjectRow['status']; description: string | null }>) {
-  const [updated] = await db.update(projects).set({ ...data, updatedAt: sql`(CURRENT_TIMESTAMP)` }).where(eq(projects.id, id)).returning();
-  return updated;
-}
-
-export async function deleteProject(id: number) {
-  const [deleted] = await db.delete(projects).where(eq(projects.id, id)).returning();
-  return deleted;
-}
-
-export async function getTasksByProject(projectId: number): Promise<TaskRow[]> {
-  return db.select().from(tasks).where(eq(tasks.projectId, projectId));
-}
-
-export async function setTaskProject(taskId: number, projectId: number | null) {
-  return updateTask(taskId, { projectId });
-}
 export async function getAllDescendantTasks(parentId: number): Promise<TaskRow[]> {
   const direct = await getChildTasks(parentId);
   let all: TaskRow[] = [...direct];
@@ -1362,46 +1331,91 @@ export async function getSubtasksByParentOrdered(parentId: number): Promise<Task
   return db.select().from(tasks).where(eq(tasks.parentId, parentId)).orderBy(tasks.subtaskOrder, tasks.id);
 }
 
-// Sequential Hybrid goal → surfaces ONLY the current unfinished milestone as a
-// real daily task (proxy), via sourceTaskId pointing at the milestone itself,
-// not the goal. Non-sequential Hybrid goals never call this — they stay a
-// flat checklist, per the earlier design (no auto-surfacing, on purpose).
-export async function decomposeSequentialHybridMilestone(
+
+// in src/db/queries.ts
+
+export async function decomposeHybridGoal(
   goal: TaskRow,
   todayStr: string,
   periodEndStr: string
 ): Promise<TaskRow | null> {
-  if (!goal.isSequential) return null;
-
-  const milestones = await getSubtasksByParentOrdered(goal.id);
-  const current = milestones.find((m) => !m.isCompleted);
-  if (!current) return null; // all done, or none exist yet
-
-  const existingProxies = await getChildTasks(current.id);
-  const pending = existingProxies.find((p) => !p.isCompleted && p.scheduledDate >= todayStr);
-  if (pending) return pending; // already surfaced (possibly rolled forward), don't duplicate
-
   if (todayStr > periodEndStr) return null;
 
-  const [created] = await db
-    .insert(tasks)
-    .values({
-      title: current.title,
-      type: current.totalProgress != null ? 'Progression' : 'Simple',
-      priority: goal.priority,
-      scheduledDate: todayStr,
-      deadline: current.totalProgress != null ? todayStr : null,
-      scope: 'daily',
-      sourceTaskId: current.id,
-      totalProgress: current.totalProgress ?? null,
-      progressUnit: current.progressUnit ?? null,
-      // Deliberately NOT the self-healing occurrence-spacing model — a milestone
-      // has no target count or max-gap, it's just "the current thing to work
-      // on." Ordinary rollover (procrastination count climbing, evolving
-      // priority eligible) is the honest behavior if it sits untouched.
-      rolloverEnabled: true,
-    })
-    .returning();
+  // 1. If goal has an occurrence schedule, check if an occurrence is due today
+  if (goal.occurrenceTarget) {
+    const existingProxy = await db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.sourceTaskId, goal.id),
+          eq(tasks.scheduledDate, todayStr),
+          eq(tasks.scope, 'daily')
+        )
+      )
+      .limit(1);
 
-  return created;
+    if (existingProxy.length > 0) return existingProxy[0];
+
+    // Check if max gap or schedule requires an occurrence today
+    const childOccurrences = await db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.sourceTaskId, goal.id), eq(tasks.scope, 'daily')));
+
+    const completedCount = childOccurrences.filter((c) => c.isCompleted).length;
+    if (completedCount >= goal.occurrenceTarget) return null; // Target met
+
+    const pending = childOccurrences.find((c) => !c.isCompleted && c.scheduledDate >= todayStr);
+    if (pending) return pending; // Already pending on or after today
+
+    // Spawn a daily portal to the master hybrid goal
+    const [created] = await db
+      .insert(tasks)
+      .values({
+        title: goal.title,
+        type: 'Hybrid',
+        priority: goal.priority,
+        scheduledDate: todayStr,
+        deadline: periodEndStr,
+        scope: 'daily',
+        sourceTaskId: goal.id,
+        isSequential: goal.isSequential,
+        rolloverEnabled: true,
+      })
+      .returning();
+
+    return created;
+  }
+
+  // 2. Non-recurring sequential goals: Surface the single active milestone
+  if (goal.isSequential) {
+    const milestones = await getSubtasksByParentOrdered(goal.id);
+    const current = milestones.find((m) => !m.isCompleted);
+    if (!current) return null;
+
+    const existingProxies = await getChildTasks(current.id);
+    const pending = existingProxies.find((p) => !p.isCompleted && p.scheduledDate >= todayStr);
+    if (pending) return pending;
+
+    const [created] = await db
+      .insert(tasks)
+      .values({
+        title: current.title,
+        type: current.totalProgress != null ? 'Progression' : 'Simple',
+        priority: goal.priority,
+        scheduledDate: todayStr,
+        deadline: current.totalProgress != null ? todayStr : null,
+        scope: 'daily',
+        sourceTaskId: current.id,
+        totalProgress: current.totalProgress ?? null,
+        progressUnit: current.progressUnit ?? null,
+        rolloverEnabled: true,
+      })
+      .returning();
+
+    return created;
+  }
+
+  return null;
 }
