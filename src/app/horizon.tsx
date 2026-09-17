@@ -1,10 +1,9 @@
 // src/app/(tabs)/horizon.tsx
 import { ActivityCard } from '@/components/ActivityCard';
+import { GhostTaskCard } from '@/components/GhostTaskCard';
 import { GoalCard } from '@/components/GoalCard';
-import NewMonthlyTaskModal from '@/components/NewMonthlyTaskModal';
-import NewWeeklyTaskModal from '@/components/NewWeeklyTaskModal';
-import NewYearlyTaskModal from '@/components/NewYearlyTaskModal';
 import NoteSheet from '@/components/NoteSheet';
+import { PeriodGoalModal } from '@/components/PeriodGoalModal';
 import ProgressLogSheet from '@/components/ProgressLogSheet';
 import { TagFilterBar } from '@/components/TagFilterBar';
 import { TaskCard } from '@/components/TaskCard';
@@ -28,6 +27,8 @@ import {
   getYearlyTasks,
   HabitWithStatus,
   logHabitCompletion,
+  previewOccurrenceSchedule,
+  ProjectedOccurrence,
   TaskRow,
 } from '@/db/queries';
 import { generatePeriodSeed } from '@/engine/notesSeed';
@@ -113,6 +114,7 @@ export default function HorizonScreen() {
   const [goalSubtasks, setGoalSubtasks] = useState<Record<number, { completed: number; total: number }>>({});
   const [goalOccurrences, setGoalOccurrences] = useState<Record<number, number>>({});
   const [yearlyBreakdownMap, setYearlyBreakdownMap] = useState<Record<string, { total: number; completed: number }>>({});
+  const [projectedOccurrences, setProjectedOccurrences] = useState<ProjectedOccurrence[]>([]);
 
   const [selectedDayStr, setSelectedDayStr] = useState<string>(todayStr);
   const [progressMap, setProgressMap] = useState<Record<number, number>>({});
@@ -275,6 +277,27 @@ export default function HorizonScreen() {
   const filteredEvents = useMemo(() => filterItems(periodEvents, 'events'), [filterItems, periodEvents]);
   const filteredHabits = useMemo(() => filterItems(dayHabits, 'habits'), [filterItems, dayHabits]);
 
+  useEffect(() => {
+    let active = true;
+    const countGoals = filteredGoals.filter((g) => g.occurrenceTarget != null && g.occurrenceTarget > 0);
+    if (countGoals.length === 0) {
+      setProjectedOccurrences([]);
+      return;
+    }
+    (async () => {
+      const fromDate = todayStr > startStr ? todayStr : startStr;
+      const results = await Promise.all(
+        countGoals.map((g) => previewOccurrenceSchedule(g, fromDate, endStr))
+      );
+      if (active) {
+        setProjectedOccurrences(results.flat());
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [filteredGoals, startStr, endStr, todayStr]);
+
   const densityMap = useMemo(() => {
     const map: Record<string, { total: number; completed: number }> = {};
     for (const t of filteredRangeTasks) {
@@ -325,6 +348,11 @@ export default function HorizonScreen() {
   const singleDayTasks = useMemo(
     () => filteredRangeTasks.filter((t) => t.scheduledDate === selectedDayStr),
     [filteredRangeTasks, selectedDayStr]
+  );
+
+  const singleDayGhosts = useMemo(
+    () => projectedOccurrences.filter((g) => g.date === selectedDayStr),
+    [projectedOccurrences, selectedDayStr]
   );
 
   const singleDayActivities = useMemo(
@@ -800,10 +828,11 @@ export default function HorizonScreen() {
                 {/* Tasks Section */}
                 <View>
                   <Text style={styles.subCategoryTitle}>TASKS</Text>
-                  {singleDayTasks.length === 0 ? (
-                    <Text style={styles.emptyNotice}>No tasks scheduled for this day.</Text>
+                  {singleDayTasks.length === 0 && singleDayGhosts.length === 0 ? (
+                    <Text style={styles.emptyNotice}>No tasks scheduled or projected for this day.</Text>
                   ) : (
                     <View style={{ gap: 8 }}>
+                      {/* Real Tasks */}
                       {singleDayTasks.map((task) => (
                         <TaskCard
                           key={task.id}
@@ -822,6 +851,17 @@ export default function HorizonScreen() {
                           onToggleSelect={() => toggleSelectTask(task.id)}
                         />
                       ))}
+
+                      {/* Projected Ghost Tasks */}
+                      {singleDayGhosts.map((ghost, index) => (
+                        <GhostTaskCard
+                          key={`ghost-${ghost.goalId}-${index}`}
+                          title={ghost.goalTitle}
+                          priority={ghost.priority}
+                          totalProgress={ghost.totalProgress}
+                          progressUnit={ghost.progressUnit}
+                        />
+                      ))}
                     </View>
                   )}
                 </View>
@@ -830,26 +870,29 @@ export default function HorizonScreen() {
           )}
         </ScrollView>
 
-        <NewWeeklyTaskModal
+        <PeriodGoalModal
           sheetRef={weeklyModalRef}
-          weekStartDate={format(startOfWeek(anchorDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')}
-          weekEndDate={format(endOfWeek(anchorDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')}
+          scope="weekly"
+          startDate={format(startOfWeek(anchorDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')}
+          endDate={format(endOfWeek(anchorDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')}
           editTask={zoomLevel === 'week' ? selectedTaskToEdit : null}
           onTaskCreated={loadData}
           onClose={() => setSelectedTaskToEdit(null)}
         />
-        <NewMonthlyTaskModal
+        <PeriodGoalModal
           sheetRef={monthlyModalRef}
-          monthStartDate={format(startOfMonth(anchorDate), 'yyyy-MM-dd')}
-          monthEndDate={format(endOfMonth(anchorDate), 'yyyy-MM-dd')}
+          scope="monthly"
+          startDate={format(startOfMonth(anchorDate), 'yyyy-MM-dd')}
+          endDate={format(endOfMonth(anchorDate), 'yyyy-MM-dd')}
           editTask={zoomLevel === 'month' ? selectedTaskToEdit : null}
           onTaskCreated={loadData}
           onClose={() => setSelectedTaskToEdit(null)}
         />
-        <NewYearlyTaskModal
+        <PeriodGoalModal
           sheetRef={yearlyModalRef}
-          yearStartDate={format(startOfYear(anchorDate), 'yyyy-MM-dd')}
-          yearEndDate={format(endOfYear(anchorDate), 'yyyy-MM-dd')}
+          scope="yearly"
+          startDate={format(startOfYear(anchorDate), 'yyyy-MM-dd')}
+          endDate={format(endOfYear(anchorDate), 'yyyy-MM-dd')}
           editTask={zoomLevel === 'year' ? selectedTaskToEdit : null}
           onTaskCreated={loadData}
           onClose={() => setSelectedTaskToEdit(null)}

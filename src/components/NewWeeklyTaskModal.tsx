@@ -84,22 +84,27 @@ export default function NewWeeklyTaskModal({
     }
   }, [weekStartDate, weekEndDate]);
 
-  const periodLengthDays = useMemo(() => {
+  // Calculate the remaining active window from today (or start date if week is in the future)
+  const remainingDaysInPeriod = useMemo(() => {
     try {
-      return differenceInCalendarDays(parseISO(weekEndDate), parseISO(weekStartDate)) + 1;
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const start = weekStartDate > todayStr ? parseISO(weekStartDate) : parseISO(todayStr);
+      const end = parseISO(weekEndDate);
+      return Math.max(1, differenceInCalendarDays(end, start) + 1);
     } catch {
       return 7;
     }
   }, [weekStartDate, weekEndDate]);
 
+  // Strict dynamic cap: with n occurrences in the remaining days, max gap is floor(remainingDays / n)
   const maxPossibleGap = useMemo(() => {
     const n = Number(occurrenceCount);
-    if (!n || n <= 0) return periodLengthDays;
-    return Math.max(1, Math.floor(periodLengthDays / n));
-  }, [occurrenceCount, periodLengthDays]);
+    if (!n || n <= 0) return remainingDaysInPeriod;
+    return Math.max(1, Math.floor(remainingDaysInPeriod / n));
+  }, [occurrenceCount, remainingDaysInPeriod]);
 
   useEffect(() => {
-    setMaxGapDays((prev) => Math.min(prev, maxPossibleGap));
+    setMaxGapDays((prev) => Math.max(1, Math.min(prev, maxPossibleGap)));
   }, [maxPossibleGap]);
 
   const hasAnyMilestones = subtasks.length > 0;
@@ -421,7 +426,7 @@ export default function NewWeeklyTaskModal({
                     />
                   </View>
                   <Text style={[styles.label, { marginTop: 8 }]}>
-                    Max gap: {maxGapDays} day{maxGapDays > 1 ? 's' : ''}
+                    Max gap: {maxGapDays} day{maxGapDays > 1 ? 's' : ''} {maxPossibleGap === 1 ? '(Tight schedule)' : ''}
                   </Text>
                   <Slider
                     style={{ width: '100%', height: 36 }}

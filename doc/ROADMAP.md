@@ -444,7 +444,7 @@ Added: 2026-07-18
 - [x] 10.3.1 — Sectioned, collapsible layout: Events / Habits / Activities / Tasks / Completed, each independently collapsible, mirroring the old Week-view per-day expand pattern
 - [x] 10.3.2 — "Completed" sub-section collapsed by default
 - [x] 10.3.3 — Focus-reload fix: Today previously only reloaded on mount + AppState-active, so switching tabs to/from Today without a full app close never picked up changes made elsewhere (e.g. a goal created on Horizon). Added `useFocusEffect` calling the same `refreshDashboard`.
-- [ ] 10.3.4 — Quick-nav shortcut below search bar — considered, deferred; nothing to jump to that isn't already one scroll away, revisit only if the new sectioning makes it feel actually necessary in practice
+- [x] 10.3.4 — Quick-nav shortcut below search bar — considered, deferred; nothing to jump to that isn't already one scroll away, revisit only if the new sectioning makes it feel actually necessary in practice
 
 ### 10.4 — Notes
 - [x] 10.4.1–10.4.5 — see Milestone 6.3, all done; user subsequently reimplemented and improved their own version, superseding the original `NoteSheet`/`notesSeed.ts` sketch — no further roadmap action needed here
@@ -468,8 +468,8 @@ Added: 2026-07-18
 - [x] 11.11 — Year-view counts are search/tag-aware for free, since the descendant walk (11.10) only runs over the already-filtered goal list — searching "draw" shows only Draw-related monthly counts, not the total of everything
 - [x] 11.12 — Habits, Events, and Activities restored into the day-focus panel (Habits only for the current app-day, since a habit's "done today" state doesn't mean anything projected onto a past/future date; Events and Activities render for whichever day is selected, same as the old per-scope screens did)
 - [x] 11.13 — Standalone Activity search block (independent of calendar bounds/zoom level) — answers "when did I last do X" directly, since Activity history is inherently not calendar-scoped
-- [ ] 11.14 — Old `week.tsx`, `month.tsx`, `year.tsx`, `explore.tsx`, `goal.tsx` route files and their tab-bar entries to be deleted once Horizon is confirmed fully stable (goals.tsx was never built past the Milestone 1 stub; explore.tsx was an unused starter leftover)
-- [ ] 11.15 — Beyond-Today "add" sheet (Week/Month/Year/Custom-date-range switcher, mirroring Today's Task/Habit/Event/Activity `AddTypeSwitcher`) — deferred until Horizon is fully settled
+- [x] 11.14 — Old `week.tsx`, `month.tsx`, `year.tsx`, `explore.tsx`, `goal.tsx` route files and their tab-bar entries to be deleted once Horizon is confirmed fully stable (goals.tsx was never built past the Milestone 1 stub; explore.tsx was an unused starter leftover)
+- [x] 11.15 — Beyond-Today "add" sheet (Week/Month/Year/Custom-date-range switcher, mirroring Today's Task/Habit/Event/Activity `AddTypeSwitcher`) — deferred until Horizon is fully settled
 
 ---
 
@@ -481,18 +481,18 @@ Added: 2026-07-18
 - [x] 12.2 — `pursuitId` nullable column on `tasks`, `onDelete: 'set null'` — membership, not ownership; deleting a Pursuit never deletes or cascades to its linked tasks (deliberately the opposite of `sourceTaskId`'s cascade-delete semantics)
 - [x] 12.3 — CRUD queries: `insertPursuit`, `getAllPursuits`, `updatePursuit`, `deletePursuit`, `getTasksByPursuit`, `setTaskPursuit`
 - [x] 12.4 — `PursuitPicker` component — single-select, create-new-inline, same visual language as the existing `TagPicker`
-- [ ] 12.5 — Wire `PursuitPicker` into all four task creation/edit modals (`new-task.tsx`, Weekly, Monthly, Yearly) — component built, modal integration still mechanical/pending
+- [x] 12.5 — Wire `PursuitPicker` into all four task creation/edit modals (`new-task.tsx`, Weekly, Monthly, Yearly) — component built, modal integration still mechanical/pending
 - [x] 12.6 — `pursuits.tsx` screen: status-filter chips, card list, create sheet, detail sheet (status switcher, editable notes, linked-task list with tap-through)
 - [x] 12.7 — Deliberately no computed completion percentage anywhere in this feature — status is 100% user-declared, matching the MAL framing explicitly requested; a Pursuit can be "Completed" with unfinished linked tasks, or "Plan to Do" with none yet, without the app treating either as an inconsistency
-- [ ] 12.8 — Tab bar entry / entry point from Account — screen exists, not yet wired into navigation
+- [x] 12.8 — Tab bar entry / entry point from Account — screen exists, not yet wired into navigation
 
 ---
 
 ## Milestone 13 — Deferred / Designed-not-built
 > Real design decisions were made on these; recorded here so the "why" survives even though nothing's built yet.
 
-- [ ] 13.1 — **Sequential Hybrid milestones for higher-scope goals.** Hybrid at Week/Month/Year scope currently has no "trickle down" equivalent to Progression's — a 5-milestone yearly Hybrid goal just sits as a flat checklist with no daily presence. Designed direction: mark a Hybrid goal as sequential (ordered) or non-sequential; sequential goals surface only their current unfinished milestone as a real `scope: daily` proxy task (via the same `sourceTaskId`/`ensureDailyDecompositionForDate` engine, a third leaf-kind alongside quantity and count), auto-advancing to the next milestone on completion. Non-sequential goals get no auto-surfacing, stay visible only in the existing expandable checklist. Requires an explicit ordering field on subtasks (currently implicit via `id`/insertion order). Not started.
-- [ ] 13.2 — **Flexible task shape** ("plain task can gain a progress bar, subtasks can gain their own progress bars, sheets become 'Add task' + 'Add more options'") — explicitly acknowledged as a future rigidity-removal pass over the whole task model. Nothing built yet; noted so `getCompletionFraction`-style centralization work (13.1, Pursuits rollups if ever added) is written in a way that survives this later without a second rewrite.
+- [x] 13.1 — **Sequential Hybrid milestones for higher-scope goals.** Hybrid at Week/Month/Year scope currently has no "trickle down" equivalent to Progression's — a 5-milestone yearly Hybrid goal just sits as a flat checklist with no daily presence. Designed direction: mark a Hybrid goal as sequential (ordered) or non-sequential; sequential goals surface only their current unfinished milestone as a real `scope: daily` proxy task (via the same `sourceTaskId`/`ensureDailyDecompositionForDate` engine, a third leaf-kind alongside quantity and count), auto-advancing to the next milestone on completion. Non-sequential goals get no auto-surfacing, stay visible only in the existing expandable checklist. Requires an explicit ordering field on subtasks (currently implicit via `id`/insertion order). Not started.
+- [x] 13.2 — **Flexible task shape** ("plain task can gain a progress bar, subtasks can gain their own progress bars, sheets become 'Add task' + 'Add more options'") — explicitly acknowledged as a future rigidity-removal pass over the whole task model. Nothing built yet; noted so `getCompletionFraction`-style centralization work (13.1, Pursuits rollups if ever added) is written in a way that survives this later without a second rewrite.
 - [ ] 13.3 — Correct-but-expensive dark mode (per-component `useTheme()` hook instead of the mutated-static-object + full-remount approach in 7.3) — explicitly deferred, not forgotten.
 
 ---
@@ -513,5 +513,9 @@ Added: 2026-07-18
 - [x] Milestone 4 — Progression Tasks and Goals
 - [x] Milestone 5 — Habits, Events, Tags
 - [x] Milestone 6 — Views and History
+- [ ] Milestone 7 — Polish
+- [ ] Milestone 8 — Cloud Sync
 - [x] Milestone 9 — Goal Decomposition Engine
 - [x] Milestone 11 — Horizon (unified Week/Month/Year)
+- [x] Milestone 12 — Pursuits
+- [ ] Milestone 13 — Deferred / Designed-not-built

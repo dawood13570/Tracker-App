@@ -29,6 +29,16 @@ export type ActivityRow = typeof activities.$inferSelect;
 export type ActivityLogRow = typeof activityLogs.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
 
+export interface ProjectedOccurrence {
+  goalId: number;
+  goalTitle: string;
+  type: 'Simple' | 'Progression' | 'Hybrid';
+  priority: 'Low' | 'Medium' | 'High';
+  date: string;
+  totalProgress?: number | null;
+  progressUnit?: string | null;
+}
+
 export async function getTaskByDate(date: string): Promise<TaskRow[]> {
   return db
     .select()
@@ -1072,6 +1082,64 @@ export async function decomposeCountGoalToNextOccurrence(
     .returning();
 
   return created;
+}
+
+
+export async function previewOccurrenceSchedule(
+  parentTask: TaskRow,
+  fromDateStr: string,
+  periodEndStr: string
+): Promise<ProjectedOccurrence[]> {
+  const target = parentTask.occurrenceTarget ?? 0;
+  if (target <= 0) return [];
+
+  const completedCount = await getCompletedOccurrenceCount(parentTask.id);
+  const remaining = target - completedCount;
+  if (remaining <= 0) return [];
+
+  const children = await getChildTasks(parentTask.id);
+  const existingDates = new Set(children.map((c) => c.scheduledDate));
+
+  const existingPendingFuture = children.filter(
+    (c) => !c.isCompleted && c.scheduledDate >= fromDateStr
+  );
+
+  let unspawnedNeeded = remaining - existingPendingFuture.length;
+  if (unspawnedNeeded <= 0) return [];
+
+  const daysLeft = Math.max(1, differenceInCalendarDays(parseISO(periodEndStr), parseISO(fromDateStr)) + 1);
+  const idealSpacing = Math.floor(daysLeft / remaining);
+  const spacing = Math.max(1, Math.min(parentTask.maxGapDays ?? idealSpacing, idealSpacing || 1));
+
+  const latestDate = children.length > 0
+    ? children.reduce((latest, c) => (c.scheduledDate > latest.scheduledDate ? c : latest)).scheduledDate
+    : null;
+
+  const projections: ProjectedOccurrence[] = [];
+  let cursor = latestDate && latestDate >= fromDateStr 
+    ? parseISO(latestDate) 
+    : parseISO(fromDateStr);
+
+  while (unspawnedNeeded > 0) {
+    cursor = addDays(cursor, spacing);
+    const candidateStr = format(cursor, 'yyyy-MM-dd');
+    if (candidateStr > periodEndStr) break;
+
+    if (!existingDates.has(candidateStr) && candidateStr >= fromDateStr) {
+      projections.push({
+        goalId: parentTask.id,
+        goalTitle: parentTask.title,
+        type: parentTask.type as any,
+        priority: parentTask.priority as any,
+        date: candidateStr,
+        totalProgress: parentTask.totalProgress,
+        progressUnit: parentTask.progressUnit,
+      });
+      unspawnedNeeded--;
+    }
+  }
+
+  return projections;
 }
 
 export async function getYearlyTasks(yearStartDate: string, yearEndDate: string): Promise<TaskRow[]> {

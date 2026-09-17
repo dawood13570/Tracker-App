@@ -1,4 +1,4 @@
-// src/components/NewMonthlyTaskModal.tsx
+// src/components/PeriodGoalModal.tsx
 import { useTagStore } from '@/store/tagStore';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
@@ -6,26 +6,28 @@ import Slider from '@react-native-community/slider';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Keyboard,
+    Pressable,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import {
-  assignTag,
-  deleteTask,
-  getSubtasksByParent,
-  insertSubtask,
-  insertTask,
-  updateTask,
+    assignTag,
+    deleteTask,
+    getSubtasksByParentOrdered,
+    insertSubtask,
+    insertTask,
+    updateTask,
 } from '../db/queries';
 import { colors } from '../theme/colors';
 import { PursuitPicker } from './PursuitPicker';
 import { TagPicker } from './TagPicker';
+
+export type GoalScope = 'weekly' | 'monthly' | 'yearly';
 
 interface SubTaskDraft {
   id: string;
@@ -34,10 +36,11 @@ interface SubTaskDraft {
   isNew?: boolean;
 }
 
-interface NewMonthlyTaskModalProps {
+export interface PeriodGoalModalProps {
   sheetRef: React.RefObject<BottomSheet | null>;
-  monthStartDate: string;
-  monthEndDate: string;
+  scope: GoalScope;
+  startDate: string;
+  endDate: string;
   editTask?: any | null;
   onTaskCreated: () => void;
   onClose?: () => void;
@@ -45,14 +48,15 @@ interface NewMonthlyTaskModalProps {
 
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'] as const;
 
-export default function NewMonthlyTaskModal({
+export function PeriodGoalModal({
   sheetRef,
-  monthStartDate,
-  monthEndDate,
+  scope,
+  startDate,
+  endDate,
   editTask,
   onTaskCreated,
   onClose,
-}: NewMonthlyTaskModalProps) {
+}: PeriodGoalModalProps) {
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
   const [selectedPursuitId, setSelectedPursuitId] = useState<number | null>(null);
@@ -74,29 +78,74 @@ export default function NewMonthlyTaskModal({
 
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
-  const snapPoints = useMemo(() => ['85%', '55%'], []);
+  const snapPoints = useMemo(() => ['85%', '60%'], []);
 
-  const formattedMonthLabel = useMemo(() => {
-    try {
-      return format(parseISO(monthStartDate), 'MMMM yyyy');
-    } catch {
-      return `${monthStartDate} – ${monthEndDate}`;
+  // Scope-specific copy & configurations
+  const config = useMemo(() => {
+    switch (scope) {
+      case 'weekly':
+        return {
+          title: editTask ? 'Edit Weekly Goal' : 'Plan Goal for Week',
+          subTitlePrefix: 'Range:',
+          formattedLabel: (() => {
+            try {
+              return `${format(parseISO(startDate), 'MMM d')} – ${format(parseISO(endDate), 'MMM d')}`;
+            } catch {
+              return `${startDate} – ${endDate}`;
+            }
+          })(),
+          inputPlaceholder: 'What do you want to accomplish this week?',
+          targetLabel: 'Target this week:',
+          occurrenceLabel: 'Times this week:',
+          submitLabel: editTask ? 'Save Changes' : 'Schedule Weekly Goal',
+        };
+      case 'monthly':
+        return {
+          title: editTask ? 'Edit Monthly Goal' : 'Plan Goal for Month',
+          subTitlePrefix: 'Period:',
+          formattedLabel: (() => {
+            try {
+              return format(parseISO(startDate), 'MMMM yyyy');
+            } catch {
+              return `${startDate} – ${endDate}`;
+            }
+          })(),
+          inputPlaceholder: 'What macro goal do you want to accomplish?',
+          targetLabel: 'Target this month:',
+          occurrenceLabel: 'Times this month:',
+          submitLabel: editTask ? 'Save Changes' : 'Schedule Monthly Goal',
+        };
+      case 'yearly':
+        return {
+          title: editTask ? 'Edit Yearly Goal' : 'Plan Goal for Year',
+          subTitlePrefix: 'Year:',
+          formattedLabel: (() => {
+            try {
+              return format(parseISO(startDate), 'yyyy');
+            } catch {
+              return `${startDate} – ${endDate}`;
+            }
+          })(),
+          inputPlaceholder: "What's the big goal this year?",
+          targetLabel: 'Total Yearly Target:',
+          occurrenceLabel: 'Times this year:',
+          submitLabel: editTask ? 'Save Changes' : 'Schedule Yearly Goal',
+        };
     }
-  }, [monthStartDate, monthEndDate]);
+  }, [scope, startDate, endDate, editTask]);
 
-  // Calculate the remaining active window from today (or start date if future)
+  // Dynamic window calculation
   const remainingDaysInPeriod = useMemo(() => {
     try {
       const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const start = monthStartDate > todayStr ? parseISO(monthStartDate) : parseISO(todayStr);
-      const end = parseISO(monthEndDate);
+      const start = startDate > todayStr ? parseISO(startDate) : parseISO(todayStr);
+      const end = parseISO(endDate);
       return Math.max(1, differenceInCalendarDays(end, start) + 1);
     } catch {
-      return 30;
+      return scope === 'weekly' ? 7 : scope === 'monthly' ? 30 : 365;
     }
-  }, [monthStartDate, monthEndDate]);
+  }, [startDate, endDate, scope]);
 
-  // Strict dynamic cap: with n occurrences in the remaining days, max gap is floor(remainingDays / n)
   const maxPossibleGap = useMemo(() => {
     const n = Number(occurrenceCount);
     if (!n || n <= 0) return remainingDaysInPeriod;
@@ -182,7 +231,7 @@ export default function NewMonthlyTaskModal({
       setShowAdvanced(true);
 
       if (isHybrid) {
-        getSubtasksByParent(editTask.id).then((items) => {
+        getSubtasksByParentOrdered(editTask.id).then((items) => {
           setSubtasks(
             (items ?? []).map((s) => ({
               id: String(s.id),
@@ -197,7 +246,7 @@ export default function NewMonthlyTaskModal({
     } else {
       resetForm();
     }
-  }, [editTask, monthStartDate]);
+  }, [editTask, startDate]);
 
   const handleAddSubtask = () => {
     if (!subtaskInput.trim()) return;
@@ -223,11 +272,11 @@ export default function NewMonthlyTaskModal({
       return;
     }
     if (hasProgress && (!targetValue || Number(targetValue) <= 0)) {
-      Alert.alert('Target required', 'Please enter a valid target for this monthly goal.');
+      Alert.alert('Target required', `Please enter a valid target for this ${scope} goal.`);
       return;
     }
     if (isRecurringGoal && (!occurrenceCount || Number(occurrenceCount) <= 0)) {
-      Alert.alert('Count required', 'Enter how many times this month.');
+      Alert.alert('Count required', `Enter how many times this ${scope === 'weekly' ? 'week' : scope === 'monthly' ? 'month' : 'year'}.`);
       return;
     }
 
@@ -247,7 +296,7 @@ export default function NewMonthlyTaskModal({
           pursuitId: selectedPursuitId,
           isSequential: hasMilestones ? isSequential : false,
           subtasksTotal: hasMilestones ? subtasks.length : 0,
-        });
+        } as any);
 
         for (const delId of deletedSubtaskIds) {
           await deleteTask(delId);
@@ -258,7 +307,7 @@ export default function NewMonthlyTaskModal({
           if (s.isNew) {
             await insertSubtask(editTask.id, {
               title: s.title,
-              scheduledDate: monthStartDate,
+              scheduledDate: startDate,
               priority,
               subtaskOrder: i,
             });
@@ -274,9 +323,9 @@ export default function NewMonthlyTaskModal({
           title: title.trim(),
           type: inferredType,
           priority,
-          scheduledDate: monthStartDate,
-          deadline: monthEndDate,
-          scope: 'monthly',
+          scheduledDate: startDate,
+          deadline: endDate,
+          scope,
           totalProgress: hasProgress ? Number(targetValue) : null,
           progressUnit: hasProgress ? unit.trim() || null : null,
           occurrenceTarget: shouldSaveRecurrence ? Number(occurrenceCount) : null,
@@ -285,14 +334,14 @@ export default function NewMonthlyTaskModal({
           subtasksTotal: hasMilestones ? subtasks.length : 0,
           pursuitId: selectedPursuitId,
           isSequential: hasMilestones ? isSequential : false,
-        });
+        } as any);
 
         if (parentGoal) {
           if (hasMilestones && subtasks.length > 0) {
             for (let i = 0; i < subtasks.length; i++) {
               await insertSubtask(parentGoal.id, {
                 title: subtasks[i].title,
-                scheduledDate: monthStartDate,
+                scheduledDate: startDate,
                 priority,
                 subtaskOrder: i,
               });
@@ -309,7 +358,7 @@ export default function NewMonthlyTaskModal({
       if (onClose) onClose();
       sheetRef.current?.close();
     } catch (error) {
-      console.error('Failed to save monthly task:', error);
+      console.error(`Failed to save ${scope} goal:`, error);
     }
   };
 
@@ -328,12 +377,14 @@ export default function NewMonthlyTaskModal({
       }}
     >
       <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-        <Text style={styles.titleText}>{editTask ? 'Edit Monthly Goal' : 'Plan Goal for Month'}</Text>
-        <Text style={styles.subTitleText}>Period: {formattedMonthLabel}</Text>
+        <Text style={styles.titleText}>{config.title}</Text>
+        <Text style={styles.subTitleText}>
+          {config.subTitlePrefix} {config.formattedLabel}
+        </Text>
 
         <BottomSheetTextInput
           style={styles.input}
-          placeholder="What macro goal do you want to accomplish?"
+          placeholder={config.inputPlaceholder}
           placeholderTextColor={colors.textPlaceholder}
           value={title}
           onChangeText={setTitle}
@@ -379,12 +430,12 @@ export default function NewMonthlyTaskModal({
               {hasProgress && (
                 <>
                   <View style={styles.row}>
-                    <Text style={styles.label}>Target this month:</Text>
+                    <Text style={styles.label}>{config.targetLabel}</Text>
                     <BottomSheetTextInput
                       style={styles.inputNested}
                       value={targetValue}
                       onChangeText={setTargetValue}
-                      placeholder="e.g. 300"
+                      placeholder="e.g. 20"
                       keyboardType="numeric"
                       placeholderTextColor={colors.textPlaceholder}
                     />
@@ -395,7 +446,7 @@ export default function NewMonthlyTaskModal({
                       style={styles.inputNested}
                       value={unit}
                       onChangeText={setUnit}
-                      placeholder="pages, chapters, km"
+                      placeholder="pages, km, reps"
                       placeholderTextColor={colors.textPlaceholder}
                     />
                   </View>
@@ -415,17 +466,16 @@ export default function NewMonthlyTaskModal({
               {isRecurringGoal && (
                 <>
                   <View style={styles.row}>
-                    <Text style={styles.label}>Times this month:</Text>
+                    <Text style={styles.label}>{config.occurrenceLabel}</Text>
                     <BottomSheetTextInput
                       style={styles.inputNested}
                       value={occurrenceCount}
                       onChangeText={setOccurrenceCount}
-                      placeholder="e.g. 8"
+                      placeholder="e.g. 3"
                       keyboardType="numeric"
                       placeholderTextColor={colors.textPlaceholder}
                     />
                   </View>
-
                   <Text style={[styles.label, { marginTop: 8 }]}>
                     Max gap: {maxGapDays} day{maxGapDays > 1 ? 's' : ''} {maxPossibleGap === 1 ? '(Tight schedule)' : ''}
                   </Text>
@@ -565,7 +615,7 @@ export default function NewMonthlyTaskModal({
               pressed && title.trim() ? { opacity: 0.85 } : null,
             ]}
           >
-            <Text style={styles.submitButtonText}>{editTask ? 'Save Changes' : 'Schedule Monthly Goal'}</Text>
+            <Text style={styles.submitButtonText}>{config.submitLabel}</Text>
           </Pressable>
         </View>
       </BottomSheetScrollView>

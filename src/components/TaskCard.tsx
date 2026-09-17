@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native';
 import {
-  getSubtasksByParent,
+  getSubtasksByParentOrdered,
   getTagsForTask,
   revertToPreviousProgress,
   setAbsoluteProgress,
@@ -103,7 +103,7 @@ export function TaskCard({
   useEffect(() => {
     let active = true;
     if (isExpanded) {
-      getSubtasksByParent(targetParentId).then((items) => {
+      getSubtasksByParentOrdered(targetParentId).then((items) => {
         if (active) {
           setSubtasks(items ?? []);
           const initialMap: Record<number, number> = {};
@@ -345,7 +345,7 @@ export function TaskCard({
     await onToggle(task.id, task.isCompleted);
 
     if (hasSubtasks) {
-      const items = await getSubtasksByParent(targetParentId);
+      const items = await getSubtasksByParentOrdered(targetParentId);
       const progSubtasks = (items ?? []).filter(taskHasProgress);
 
       if (nextCompleted) {
@@ -363,7 +363,7 @@ export function TaskCard({
       }
 
       if (isExpanded) {
-        const refreshed = await getSubtasksByParent(targetParentId);
+        const refreshed = await getSubtasksByParentOrdered(targetParentId);
         setSubtasks(refreshed ?? []);
         const newMap: Record<number, number> = {};
         (refreshed ?? []).forEach((s) => {
