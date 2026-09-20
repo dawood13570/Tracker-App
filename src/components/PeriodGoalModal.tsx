@@ -2,12 +2,14 @@
 import { useTagStore } from '@/store/tagStore';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import Slider from '@react-native-community/slider';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     Alert,
     Keyboard,
+    Platform,
     Pressable,
     StyleSheet,
     Switch,
@@ -27,7 +29,7 @@ import { colors } from '../theme/colors';
 import { PursuitPicker } from './PursuitPicker';
 import { TagPicker } from './TagPicker';
 
-export type GoalScope = 'weekly' | 'monthly' | 'yearly';
+export type GoalScope = 'weekly' | 'monthly' | 'yearly' | 'custom';
 
 interface SubTaskDraft {
   id: string;
@@ -62,6 +64,12 @@ export function PeriodGoalModal({
   const [selectedPursuitId, setSelectedPursuitId] = useState<number | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Custom date range (only used when scope === 'custom')
+  const [customStart, setCustomStart] = useState<Date>(() => parseISO(startDate));
+  const [customEnd, setCustomEnd] = useState<Date>(() => parseISO(endDate));
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+
   const [hasProgress, setHasProgress] = useState(false);
   const [targetValue, setTargetValue] = useState('');
   const [unit, setUnit] = useState('');
@@ -79,6 +87,9 @@ export function PeriodGoalModal({
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
   const snapPoints = useMemo(() => ['85%', '60%'], []);
+
+  const effectiveStartDate = scope === 'custom' ? format(customStart, 'yyyy-MM-dd') : startDate;
+  const effectiveEndDate = scope === 'custom' ? format(customEnd, 'yyyy-MM-dd') : endDate;
 
   // Scope-specific copy & configurations
   const config = useMemo(() => {
@@ -131,20 +142,30 @@ export function PeriodGoalModal({
           occurrenceLabel: 'Times this year:',
           submitLabel: editTask ? 'Save Changes' : 'Schedule Yearly Goal',
         };
+      case 'custom':
+        return {
+          title: editTask ? 'Edit Custom Goal' : 'New Custom Goal',
+          subTitlePrefix: 'Range:',
+          formattedLabel: `${format(customStart, 'MMM d, yyyy')} – ${format(customEnd, 'MMM d, yyyy')}`,
+          inputPlaceholder: 'What do you want to accomplish?',
+          targetLabel: 'Target for this period:',
+          occurrenceLabel: 'Times in this period:',
+          submitLabel: editTask ? 'Save Changes' : 'Schedule Custom Goal',
+        };
     }
-  }, [scope, startDate, endDate, editTask]);
+  }, [scope, startDate, endDate, editTask, customStart, customEnd]);
 
   // Dynamic window calculation
   const remainingDaysInPeriod = useMemo(() => {
     try {
       const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const start = startDate > todayStr ? parseISO(startDate) : parseISO(todayStr);
-      const end = parseISO(endDate);
+      const start = effectiveStartDate > todayStr ? parseISO(effectiveStartDate) : parseISO(todayStr);
+      const end = parseISO(effectiveEndDate);
       return Math.max(1, differenceInCalendarDays(end, start) + 1);
     } catch {
-      return scope === 'weekly' ? 7 : scope === 'monthly' ? 30 : 365;
+      return scope === 'weekly' ? 7 : scope === 'monthly' ? 30 : scope === 'yearly' ? 365 : 30;
     }
-  }, [startDate, endDate, scope]);
+  }, [effectiveStartDate, effectiveEndDate, scope]);
 
   const maxPossibleGap = useMemo(() => {
     const n = Number(occurrenceCount);
@@ -204,6 +225,13 @@ export function PeriodGoalModal({
     setOccurrenceCount('');
     setMaxGapDays(1);
     setSelectedTagIds([]);
+    try {
+      setCustomStart(parseISO(startDate));
+      setCustomEnd(parseISO(endDate));
+    } catch {
+      setCustomStart(new Date());
+      setCustomEnd(new Date());
+    }
   };
 
   useEffect(() => {
@@ -227,6 +255,15 @@ export function PeriodGoalModal({
       setIsRecurringGoal(hasOcc);
       setOccurrenceCount(hasOcc ? String(editTask.occurrenceTarget) : '');
       setMaxGapDays(editTask.maxGapDays ?? 1);
+
+      if (editTask.scope === 'custom') {
+        try {
+          setCustomStart(parseISO(editTask.scheduledDate));
+          setCustomEnd(parseISO(editTask.deadline ?? editTask.scheduledDate));
+        } catch {
+          // ignore, keep whatever was already there
+        }
+      }
 
       setShowAdvanced(true);
 
@@ -271,12 +308,16 @@ export function PeriodGoalModal({
       Alert.alert('Title required', 'Please enter a task title.');
       return;
     }
+    if (scope === 'custom' && effectiveEndDate < effectiveStartDate) {
+      Alert.alert('Invalid range', 'End date must be on or after the start date.');
+      return;
+    }
     if (hasProgress && (!targetValue || Number(targetValue) <= 0)) {
-      Alert.alert('Target required', `Please enter a valid target for this ${scope} goal.`);
+      Alert.alert('Target required', `Please enter a valid target for this ${scope === 'custom' ? 'period' : scope} goal.`);
       return;
     }
     if (isRecurringGoal && (!occurrenceCount || Number(occurrenceCount) <= 0)) {
-      Alert.alert('Count required', `Enter how many times this ${scope === 'weekly' ? 'week' : scope === 'monthly' ? 'month' : 'year'}.`);
+      Alert.alert('Count required', `Enter how many times in this ${scope === 'weekly' ? 'week' : scope === 'monthly' ? 'month' : scope === 'yearly' ? 'year' : 'period'}.`);
       return;
     }
 
@@ -296,6 +337,7 @@ export function PeriodGoalModal({
           pursuitId: selectedPursuitId,
           isSequential: hasMilestones ? isSequential : false,
           subtasksTotal: hasMilestones ? subtasks.length : 0,
+          ...(scope === 'custom' ? { scheduledDate: effectiveStartDate, deadline: effectiveEndDate } : {}),
         } as any);
 
         for (const delId of deletedSubtaskIds) {
@@ -307,7 +349,7 @@ export function PeriodGoalModal({
           if (s.isNew) {
             await insertSubtask(editTask.id, {
               title: s.title,
-              scheduledDate: startDate,
+              scheduledDate: effectiveStartDate,
               priority,
               subtaskOrder: i,
             });
@@ -323,8 +365,8 @@ export function PeriodGoalModal({
           title: title.trim(),
           type: inferredType,
           priority,
-          scheduledDate: startDate,
-          deadline: endDate,
+          scheduledDate: effectiveStartDate,
+          deadline: effectiveEndDate,
           scope,
           totalProgress: hasProgress ? Number(targetValue) : null,
           progressUnit: hasProgress ? unit.trim() || null : null,
@@ -341,7 +383,7 @@ export function PeriodGoalModal({
             for (let i = 0; i < subtasks.length; i++) {
               await insertSubtask(parentGoal.id, {
                 title: subtasks[i].title,
-                scheduledDate: startDate,
+                scheduledDate: effectiveStartDate,
                 priority,
                 subtaskOrder: i,
               });
@@ -377,14 +419,55 @@ export function PeriodGoalModal({
       }}
     >
       <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-        <Text style={styles.titleText}>{config.title}</Text>
+        <Text style={styles.titleText}>{config?.title}</Text>
         <Text style={styles.subTitleText}>
-          {config.subTitlePrefix} {config.formattedLabel}
+          {config?.subTitlePrefix} {config?.formattedLabel}
         </Text>
+
+        {scope === 'custom' && (
+          <View style={styles.dynamicContainer}>
+            <Text style={styles.subSectionTitle}>Date Range</Text>
+            <View style={styles.row}>
+              <Text style={styles.label}>Start:</Text>
+              <Pressable onPress={() => setShowStartPicker(true)} style={styles.pickerPressable}>
+                <Text style={styles.pickerText}>{format(customStart, 'MMM d, yyyy')}</Text>
+              </Pressable>
+            </View>
+            {showStartPicker && (
+              <DateTimePicker
+                value={customStart}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                onChange={(_, selected) => {
+                  setShowStartPicker(Platform.OS === 'ios');
+                  if (selected) setCustomStart(selected);
+                }}
+              />
+            )}
+            <View style={styles.row}>
+              <Text style={styles.label}>End:</Text>
+              <Pressable onPress={() => setShowEndPicker(true)} style={styles.pickerPressable}>
+                <Text style={styles.pickerText}>{format(customEnd, 'MMM d, yyyy')}</Text>
+              </Pressable>
+            </View>
+            {showEndPicker && (
+              <DateTimePicker
+                value={customEnd}
+                mode="date"
+                minimumDate={customStart}
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                onChange={(_, selected) => {
+                  setShowEndPicker(Platform.OS === 'ios');
+                  if (selected) setCustomEnd(selected);
+                }}
+              />
+            )}
+          </View>
+        )}
 
         <BottomSheetTextInput
           style={styles.input}
-          placeholder={config.inputPlaceholder}
+          placeholder={config?.inputPlaceholder}
           placeholderTextColor={colors.textPlaceholder}
           value={title}
           onChangeText={setTitle}
@@ -430,7 +513,7 @@ export function PeriodGoalModal({
               {hasProgress && (
                 <>
                   <View style={styles.row}>
-                    <Text style={styles.label}>{config.targetLabel}</Text>
+                    <Text style={styles.label}>{config?.targetLabel}</Text>
                     <BottomSheetTextInput
                       style={styles.inputNested}
                       value={targetValue}
@@ -466,7 +549,7 @@ export function PeriodGoalModal({
               {isRecurringGoal && (
                 <>
                   <View style={styles.row}>
-                    <Text style={styles.label}>{config.occurrenceLabel}</Text>
+                    <Text style={styles.label}>{config?.occurrenceLabel}</Text>
                     <BottomSheetTextInput
                       style={styles.inputNested}
                       value={occurrenceCount}
@@ -556,21 +639,10 @@ export function PeriodGoalModal({
                         {isSequential && (
                           <>
                             <TouchableOpacity onPress={() => moveSubtask(idx, -1)} disabled={idx === 0}>
-                              <Ionicons
-                                name="chevron-up"
-                                size={16}
-                                color={idx === 0 ? colors.textMuted : colors.accent}
-                              />
+                              <Ionicons name="chevron-up" size={16} color={idx === 0 ? colors.textMuted : colors.accent} />
                             </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => moveSubtask(idx, 1)}
-                              disabled={idx === subtasks.length - 1}
-                            >
-                              <Ionicons
-                                name="chevron-down"
-                                size={16}
-                                color={idx === subtasks.length - 1 ? colors.textMuted : colors.accent}
-                              />
+                            <TouchableOpacity onPress={() => moveSubtask(idx, 1)} disabled={idx === subtasks.length - 1}>
+                              <Ionicons name="chevron-down" size={16} color={idx === subtasks.length - 1 ? colors.textMuted : colors.accent} />
                             </TouchableOpacity>
                           </>
                         )}
@@ -591,9 +663,7 @@ export function PeriodGoalModal({
                 mostUsedTags={mostUsedTags}
                 selectedTagIds={selectedTagIds}
                 onToggleTag={(tagId) =>
-                  setSelectedTagIds((prev) =>
-                    prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
-                  )
+                  setSelectedTagIds((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]))
                 }
                 onCreateTag={(name) => addTag({ name })}
                 onDeleteTag={(tagId) => {
@@ -615,7 +685,7 @@ export function PeriodGoalModal({
               pressed && title.trim() ? { opacity: 0.85 } : null,
             ]}
           >
-            <Text style={styles.submitButtonText}>{config.submitLabel}</Text>
+            <Text style={styles.submitButtonText}>{config?.submitLabel}</Text>
           </Pressable>
         </View>
       </BottomSheetScrollView>
@@ -627,73 +697,22 @@ const styles = StyleSheet.create({
   contentContainer: { padding: 24 },
   titleText: { fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.textPrimary },
   subTitleText: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 4, marginBottom: 16 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 15,
-    backgroundColor: colors.surfaceSubtle,
-    color: colors.textPrimary,
-  },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 15, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 10 },
   label: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   selectorGroup: { flexDirection: 'row' },
-  selectorItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceSubtle,
-    marginLeft: 6,
-  },
+  selectorItem: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 20, backgroundColor: colors.surfaceSubtle, marginLeft: 6 },
   selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
   unselectedText: { color: colors.textSecondary, fontSize: 12 },
   selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 12 },
-  advancedToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-  },
+  advancedToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
   advancedToggleText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.3 },
-  dynamicContainer: {
-    marginTop: 10,
-    padding: 12,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  inputNested: {
-    flex: 1.5,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    fontSize: 15,
-    backgroundColor: colors.surfaceSubtle,
-    marginLeft: 12,
-    color: colors.textPrimary,
-  },
+  dynamicContainer: { marginTop: 10, padding: 12, backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  inputNested: { flex: 1.5, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, fontSize: 15, backgroundColor: colors.surfaceSubtle, marginLeft: 12, color: colors.textPrimary },
   hintText: { fontSize: 11, color: colors.textMuted, marginTop: 4, fontStyle: 'italic' },
   subSectionTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
   addSubtaskRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 6 },
-  subtaskInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    fontSize: 14,
-    backgroundColor: colors.surfaceSubtle,
-    marginRight: 8,
-    color: colors.textPrimary,
-  },
+  subtaskInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14, backgroundColor: colors.surfaceSubtle, marginRight: 8, color: colors.textPrimary },
   addBtn: { backgroundColor: colors.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
   addBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
   subtaskItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
@@ -702,4 +721,6 @@ const styles = StyleSheet.create({
   submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
   submitDisabled: { backgroundColor: colors.surfaceElevated },
   submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '700' },
+  pickerPressable: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.surfaceSubtle },
+  pickerText: { fontSize: 14, color: colors.textPrimary },
 });

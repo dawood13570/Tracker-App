@@ -12,7 +12,7 @@ export const tasks = sqliteTable('tasks', {
   pursuitId: integer('pursuit_id').references((): any => pursuits.id, { onDelete: 'set null' }),
 
   // Scope & Decomposition
-  scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly'] }).default('daily').notNull(),
+  scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly', 'custom'] }).default('daily').notNull(),
   sourceTaskId: integer('source_task_id'),
 
   // Progression fields

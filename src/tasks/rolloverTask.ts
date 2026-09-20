@@ -1,3 +1,4 @@
+import { useStore } from '@/store/useStore';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
@@ -11,7 +12,7 @@ import {
   getTaskByDate,
 } from '../db/queries';
 import { calculatePace } from '../engine/pace';
-import { processRollover } from '../engine/rollover';
+import { processRollover, RolloverSnapshotInput } from '../engine/rollover';
 import { getLocalDateString } from '../utils/date';
 
 export const BACKGROUND_ROLLOVER_TASK = 'MIDNIGHT_ROLLOVER';
@@ -26,7 +27,7 @@ export async function runRolloverNow(): Promise<BackgroundFetch.BackgroundFetchR
 
   const todayTasks = await getTaskByDate(todayStr);
 
-  const inputs = candidates.map((t) => ({
+  const inputs: RolloverSnapshotInput[] = candidates.map((t) => ({
     id: t.id,
     title: t.title,
     type: t.type,
@@ -35,7 +36,7 @@ export async function runRolloverNow(): Promise<BackgroundFetch.BackgroundFetchR
     rolloverEnabled: Boolean(t.rolloverEnabled),
     scheduledDate: t.scheduledDate,
     procrastinationCount: t.procrastinationCount,
-    scope: t.scope ?? 'daily',
+    scope: 'daily',
     totalProgress: t.totalProgress,
     progressUnit: t.progressUnit,
   }));
@@ -111,7 +112,9 @@ export function defineRolloverTask() {
   TaskManager.defineTask(BACKGROUND_ROLLOVER_TASK, async () => {
     try {
       const result = await runRolloverNow();
+      if (useStore.getState().criticalPaceNotificationsEnabled) {
       await checkCriticalPace();
+    }
       return result;
     } catch (error) {
       console.error('[BackgroundFetch] Failed:', error);

@@ -24,6 +24,16 @@ interface AppState {
 
   skipProgressionAlerts: boolean;
   setSkipProgressionAlerts: (skip: boolean) => void;
+
+  // interface AppState additions
+  defaultRolloverEnabled: boolean;
+  setDefaultRolloverEnabled: (enabled: boolean) => void;
+
+  defaultSurplusMode: 'breathing_room' | 'raise_bar' | 'bank_it' | 'none';
+  setDefaultSurplusMode: (mode: 'breathing_room' | 'raise_bar' | 'bank_it' | 'none') => void;
+
+  criticalPaceNotificationsEnabled: boolean;
+  setCriticalPaceNotificationsEnabled: (enabled: boolean) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -48,6 +58,15 @@ export const useStore = create<AppState>((set) => ({
   setManualDayOverrideDate: (date: string | null) => set({ manualDayOverrideDate: date }),
 
   skipProgressionAlerts: false,
-setSkipProgressionAlerts: (skip: boolean) => set({ skipProgressionAlerts: skip }),
+  setSkipProgressionAlerts: (skip: boolean) => set({ skipProgressionAlerts: skip }),
+
+  defaultRolloverEnabled: true,
+  setDefaultRolloverEnabled: (enabled) => set({ defaultRolloverEnabled: enabled }),
+
+  defaultSurplusMode: 'none',
+  setDefaultSurplusMode: (mode) => set({ defaultSurplusMode: mode }),
+
+  criticalPaceNotificationsEnabled: true,
+  setCriticalPaceNotificationsEnabled: (enabled) => set({ criticalPaceNotificationsEnabled: enabled }),
 }));
 

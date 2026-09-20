@@ -99,6 +99,20 @@
       "when": 1789601050422,
       "tag": "0013_supreme_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1789606539754,
+      "tag": "0014_fat_changeling",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1789606939385,
+      "tag": "0015_certain_echo",
+      "breakpoints": true
     }
   ]
 }

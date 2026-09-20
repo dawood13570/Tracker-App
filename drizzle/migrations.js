@@ -15,6 +15,8 @@ import m0010 from './0010_harsh_magik.sql';
 import m0011 from './0011_omniscient_fenris.sql';
 import m0012 from './0012_naive_beyonder.sql';
 import m0013 from './0013_supreme_paper_doll.sql';
+import m0014 from './0014_fat_changeling.sql';
+import m0015 from './0015_certain_echo.sql';
 
   export default {
     journal,
@@ -32,7 +34,9 @@ m0009,
 m0010,
 m0011,
 m0012,
-m0013
+m0013,
+m0014,
+m0015
     }
   }
   

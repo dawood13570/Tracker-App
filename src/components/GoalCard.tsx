@@ -4,7 +4,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface GoalCardProps {
   task: TaskRow;
-  scopeLabel: 'week' | 'month' | 'year';
+  scopeLabel: 'week' | 'month' | 'year' | 'custom';
   effectiveProgress?: number;
   completedOccurrences?: number;
   subtaskCounts?: { completed: number; total: number };
@@ -13,6 +13,7 @@ interface GoalCardProps {
   onPress: () => void;
   onLongPress: () => void;
 }
+  
 
 export function GoalCard({ task, scopeLabel, effectiveProgress = 0, completedOccurrences = 0, subtaskCounts, selectionMode, isSelected, onPress, onLongPress }: GoalCardProps) {
   const isDone = Boolean(task.isCompleted);
@@ -20,25 +21,28 @@ export function GoalCard({ task, scopeLabel, effectiveProgress = 0, completedOcc
   let percent = 0;
   const hasProgress = task.totalProgress != null && task.totalProgress > 0;
   const hasOccurrenceTarget = task.occurrenceTarget != null && task.occurrenceTarget > 0;
-
+  const periodWord = scopeLabel === 'custom' ? 'period' : scopeLabel;
+  
   if (hasProgress && hasOccurrenceTarget) {
     // Progression + occurrence-repeat combo
     percent = task.occurrenceTarget! > 0 ? Math.min(1, completedOccurrences / task.occurrenceTarget!) : 0;
-    metaLine = `${effectiveProgress}/${task.totalProgress} ${task.progressUnit ?? ''} · ${completedOccurrences}/${task.occurrenceTarget} runs this ${scopeLabel} · ${task.priority}`;
+    metaLine = `${effectiveProgress}/${task.totalProgress} ${task.progressUnit ?? ''} · ${completedOccurrences}/${task.occurrenceTarget} runs this ${periodWord} · ${task.priority}`;
   } else if (hasProgress) {
     const target = task.totalProgress!;
     percent = target > 0 ? Math.min(1, effectiveProgress / target) : 0;
-    metaLine = `${effectiveProgress}/${target} ${task.progressUnit ?? ''} this ${scopeLabel} · ${task.priority}`;
+    metaLine = `${effectiveProgress}/${target} ${task.progressUnit ?? ''} this ${periodWord} · ${task.priority}`;
   } else if (subtaskCounts && subtaskCounts.total > 0) {
     percent = subtaskCounts.total > 0 ? subtaskCounts.completed / subtaskCounts.total : 0;
     metaLine = `${subtaskCounts.completed}/${subtaskCounts.total} milestones · ${task.priority}`;
   } else if (hasOccurrenceTarget) {
     const target = task.occurrenceTarget!;
     percent = target > 0 ? Math.min(1, completedOccurrences / target) : 0;
-    metaLine = `${completedOccurrences}/${target} times this ${scopeLabel} · ${task.priority}`;
+    metaLine = `${completedOccurrences}/${target} times this ${periodWord} · ${task.priority}`;
   }
 
   const showBar = hasProgress || hasOccurrenceTarget || Boolean(subtaskCounts && subtaskCounts.total > 0);
+
+
 
   return (
     <TouchableOpacity style={[styles.card, isSelected && styles.cardSelected]} onPress={onPress} onLongPress={onLongPress}>

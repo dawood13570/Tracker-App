@@ -993,6 +993,23 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
       }
     }
 
+    const customGoals = await getActiveCustomGoals(dateStr);
+    for (const custom of customGoals) {
+      const periodEnd = custom.deadline ?? dateStr;
+      if (custom.type === 'Progression') {
+        if (custom.occurrenceTarget) {
+          await decomposeProgressionCountGoal(custom, dateStr, periodEnd);
+        } else {
+          const daysRemaining = differenceInCalendarDays(parseISO(periodEnd), dayDate) + 1;
+          await decomposeWeeklyProgressionToDaily(custom, dateStr, daysRemaining);
+        }
+      } else if (custom.type === 'Simple' && custom.occurrenceTarget) {
+        await decomposeCountGoalToNextOccurrence(custom, dateStr, periodEnd);
+      } else if (custom.type === 'Hybrid') {
+        await decomposeHybridGoal(custom, dateStr, periodEnd);
+      }
+    }
+
     // Run dedupe at the end of every decomposition cycle
     await dedupeDuplicateOccurrences();
   })();
@@ -1197,6 +1214,12 @@ export async function decomposeYearlyProgressionToMonthly(
 
 export async function getNotesByScope(scope: 'daily' | 'weekly' | 'monthly' | 'yearly') {
   return db.select().from(notes).where(eq(notes.scope, scope)).orderBy(desc(notes.dateKey));
+}
+
+export type NoteSummary = typeof notes.$inferSelect;
+
+export async function getAllNotesSummaries(): Promise<NoteSummary[]> {
+  return db.select().from(notes).orderBy(desc(notes.dateKey), desc(notes.updatedAt));
 }
 
 export async function getNotesForScope(
@@ -1486,4 +1509,27 @@ export async function decomposeHybridGoal(
   }
 
   return null;
+}
+
+export async function getActiveCustomGoals(dateStr: string): Promise<TaskRow[]> {
+  return db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.scope, 'custom'),
+        isNull(tasks.parentId),
+        lte(tasks.scheduledDate, dateStr),
+        gte(tasks.deadline, dateStr)
+      )
+    )
+    .orderBy(tasks.id);
+}
+
+export async function getAllCustomGoals(): Promise<TaskRow[]> {
+  return db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.scope, 'custom'), isNull(tasks.parentId)))
+    .orderBy(desc(tasks.scheduledDate));
 }

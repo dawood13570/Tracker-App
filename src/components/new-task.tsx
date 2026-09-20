@@ -1,5 +1,6 @@
 // src/components/new-task.tsx
 import { useTagStore } from '@/store/tagStore';
+import { useStore } from '@/store/useStore';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -46,7 +47,6 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Low');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const [allowRollover, setAllowRollover] = useState(true);
   const [selectedPursuitId, setSelectedPursuitId] = useState<number | null>(null);
 
   const [hasProgress, setHasProgress] = useState(false);
@@ -66,6 +66,9 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+
+  const { defaultRolloverEnabled, defaultSurplusMode } = useStore();
+  const [allowRollover, setAllowRollover] = useState(defaultRolloverEnabled);
 
   const { selectedDate } = useTaskStore();
   const snapPoints = useMemo(() => ['85%', '55%'], []);
@@ -123,7 +126,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     setTitle('');
     setPriority('Low');
     setShowAdvanced(false);
-    setAllowRollover(true);
+    setAllowRollover(defaultRolloverEnabled);
     setSelectedPursuitId(null);
     setHasProgress(false);
     setTargetValue('');
@@ -253,6 +256,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
         totalProgress: hasProgress ? Number(targetValue) : null,
         progressUnit: hasProgress ? unit.trim() || null : null,
         deadline: deadline ? getLocalDateString(deadline) : null,
+        surplusMode: hasProgress ? defaultSurplusMode : null,
       };
 
       if (taskToEdit) {

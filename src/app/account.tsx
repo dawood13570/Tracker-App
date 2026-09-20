@@ -1,6 +1,7 @@
 import { useStore } from '@/store/useStore';
 import { colors } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import {
   ScrollView,
   StyleSheet,
@@ -17,6 +18,13 @@ const PRESET_HOURS = [
   { label: '4:00 AM', value: 4 },
 ];
 
+const SURPLUS_OPTIONS: { label: string; value: 'breathing_room' | 'raise_bar' | 'bank_it' | 'none' }[] = [
+  { label: 'Ask Each Time', value: 'none' },
+  { label: 'Ease Pace', value: 'breathing_room' },
+  { label: 'Bank Buffer', value: 'bank_it' },
+  { label: 'Raise Bar', value: 'raise_bar' },
+];
+
 export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const {
@@ -28,6 +36,12 @@ export default function AccountScreen() {
     setNightOwlMode,
     dayBoundaryHour,
     setDayBoundaryHour,
+    defaultRolloverEnabled,
+    setDefaultRolloverEnabled,
+    defaultSurplusMode,
+    setDefaultSurplusMode,
+    criticalPaceNotificationsEnabled,
+    setCriticalPaceNotificationsEnabled,
   } = useStore();
 
   return (
@@ -123,6 +137,74 @@ export default function AccountScreen() {
             trackColor={{ false: colors.borderSubtle, true: colors.accent }}
           />
         </View>
+      </View>
+
+      <Text style={styles.sectionLabel}>DEFAULTS FOR NEW TASKS</Text>
+      <View style={styles.settingsCard}>
+        <View style={styles.settingRow}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.settingTitle}>Rollover by Default</Text>
+            <Text style={styles.settingDesc}>New tasks start with "move to next day" turned on.</Text>
+          </View>
+          <Switch
+            value={defaultRolloverEnabled}
+            onValueChange={setDefaultRolloverEnabled}
+            trackColor={{ false: colors.borderSubtle, true: colors.accent }}
+          />
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.settingColumn}>
+          <Text style={styles.settingTitle}>Default Surplus Mode</Text>
+          <Text style={styles.settingDesc}>How new Progression tasks handle beating pace, until changed per-task.</Text>
+          <View style={[styles.presetButtonRow, { flexWrap: 'wrap' }]}>
+            {SURPLUS_OPTIONS.map((opt) => {
+              const isSelected = defaultSurplusMode === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.presetButton, isSelected && styles.presetButtonSelected]}
+                  onPress={() => setDefaultSurplusMode(opt.value)}
+                >
+                  <Text style={[styles.presetButtonText, isSelected && styles.presetButtonTextSelected]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
+      <View style={styles.settingsCard}>
+        <View style={styles.settingRow}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.settingTitle}>Critical Pace Alerts</Text>
+            <Text style={styles.settingDesc}>Notify when a Progression task falls to Critical status.</Text>
+          </View>
+          <Switch
+            value={criticalPaceNotificationsEnabled}
+            onValueChange={setCriticalPaceNotificationsEnabled}
+            trackColor={{ false: colors.borderSubtle, true: colors.accent }}
+          />
+        </View>
+      </View>
+
+      <Text style={styles.sectionLabel}>NOTES & GOALS</Text>
+      <View style={styles.settingsCard}>
+        <TouchableOpacity style={styles.settingRow} onPress={() => router.push('/notes-history' as any)}>
+          <Ionicons name="document-text-outline" size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
+          <Text style={[styles.settingTitle, { flex: 1 }]}>Browse Past Notes</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.settingRow} onPress={() => router.push('/custom-goals' as any)}>
+          <Ionicons name="calendar-number-outline" size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
+          <Text style={[styles.settingTitle, { flex: 1 }]}>Custom-Range Goals</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.sectionLabel}>DATA</Text>

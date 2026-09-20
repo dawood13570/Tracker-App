@@ -8,7 +8,7 @@ export interface RolloverSnapshotInput {
   rolloverEnabled: boolean;
   scheduledDate: string;
   procrastinationCount: number | null;
-  scope: 'daily' | 'weekly' | 'monthly' | 'yearly'; // <-- updated to include monthly & yearly
+  scope: 'daily'; 
   totalProgress: number | null;
   progressUnit: string | null;
 }
