@@ -1,6 +1,6 @@
 // src/components/GhostTaskCard.tsx
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme/colors';
 
 interface GhostTaskCardProps {
@@ -8,9 +8,10 @@ interface GhostTaskCardProps {
   priority?: 'Low' | 'Medium' | 'High';
   totalProgress?: number | null;
   progressUnit?: string | null;
+  onPress?: () => void;
 }
 
-export function GhostTaskCard({ title, priority = 'Medium', totalProgress, progressUnit }: GhostTaskCardProps) {
+export function GhostTaskCard({ title, priority = 'Medium', totalProgress, progressUnit, onPress }: GhostTaskCardProps) {
   const accentColor =
     priority === 'High'
       ? colors.priorityHighBorder ?? '#ef4444'
@@ -18,7 +19,7 @@ export function GhostTaskCard({ title, priority = 'Medium', totalProgress, progr
       ? colors.priorityMediumBorder ?? '#eab308'
       : colors.priorityLowBorder ?? '#22c55e';
 
-  return (
+  const content = (
     <View style={styles.card}>
       <View style={[styles.priorityAccent, { backgroundColor: accentColor }]} />
       <View style={styles.body}>
@@ -44,6 +45,7 @@ export function GhostTaskCard({ title, priority = 'Medium', totalProgress, progr
       </View>
     </View>
   );
+  return onPress ? <Pressable onPress={onPress}>{content}</Pressable> : content;
 }
 
 const styles = StyleSheet.create({

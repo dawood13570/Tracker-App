@@ -1,7 +1,6 @@
 import { useStore } from '@/store/useStore';
 import { colors } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import {
   ScrollView,
   StyleSheet,
@@ -192,20 +191,6 @@ export default function AccountScreen() {
         </View>
       </View>
 
-      <Text style={styles.sectionLabel}>NOTES & GOALS</Text>
-      <View style={styles.settingsCard}>
-        <TouchableOpacity style={styles.settingRow} onPress={() => router.push('/notes-history' as any)}>
-          <Ionicons name="document-text-outline" size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
-          <Text style={[styles.settingTitle, { flex: 1 }]}>Browse Past Notes</Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-        </TouchableOpacity>
-        <View style={styles.divider} />
-        <TouchableOpacity style={styles.settingRow} onPress={() => router.push('/custom-goals' as any)}>
-          <Ionicons name="calendar-number-outline" size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
-          <Text style={[styles.settingTitle, { flex: 1 }]}>Custom-Range Goals</Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-        </TouchableOpacity>
-      </View>
 
       <Text style={styles.sectionLabel}>DATA</Text>
       <View style={styles.settingsCard}>

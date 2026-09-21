@@ -5,7 +5,6 @@ import NewTaskModal from '@/components/new-task';
 import NewActivityModal from '@/components/NewActivityModal';
 import NewEventModal from '@/components/NewEventModal';
 import NewHabitModal from '@/components/NewHabitModal';
-import NoteSheet from '@/components/NoteSheet';
 import ProgressLogSheet from '@/components/ProgressLogSheet';
 import { TagFilterBar } from '@/components/TagFilterBar';
 import { TaskCard } from '@/components/TaskCard';
@@ -16,7 +15,6 @@ import {
   getProgressLogsByTask,
   getSubtaskCountsForTaskIds
 } from '@/db/queries';
-import { generateDailySeed } from '@/engine/notesSeed';
 import { calculatePace, PaceResult } from '@/engine/pace';
 import { shouldShowPaceStatus } from '@/engine/paceConfidence';
 import { getEffectivePriority, shouldArchiveTask } from '@/engine/priority';
@@ -34,7 +32,7 @@ import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { parseISO } from 'date-fns';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -121,7 +119,6 @@ export default function AppDashboard() {
   const eventSheetRef = useRef<BottomSheet>(null);
   const newActivitySheetRef = useRef<BottomSheet>(null);
   const activityDetailSheetRef = useRef<BottomSheet>(null);
-  const noteSheetRef = useRef<BottomSheet>(null);
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [loggingTask, setLoggingTask] = useState<Task | null>(null);
@@ -595,7 +592,7 @@ export default function AppDashboard() {
               </View>
             </View>
           ) : (
-            <DateHeader dateStr={todayStr} onOpenNote={() => noteSheetRef.current?.expand()} />
+            <DateHeader dateStr={todayStr} onOpenNote={() => router.push('/notes-history')} />
           )}
         </View>
 
@@ -871,17 +868,6 @@ export default function AppDashboard() {
           onClose={() => setSelectedActivity(null)}
         />
 
-        <NoteSheet
-          sheetRef={noteSheetRef}
-          scope="daily"
-          dateKey={todayStr}
-          periodLabel={parseISO(todayStr).toLocaleDateString('en-GB', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-          })}
-          getSeed={() => generateDailySeed(todayStr)}
-        />
       </SafeAreaView>
     </GestureHandlerRootView>
   );

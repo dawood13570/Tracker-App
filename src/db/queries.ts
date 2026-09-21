@@ -1422,9 +1422,6 @@ export async function getSubtasksByParentOrdered(parentId: number): Promise<Task
   return db.select().from(tasks).where(eq(tasks.parentId, parentId)).orderBy(tasks.subtaskOrder, tasks.id);
 }
 
-
-// in src/db/queries.ts
-
 export async function decomposeHybridGoal(
   goal: TaskRow,
   todayStr: string,
@@ -1432,47 +1429,55 @@ export async function decomposeHybridGoal(
 ): Promise<TaskRow | null> {
   if (todayStr > periodEndStr) return null;
 
-  // 1. If goal has an occurrence schedule, check if an occurrence is due today
   if (goal.occurrenceTarget) {
     const existingProxy = await db
       .select()
       .from(tasks)
-      .where(
-        and(
-          eq(tasks.sourceTaskId, goal.id),
-          eq(tasks.scheduledDate, todayStr),
-          eq(tasks.scope, 'daily')
-        )
-      )
+      .where(and(eq(tasks.sourceTaskId, goal.id), eq(tasks.scheduledDate, todayStr), eq(tasks.scope, 'daily')))
       .limit(1);
-
     if (existingProxy.length > 0) return existingProxy[0];
 
-    // Check if max gap or schedule requires an occurrence today
     const childOccurrences = await db
       .select()
       .from(tasks)
       .where(and(eq(tasks.sourceTaskId, goal.id), eq(tasks.scope, 'daily')));
 
     const completedCount = childOccurrences.filter((c) => c.isCompleted).length;
-    if (completedCount >= goal.occurrenceTarget) return null; // Target met
+    const remaining = goal.occurrenceTarget - completedCount;
+    if (remaining <= 0) return null;
 
     const pending = childOccurrences.find((c) => !c.isCompleted && c.scheduledDate >= todayStr);
-    if (pending) return pending; // Already pending on or after today
+    if (pending) return pending;
 
-    // Spawn a daily portal to the master hybrid goal
+    const daysLeft = Math.max(1, differenceInCalendarDays(parseISO(periodEndStr), parseISO(todayStr)) + 1);
+    const idealSpacing = Math.floor(daysLeft / remaining);
+    const cappedSpacing = Math.max(1, Math.min(goal.maxGapDays ?? idealSpacing, idealSpacing || 1));
+
+    const mostRecent = childOccurrences.length > 0
+      ? childOccurrences.reduce((latest, c) => (c.scheduledDate > latest.scheduledDate ? c : latest))
+      : null;
+
+    let nextDateStr: string;
+    if (!mostRecent) {
+      nextDateStr = todayStr;
+    } else {
+      const candidate = format(addDays(parseISO(mostRecent.scheduledDate), cappedSpacing), 'yyyy-MM-dd');
+      nextDateStr = candidate < todayStr ? todayStr : candidate;
+    }
+    if (nextDateStr > periodEndStr) return null;
+
     const [created] = await db
       .insert(tasks)
       .values({
         title: goal.title,
         type: 'Hybrid',
         priority: goal.priority,
-        scheduledDate: todayStr,
+        scheduledDate: nextDateStr,
         deadline: periodEndStr,
         scope: 'daily',
         sourceTaskId: goal.id,
         isSequential: goal.isSequential,
-        rolloverEnabled: true,
+        rolloverEnabled: false,
       })
       .returning();
 
@@ -1501,7 +1506,7 @@ export async function decomposeHybridGoal(
         sourceTaskId: current.id,
         totalProgress: current.totalProgress ?? null,
         progressUnit: current.progressUnit ?? null,
-        rolloverEnabled: true,
+        rolloverEnabled: false,
       })
       .returning();
 
@@ -1532,4 +1537,18 @@ export async function getAllCustomGoals(): Promise<TaskRow[]> {
     .from(tasks)
     .where(and(eq(tasks.scope, 'custom'), isNull(tasks.parentId)))
     .orderBy(desc(tasks.scheduledDate));
+}
+
+export async function getActiveRecurringDailyTasks(): Promise<TaskRow[]> {
+  return db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        isNull(tasks.parentId),
+        eq(tasks.scope, 'daily'),
+        eq(tasks.isCompleted, false),
+        sql`${tasks.recurrenceType} != 'none'`
+      )
+    );
 }

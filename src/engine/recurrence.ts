@@ -57,3 +57,15 @@ export function getNextOccurrence(task: RecurrenceInput, fromDate: Date): Date |
             return null;
     }
 }
+
+export function previewRecurrenceDates(task: RecurrenceInput, fromDate: Date, toDate: Date): Date[] {
+  const dates: Date[] = [];
+  let cursor = fromDate;
+  for (let i = 0; i < 366; i++) {
+    const next = getNextOccurrence(task, cursor);
+    if (!next || next > toDate) break;
+    dates.push(next);
+    cursor = next;
+  }
+  return dates;
+}

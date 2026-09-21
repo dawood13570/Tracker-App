@@ -1,19 +1,23 @@
 // src/app/notes-history.tsx
 import NoteSheet from '@/components/NoteSheet';
 import { getAllNotesSummaries, NoteSummary } from '@/db/queries';
+import { generateDailySeed } from '@/engine/notesSeed';
 import { colors } from '@/theme/colors';
+import { getAppToday } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, parseISO } from 'date-fns';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -39,10 +43,16 @@ function formatNoteDate(scope: NoteSummary['scope'], dateKey: string) {
 
 export default function NotesHistoryScreen() {
   const insets = useSafeAreaInsets();
+  const todayStr = useMemo(() => getAppToday(), []);
+
   const [notesList, setNotesList] = useState<NoteSummary[]>([]);
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all');
-  const [activeNote, setActiveNote] = useState<NoteSummary | null>(null);
+  const [activeDateKey, setActiveDateKey] = useState<string | null>(null);
+
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerDate, setPickerDate] = useState(new Date());
+
   const sheetRef = useRef<BottomSheet>(null);
 
   const loadNotes = useCallback(async () => {
@@ -53,6 +63,11 @@ export default function NotesHistoryScreen() {
     useCallback(() => {
       loadNotes();
     }, [loadNotes])
+  );
+
+  const todaysNote = useMemo(
+    () => notesList.find((n) => n.scope === 'daily' && n.dateKey === todayStr) ?? null,
+    [notesList, todayStr]
   );
 
   const filtered = useMemo(() => {
@@ -68,9 +83,16 @@ export default function NotesHistoryScreen() {
     });
   }, [notesList, search, scopeFilter]);
 
-  const openNote = (note: NoteSummary) => {
-    setActiveNote(note);
+  const openDate = (dateKey: string) => {
+    setActiveDateKey(dateKey);
     sheetRef.current?.expand();
+  };
+
+  const handlePickDate = (selected?: Date) => {
+    setShowPicker(Platform.OS === 'ios');
+    if (selected) {
+      openDate(format(selected, 'yyyy-MM-dd'));
+    }
   };
 
   return (
@@ -79,9 +101,32 @@ export default function NotesHistoryScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.pageTitle}>All Notes</Text>
+        <Text style={styles.pageTitle}>Notes</Text>
         <View style={{ width: 24 }} />
       </View>
+
+      <TouchableOpacity style={styles.todayCard} onPress={() => openDate(todayStr)}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.todayCardLabel}>TODAY</Text>
+          <Text style={styles.todayCardSnippet} numberOfLines={2}>
+            {todaysNote?.content || 'No note yet — tap to add one.'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.accent} />
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.addOtherRow} onPress={() => { setPickerDate(new Date()); setShowPicker(true); }}>
+        <Ionicons name="calendar-outline" size={16} color={colors.accent} />
+        <Text style={styles.addOtherText}>Add a note for another day</Text>
+      </TouchableOpacity>
+      {showPicker && (
+        <DateTimePicker
+          value={pickerDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'inline' : 'default'}
+          onChange={(_, selected) => handlePickDate(selected)}
+        />
+      )}
 
       <View style={styles.searchRow}>
         <Ionicons name="search" size={16} color={colors.textMuted} />
@@ -121,7 +166,7 @@ export default function NotesHistoryScreen() {
           </View>
         ) : (
           filtered.map((note) => (
-            <TouchableOpacity key={note.id} style={styles.noteCard} onPress={() => openNote(note)}>
+            <TouchableOpacity key={note.id} style={styles.noteCard} onPress={() => openDate(note.dateKey)}>
               <View style={styles.noteCardHeader}>
                 <View style={styles.scopeBadge}>
                   <Text style={styles.scopeBadgeText}>{SCOPE_LABELS[note.scope]}</Text>
@@ -139,12 +184,12 @@ export default function NotesHistoryScreen() {
 
       <NoteSheet
         sheetRef={sheetRef}
-        scope={activeNote?.scope ?? 'daily'}
-        dateKey={activeNote?.dateKey ?? ''}
-        periodLabel={activeNote ? formatNoteDate(activeNote.scope, activeNote.dateKey) : ''}
-        getSeed={async () => ''}
+        scope="daily"
+        dateKey={activeDateKey ?? ''}
+        periodLabel={activeDateKey ? formatNoteDate('daily', activeDateKey) : ''}
+        getSeed={() => generateDailySeed(activeDateKey ?? todayStr)}
         onClose={() => {
-          setActiveNote(null);
+          setActiveDateKey(null);
           loadNotes();
         }}
       />
@@ -156,6 +201,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 12 },
   pageTitle: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
+  todayCard: {
+    flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 10,
+    backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.accent, padding: 12,
+  },
+  todayCardLabel: { fontSize: 10, fontWeight: '800', color: colors.accent, letterSpacing: 0.6, marginBottom: 4 },
+  todayCardSnippet: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+  addOtherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 16, marginBottom: 14 },
+  addOtherText: { fontSize: 12, color: colors.accent, fontWeight: '600' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 10, backgroundColor: colors.surfaceSubtle, borderRadius: 8, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, height: 38 },
   searchInput: { flex: 1, color: colors.textPrimary, fontSize: 13 },
   filterRow: { marginBottom: 10, flexGrow: 0 },
@@ -164,7 +217,7 @@ const styles = StyleSheet.create({
   filterChipText: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
   filterChipTextActive: { fontSize: 12, color: colors.textOnAccent, fontWeight: '700' },
   listContent: { paddingHorizontal: 16, paddingBottom: 40 },
-  emptyState: { alignItems: 'center', marginTop: 60, gap: 8 },
+  emptyState: { alignItems: 'center', marginTop: 40, gap: 8 },
   emptyText: { fontSize: 13, color: colors.textMuted },
   noteCard: { backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.borderSubtle, padding: 12, marginBottom: 10 },
   noteCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },

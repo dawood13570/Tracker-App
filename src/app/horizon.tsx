@@ -11,7 +11,9 @@ import {
   deleteTaskCascade,
   ensureDailyDecompositionForDate,
   EventRow,
+  getActiveRecurringDailyTasks,
   getActivityLogsForDateRange,
+  getAllCustomGoals,
   getAllDescendantTasks,
   getAllTagAssociations,
   getCompletedOccurrenceCount,
@@ -26,14 +28,16 @@ import {
   getWeeklyTasks,
   getYearlyTasks,
   HabitWithStatus,
+  insertTask,
   logHabitCompletion,
   previewOccurrenceSchedule,
   ProjectedOccurrence,
-  TaskRow,
+  TaskRow
 } from '@/db/queries';
 import { generatePeriodSeed } from '@/engine/notesSeed';
 import { calculatePace, PaceResult } from '@/engine/pace';
 import { shouldShowPaceStatus } from '@/engine/paceConfidence';
+import { previewRecurrenceDates } from '@/engine/recurrence';
 import { taskHasProgress } from '@/engine/taskShape';
 import { ActivityLogWithDetails } from '@/store/activityStore';
 import { useTagStore } from '@/store/tagStore';
@@ -44,6 +48,7 @@ import { isPeriodEligibleForReflection } from '@/utils/reflections';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import {
+  addDays,
   addMonths,
   addWeeks,
   addYears,
@@ -62,7 +67,7 @@ import {
   startOfYear,
   subMonths,
   subWeeks,
-  subYears,
+  subYears
 } from 'date-fns';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -126,6 +131,13 @@ export default function HorizonScreen() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectedTaskToEdit, setSelectedTaskToEdit] = useState<TaskRow | null>(null);
+
+  const [customGoals, setCustomGoals] = useState<TaskRow[]>([]);
+  const [customGoalProgress, setCustomGoalProgress] = useState<Record<number, number>>({});
+  const [customGoalSubtasks, setCustomGoalSubtasks] = useState<Record<number, { completed: number; total: number }>>({});
+  const [customGoalOccurrences, setCustomGoalOccurrences] = useState<Record<number, number>>({});
+  const [editingCustomGoal, setEditingCustomGoal] = useState<TaskRow | null>(null);
+  const customModalRef = useRef<BottomSheet>(null);
 
   const { toggleTask } = useTaskStore();
   const { tags: allTags, loadTags, loadMostUsedTags, tagVersion } = useTagStore();
@@ -277,26 +289,72 @@ export default function HorizonScreen() {
   const filteredEvents = useMemo(() => filterItems(periodEvents, 'events'), [filterItems, periodEvents]);
   const filteredHabits = useMemo(() => filterItems(dayHabits, 'habits'), [filterItems, dayHabits]);
 
+  const handleScheduleGhostNow = (ghost: ProjectedOccurrence) => {
+    Alert.alert(
+      'Schedule now?',
+      `Create "${ghost.goalTitle}" as a real task on ${format(parseISO(ghost.date), 'EEE, MMM d')} instead of waiting for it to auto-generate?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Schedule',
+          onPress: async () => {
+            await insertTask({
+              title: ghost.goalTitle,
+              type: ghost.type,
+              priority: ghost.priority,
+              scheduledDate: ghost.date,
+              scope: 'daily',
+              sourceTaskId: ghost.goalId,
+              totalProgress: ghost.totalProgress ?? null,
+              progressUnit: ghost.progressUnit ?? null,
+              deadline: ghost.totalProgress ? ghost.date : null,
+              rolloverEnabled: false,
+            } as any);
+            await loadData();
+          },
+        },
+      ]
+    );
+  };
+
   useEffect(() => {
     let active = true;
-    const countGoals = filteredGoals.filter((g) => g.occurrenceTarget != null && g.occurrenceTarget > 0);
-    if (countGoals.length === 0) {
-      setProjectedOccurrences([]);
-      return;
-    }
     (async () => {
       const fromDate = todayStr > startStr ? todayStr : startStr;
-      const results = await Promise.all(
-        countGoals.map((g) => previewOccurrenceSchedule(g, fromDate, endStr))
-      );
-      if (active) {
-        setProjectedOccurrences(results.flat());
+
+      const countGoals = filteredGoals.filter((g) => g.occurrenceTarget != null && g.occurrenceTarget > 0);
+      const countResults = countGoals.length
+        ? (await Promise.all(countGoals.map((g) => previewOccurrenceSchedule(g, fromDate, endStr)))).flat()
+        : [];
+
+      const recurringTasks = await getActiveRecurringDailyTasks();
+      const recurrenceResults: ProjectedOccurrence[] = [];
+      for (const t of recurringTasks) {
+        const projectFrom = t.scheduledDate > fromDate ? t.scheduledDate : fromDate;
+        const dates = previewRecurrenceDates(
+          { recurrenceType: t.recurrenceType as any, recurrenceInterval: t.recurrenceInterval, recurrenceDaysOfWeek: t.recurrenceDaysOfWeek },
+          parseISO(projectFrom),
+          bounds.end
+        );
+        for (const d of dates) {
+          const dStr = format(d, 'yyyy-MM-dd');
+          if (dStr < startStr || dStr > endStr) continue;
+          recurrenceResults.push({
+            goalId: t.id,
+            goalTitle: t.title,
+            type: t.type as any,
+            priority: t.priority as any,
+            date: dStr,
+            totalProgress: t.totalProgress,
+            progressUnit: t.progressUnit,
+          });
+        }
       }
+
+      if (active) setProjectedOccurrences([...countResults, ...recurrenceResults]);
     })();
-    return () => {
-      active = false;
-    };
-  }, [filteredGoals, startStr, endStr, todayStr]);
+    return () => { active = false; };
+  }, [filteredGoals, startStr, endStr, todayStr, bounds.end]);
 
   const densityMap = useMemo(() => {
     const map: Record<string, { total: number; completed: number }> = {};
@@ -432,6 +490,24 @@ export default function HorizonScreen() {
       },
     ]);
   };
+
+      const loadCustomGoals = useCallback(async () => {
+      const list = await getAllCustomGoals();
+      setCustomGoals(list);
+      const progressionGoals = list.filter((t) => t.type === 'Progression');
+      const hybridGoals = list.filter((t) => t.type === 'Hybrid');
+      const countGoals = list.filter((t) => t.occurrenceTarget != null && t.occurrenceTarget > 0);
+      const [progressEntries, subtaskEntries, countEntries] = await Promise.all([
+        Promise.all(progressionGoals.map(async (t) => [t.id, await getEffectiveProgress(t.id)] as const)),
+        Promise.all(hybridGoals.map(async (t) => [t.id, await getSubtaskCounts(t.id)] as const)),
+        Promise.all(countGoals.map(async (t) => [t.id, await getCompletedOccurrenceCount(t.id)] as const)),
+      ]);
+      setCustomGoalProgress(Object.fromEntries(progressEntries));
+      setCustomGoalSubtasks(Object.fromEntries(subtaskEntries));
+      setCustomGoalOccurrences(Object.fromEntries(countEntries));
+    }, []);
+
+    useFocusEffect(useCallback(() => { loadCustomGoals(); }, [loadCustomGoals]));
 
   const activeModalRef = zoomLevel === 'week' ? weeklyModalRef : zoomLevel === 'month' ? monthlyModalRef : yearlyModalRef;
 
@@ -653,6 +729,39 @@ export default function HorizonScreen() {
             )}
           </View>
 
+          <View style={styles.sectionBlock}>
+            <View style={styles.sectionHeaderLine}>
+              <Text style={styles.sectionHeaderTitle}>CUSTOM GOALS</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={styles.sectionItemCount}>{customGoals.length}</Text>
+                <TouchableOpacity onPress={() => { setEditingCustomGoal(null); customModalRef.current?.expand(); }} hitSlop={8}>
+                  <Ionicons name="add-circle-outline" size={18} color={colors.accent} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            {customGoals.length === 0 ? (
+              <Text style={styles.emptyNotice}>No custom-range goals yet — tap + to plan one with its own dates.</Text>
+            ) : (
+              customGoals.map((goal) => (
+                <GoalCard
+                  key={goal.id}
+                  task={goal}
+                  scopeLabel="custom"
+                  effectiveProgress={customGoalProgress[goal.id]}
+                  completedOccurrences={customGoalOccurrences[goal.id]}
+                  subtaskCounts={customGoalSubtasks[goal.id]}
+                  onPress={() => { setEditingCustomGoal(goal); customModalRef.current?.expand(); }}
+                  onLongPress={() => {
+                    Alert.alert('Delete Goal', `Delete "${goal.title}"? This removes its generated daily tasks too.`, [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: async () => { await deleteTaskCascade(goal.id); await loadCustomGoals(); } },
+                    ]);
+                  }}
+                />
+              ))
+            )}
+          </View>
+
           {isFilterActive ? (
             <View style={styles.sectionBlock}>
               <View style={styles.sectionHeaderLine}>
@@ -860,6 +969,7 @@ export default function HorizonScreen() {
                           priority={ghost.priority}
                           totalProgress={ghost.totalProgress}
                           progressUnit={ghost.progressUnit}
+                          onPress={() => handleScheduleGhostNow(ghost)}
                         />
                       ))}
                     </View>
@@ -896,6 +1006,15 @@ export default function HorizonScreen() {
           editTask={zoomLevel === 'year' ? selectedTaskToEdit : null}
           onTaskCreated={loadData}
           onClose={() => setSelectedTaskToEdit(null)}
+        />
+        <PeriodGoalModal
+          sheetRef={customModalRef}
+          scope="custom"
+          startDate={todayStr}
+          endDate={format(addDays(new Date(), 30), 'yyyy-MM-dd')}
+          editTask={editingCustomGoal}
+          onTaskCreated={loadCustomGoals}
+          onClose={() => setEditingCustomGoal(null)}
         />
         <ProgressLogSheet
           sheetRef={progressSheetRef}

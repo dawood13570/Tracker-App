@@ -3,8 +3,9 @@ import type { PaceResult } from '@/engine/pace';
 import { getEffectivePriority } from '@/engine/priority';
 import { taskHasProgress } from '@/engine/taskShape';
 import { useTagStore } from '@/store/tagStore';
+import { getAppToday } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Keyboard,
@@ -89,6 +90,9 @@ export function TaskCard({
   const [localSubtaskProg, setLocalSubtaskProg] = useState<Record<number, number>>({});
 
   const isSubmittingSubtask = useRef(false);
+
+  const todayStr = useMemo(() => getAppToday(), []);
+  const isOverdueProxy = !task.isCompleted && task.sourceTaskId != null && !task.rolloverEnabled && task.scheduledDate < todayStr;
 
   useEffect(() => {
     let active = true;
@@ -473,14 +477,21 @@ export function TaskCard({
               </View>
             </View>
 
-            {/* Bottom Meta & Sliders */}
+{/* Bottom Meta & Sliders */}
             {(taskTags.length > 0 ||
               Boolean(task.procrastinationCount && task.procrastinationCount > 0) ||
-              taskHasProgress(task)) && (
+              taskHasProgress(task) ||
+              isOverdueProxy) && (
               <View style={styles.detailsBlock}>
                 {(taskTags.length > 0 ||
-                  Boolean(task.procrastinationCount && task.procrastinationCount > 0)) && (
+                  Boolean(task.procrastinationCount && task.procrastinationCount > 0) ||
+                  isOverdueProxy) && (
                   <View style={styles.tagRow}>
+                    {isOverdueProxy && (
+                      <View style={styles.overdueBadge}>
+                        <Text style={styles.overdueBadgeText}>Missed {task.scheduledDate}</Text>
+                      </View>
+                    )}
                     {Boolean(task.procrastinationCount && task.procrastinationCount > 0) && (
                       <ProcrastinationBadge count={task.procrastinationCount!} />
                     )}
@@ -845,4 +856,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  overdueBadge: { backgroundColor: colors.dangerBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  overdueBadgeText: { fontSize: 11, fontWeight: '700', color: colors.danger },
 });
