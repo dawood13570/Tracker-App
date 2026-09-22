@@ -1,4 +1,3 @@
-// src/app/(tabs)/horizon.tsx
 import { ActivityCard } from '@/components/ActivityCard';
 import { GhostTaskCard } from '@/components/GhostTaskCard';
 import { GoalCard } from '@/components/GoalCard';
@@ -11,7 +10,6 @@ import {
   deleteTaskCascade,
   ensureDailyDecompositionForDate,
   EventRow,
-  getActiveRecurringDailyTasks,
   getActivityLogsForDateRange,
   getAllCustomGoals,
   getAllDescendantTasks,
@@ -32,12 +30,11 @@ import {
   logHabitCompletion,
   previewOccurrenceSchedule,
   ProjectedOccurrence,
-  TaskRow
+  TaskRow,
 } from '@/db/queries';
 import { generatePeriodSeed } from '@/engine/notesSeed';
 import { calculatePace, PaceResult } from '@/engine/pace';
 import { shouldShowPaceStatus } from '@/engine/paceConfidence';
-import { previewRecurrenceDates } from '@/engine/recurrence';
 import { taskHasProgress } from '@/engine/taskShape';
 import { ActivityLogWithDetails } from '@/store/activityStore';
 import { useTagStore } from '@/store/tagStore';
@@ -67,7 +64,7 @@ import {
   startOfYear,
   subMonths,
   subWeeks,
-  subYears
+  subYears,
 } from 'date-fns';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -190,7 +187,11 @@ export default function HorizonScreen() {
   }, []);
 
   const loadData = useCallback(async () => {
+    // 1. Decompose both today's active window and the current viewing window if in the future
     await ensureDailyDecompositionForDate(todayStr);
+    if (startStr > todayStr) {
+      await ensureDailyDecompositionForDate(startStr);
+    }
 
     const [rangeTasks, scopedGoals, rangeActivities, rangeEvents, currentDayHabits] = await Promise.all([
       getTasksForDateRange(startStr, endStr),
@@ -261,14 +262,21 @@ export default function HorizonScreen() {
     }
   }, [zoomLevel, startStr, endStr, todayStr, selectedDayStr, loadTags, loadMostUsedTags, refreshTagMap]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   useEffect(() => {
     refreshTagMap();
   }, [tagVersion, refreshTagMap]);
 
   const filterItems = useCallback(
-    <T extends { id: number; title?: string | null }>(items: T[], type: 'tasks' | 'habits' | 'events' | 'activities'): T[] => {
+    <T extends { id: number; title?: string | null }>(
+      items: T[],
+      type: 'tasks' | 'habits' | 'events' | 'activities'
+    ): T[] => {
       const q = searchQuery.trim().toLowerCase();
       return items.filter((item) => {
         const itemTitle = item.title ?? '';
@@ -320,41 +328,30 @@ export default function HorizonScreen() {
   useEffect(() => {
     let active = true;
     (async () => {
+      // Pull yearly goals for the active bounds so future views know the parent pacing schedule
+      const yearStart = format(startOfYear(bounds.start), 'yyyy-MM-dd');
+      const yearEnd = format(endOfYear(bounds.start), 'yyyy-MM-dd');
+      const yearlyGoals = await getYearlyTasks(yearStart, yearEnd);
+
+      const allActiveGoals = [...filteredGoals, ...yearlyGoals.filter((y) => y.occurrenceTarget)];
+      const uniqueGoals = Array.from(new Map(allActiveGoals.map((g) => [g.id, g])).values());
+
       const fromDate = todayStr > startStr ? todayStr : startStr;
 
-      const countGoals = filteredGoals.filter((g) => g.occurrenceTarget != null && g.occurrenceTarget > 0);
-      const countResults = countGoals.length
-        ? (await Promise.all(countGoals.map((g) => previewOccurrenceSchedule(g, fromDate, endStr)))).flat()
-        : [];
+      const countResults = (
+        await Promise.all(
+          uniqueGoals
+            .filter((g) => g.occurrenceTarget != null && g.occurrenceTarget > 0)
+            .map((g) => previewOccurrenceSchedule(g, fromDate, endStr))
+        )
+      ).flat();
 
-      const recurringTasks = await getActiveRecurringDailyTasks();
-      const recurrenceResults: ProjectedOccurrence[] = [];
-      for (const t of recurringTasks) {
-        const projectFrom = t.scheduledDate > fromDate ? t.scheduledDate : fromDate;
-        const dates = previewRecurrenceDates(
-          { recurrenceType: t.recurrenceType as any, recurrenceInterval: t.recurrenceInterval, recurrenceDaysOfWeek: t.recurrenceDaysOfWeek },
-          parseISO(projectFrom),
-          bounds.end
-        );
-        for (const d of dates) {
-          const dStr = format(d, 'yyyy-MM-dd');
-          if (dStr < startStr || dStr > endStr) continue;
-          recurrenceResults.push({
-            goalId: t.id,
-            goalTitle: t.title,
-            type: t.type as any,
-            priority: t.priority as any,
-            date: dStr,
-            totalProgress: t.totalProgress,
-            progressUnit: t.progressUnit,
-          });
-        }
-      }
-
-      if (active) setProjectedOccurrences([...countResults, ...recurrenceResults]);
+      if (active) setProjectedOccurrences(countResults);
     })();
-    return () => { active = false; };
-  }, [filteredGoals, startStr, endStr, todayStr, bounds.end]);
+    return () => {
+      active = false;
+    };
+  }, [filteredGoals, startStr, endStr, todayStr, bounds.start]);
 
   const densityMap = useMemo(() => {
     const map: Record<string, { total: number; completed: number }> = {};
@@ -383,7 +380,9 @@ export default function HorizonScreen() {
       }
       if (active) setYearlyBreakdownMap(map);
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [zoomLevel, filteredGoals]);
 
   const searchDateKeys = useMemo(() => {
@@ -424,10 +423,14 @@ export default function HorizonScreen() {
   );
 
   const navPrev = () => {
-    setAnchorDate((d) => (zoomLevel === 'week' ? subWeeks(d, 1) : zoomLevel === 'month' ? subMonths(d, 1) : subYears(d, 1)));
+    setAnchorDate((d) =>
+      zoomLevel === 'week' ? subWeeks(d, 1) : zoomLevel === 'month' ? subMonths(d, 1) : subYears(d, 1)
+    );
   };
   const navNext = () => {
-    setAnchorDate((d) => (zoomLevel === 'week' ? addWeeks(d, 1) : zoomLevel === 'month' ? addMonths(d, 1) : addYears(d, 1)));
+    setAnchorDate((d) =>
+      zoomLevel === 'week' ? addWeeks(d, 1) : zoomLevel === 'month' ? addMonths(d, 1) : addYears(d, 1)
+    );
   };
   const jumpToToday = () => {
     setAnchorDate(new Date());
@@ -464,12 +467,20 @@ export default function HorizonScreen() {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
   };
   const handleLongPressTask = (task: TaskRow) => {
-    if (!selectionMode) { setSelectedIds([task.id]); setSelectionMode(true); }
+    if (!selectionMode) {
+      setSelectedIds([task.id]);
+      setSelectionMode(true);
+    }
   };
-  const exitSelectionMode = () => { setSelectionMode(false); setSelectedIds([]); };
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds([]);
+  };
   const handleEditSelected = () => {
     if (selectedIds.length !== 1) return;
-    const task = periodGoals.find((t) => t.id === selectedIds[0]) || periodRangeTasks.find((t) => t.id === selectedIds[0]);
+    const task =
+      periodGoals.find((t) => t.id === selectedIds[0]) ||
+      periodRangeTasks.find((t) => t.id === selectedIds[0]);
     exitSelectionMode();
     if (!task) return;
     setSelectedTaskToEdit(task);
@@ -478,38 +489,48 @@ export default function HorizonScreen() {
     else if (task.scope === 'weekly') weeklyModalRef.current?.expand();
   };
   const handleBatchDelete = () => {
-    Alert.alert('Delete Selected Items', `Delete ${selectedIds.length} item(s)? Subtasks and decomposition trees will be removed.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          for (const id of selectedIds) await deleteTaskCascade(id);
-          exitSelectionMode();
-          loadData();
+    Alert.alert(
+      'Delete Selected Items',
+      `Delete ${selectedIds.length} item(s)? Subtasks and decomposition trees will be removed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            for (const id of selectedIds) await deleteTaskCascade(id);
+            exitSelectionMode();
+            loadData();
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
-      const loadCustomGoals = useCallback(async () => {
-      const list = await getAllCustomGoals();
-      setCustomGoals(list);
-      const progressionGoals = list.filter((t) => t.type === 'Progression');
-      const hybridGoals = list.filter((t) => t.type === 'Hybrid');
-      const countGoals = list.filter((t) => t.occurrenceTarget != null && t.occurrenceTarget > 0);
-      const [progressEntries, subtaskEntries, countEntries] = await Promise.all([
-        Promise.all(progressionGoals.map(async (t) => [t.id, await getEffectiveProgress(t.id)] as const)),
-        Promise.all(hybridGoals.map(async (t) => [t.id, await getSubtaskCounts(t.id)] as const)),
-        Promise.all(countGoals.map(async (t) => [t.id, await getCompletedOccurrenceCount(t.id)] as const)),
-      ]);
-      setCustomGoalProgress(Object.fromEntries(progressEntries));
-      setCustomGoalSubtasks(Object.fromEntries(subtaskEntries));
-      setCustomGoalOccurrences(Object.fromEntries(countEntries));
-    }, []);
+  const loadCustomGoals = useCallback(async () => {
+    const list = await getAllCustomGoals();
+    setCustomGoals(list);
+    const progressionGoals = list.filter((t) => t.type === 'Progression');
+    const hybridGoals = list.filter((t) => t.type === 'Hybrid');
+    const countGoals = list.filter((t) => t.occurrenceTarget != null && t.occurrenceTarget > 0);
+    const [progressEntries, subtaskEntries, countEntries] = await Promise.all([
+      Promise.all(progressionGoals.map(async (t) => [t.id, await getEffectiveProgress(t.id)] as const)),
+      Promise.all(hybridGoals.map(async (t) => [t.id, await getSubtaskCounts(t.id)] as const)),
+      Promise.all(countGoals.map(async (t) => [t.id, await getCompletedOccurrenceCount(t.id)] as const)),
+    ]);
+    setCustomGoalProgress(Object.fromEntries(progressEntries));
+    setCustomGoalSubtasks(Object.fromEntries(subtaskEntries));
+    setCustomGoalOccurrences(Object.fromEntries(countEntries));
+  }, []);
 
-    useFocusEffect(useCallback(() => { loadCustomGoals(); }, [loadCustomGoals]));
+  useFocusEffect(
+    useCallback(() => {
+      loadCustomGoals();
+    }, [loadCustomGoals])
+  );
 
-  const activeModalRef = zoomLevel === 'week' ? weeklyModalRef : zoomLevel === 'month' ? monthlyModalRef : yearlyModalRef;
+  const activeModalRef =
+    zoomLevel === 'week' ? weeklyModalRef : zoomLevel === 'month' ? monthlyModalRef : yearlyModalRef;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -524,11 +545,23 @@ export default function HorizonScreen() {
               </Pressable>
               <Text style={styles.selectionCountText}>{selectedIds.length} selected</Text>
               <View style={styles.selectionActions}>
-                <Pressable onPress={() => setSelectedIds([...periodGoals, ...periodRangeTasks].map((t) => t.id))} hitSlop={8}>
+                <Pressable
+                  onPress={() => setSelectedIds([...periodGoals, ...periodRangeTasks].map((t) => t.id))}
+                  hitSlop={8}
+                >
                   <Ionicons name="checkbox-outline" size={22} color={colors.accent} />
                 </Pressable>
-                <Pressable onPress={handleEditSelected} disabled={selectedIds.length !== 1} hitSlop={8} style={selectedIds.length !== 1 && { opacity: 0.35 }}>
-                  <Ionicons name="pencil-outline" size={22} color={selectedIds.length === 1 ? colors.accent : colors.textMuted} />
+                <Pressable
+                  onPress={handleEditSelected}
+                  disabled={selectedIds.length !== 1}
+                  hitSlop={8}
+                  style={selectedIds.length !== 1 && { opacity: 0.35 }}
+                >
+                  <Ionicons
+                    name="pencil-outline"
+                    size={22}
+                    color={selectedIds.length === 1 ? colors.accent : colors.textMuted}
+                  />
                 </Pressable>
                 <Pressable onPress={handleBatchDelete} hitSlop={8}>
                   <Ionicons name="trash-outline" size={22} color={colors.danger} />
@@ -540,10 +573,14 @@ export default function HorizonScreen() {
               <View style={styles.headerTop}>
                 <View style={styles.headerLeftGroup}>
                   {zoomLevel === 'year' ? (
-                    <Text style={styles.headerTitle} numberOfLines={1}>{headerLabel}</Text>
+                    <Text style={styles.headerTitle} numberOfLines={1}>
+                      {headerLabel}
+                    </Text>
                   ) : (
                     <TouchableOpacity onPress={handleZoomOut} style={styles.headerTitlePressable} hitSlop={8}>
-                      <Text style={styles.headerTitle} numberOfLines={1}>{headerLabel}</Text>
+                      <Text style={styles.headerTitle} numberOfLines={1}>
+                        {headerLabel}
+                      </Text>
                       <Ionicons name="chevron-up-circle-outline" size={15} color={colors.textMuted} />
                     </TouchableOpacity>
                   )}
@@ -554,7 +591,10 @@ export default function HorizonScreen() {
                   )}
                 </View>
                 <TouchableOpacity
-                  onPress={() => { setSelectedTaskToEdit(null); activeModalRef.current?.expand(); }}
+                  onPress={() => {
+                    setSelectedTaskToEdit(null);
+                    activeModalRef.current?.expand();
+                  }}
                   style={styles.addBtn}
                 >
                   <Ionicons name="add" size={20} color={colors.textOnAccent} />
@@ -580,7 +620,9 @@ export default function HorizonScreen() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           selectedTagIds={selectedFilterTagIds}
-          onToggleTag={(id) => setSelectedFilterTagIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]))}
+          onToggleTag={(id) =>
+            setSelectedFilterTagIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]))
+          }
           onClearAllTags={() => setSelectedFilterTagIds([])}
           strictOnly={strictTagFilter}
           onToggleStrictOnly={setStrictTagFilter}
@@ -592,7 +634,9 @@ export default function HorizonScreen() {
               <View style={styles.weekLabelsRow}>
                 {zoomLevel === 'month' && <View style={styles.weekNumSpacer} />}
                 {WEEKDAYS.map((day, idx) => (
-                  <Text key={`${day}-${idx}`} style={styles.weekLabelText}>{day}</Text>
+                  <Text key={`${day}-${idx}`} style={styles.weekLabelText}>
+                    {day}
+                  </Text>
                 ))}
               </View>
             )}
@@ -614,14 +658,25 @@ export default function HorizonScreen() {
                       activeOpacity={0.7}
                     >
                       <View style={styles.yearMonthCardTop}>
-                        <Text style={[styles.yearMonthName, isCurrent && styles.yearMonthNameCurrent]}>{format(monthDate, 'MMM')}</Text>
+                        <Text style={[styles.yearMonthName, isCurrent && styles.yearMonthNameCurrent]}>
+                          {format(monthDate, 'MMM')}
+                        </Text>
                         <Ionicons name="arrow-forward-circle-outline" size={16} color={colors.textMuted} />
                       </View>
                       <View style={styles.yearProgressTrack}>
-                        <View style={[styles.yearProgressFill, { width: count > 0 ? `${Math.round((completed / count) * 100)}%` : '0%' }]} />
+                        <View
+                          style={[
+                            styles.yearProgressFill,
+                            { width: count > 0 ? `${Math.round((completed / count) * 100)}%` : '0%' },
+                          ]}
+                        />
                       </View>
                       <Text style={styles.yearFooterText}>
-                        {count > 0 ? `${completed}/${count}${isFilterActive ? ' matching' : ''} tasks` : isFilterActive ? 'No matches' : 'No activity'}
+                        {count > 0
+                          ? `${completed}/${count}${isFilterActive ? ' matching' : ''} tasks`
+                          : isFilterActive
+                          ? 'No matches'
+                          : 'No activity'}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -636,7 +691,10 @@ export default function HorizonScreen() {
 
                   return (
                     <View key={wIdx} style={styles.monthWeekRow}>
-                      <TouchableOpacity style={styles.weekNumCell} onPress={() => handleDrillToWeek(weekStartRowStr, weekDayStrs)}>
+                      <TouchableOpacity
+                        style={styles.weekNumCell}
+                        onPress={() => handleDrillToWeek(weekStartRowStr, weekDayStrs)}
+                      >
                         <Text style={styles.weekNumText}>{weekNum}</Text>
                       </TouchableOpacity>
                       {weekDays.map((cell, index) => {
@@ -648,17 +706,33 @@ export default function HorizonScreen() {
 
                         let dotColor = 'transparent';
                         if (stats && stats.total > 0) {
-                          dotColor = stats.completed === stats.total ? colors.success : stats.completed > 0 ? colors.priorityMediumBorder : colors.priorityHighBorder;
+                          dotColor =
+                            stats.completed === stats.total
+                              ? colors.success
+                              : stats.completed > 0
+                              ? colors.priorityMediumBorder
+                              : colors.priorityHighBorder;
                         }
 
                         return (
                           <TouchableOpacity
                             key={index}
-                            style={[styles.monthDayCell, isSelected && styles.cellActive, isToday && styles.cellToday, isOutsideMonth && styles.cellMuted]}
+                            style={[
+                              styles.monthDayCell,
+                              isSelected && styles.cellActive,
+                              isToday && styles.cellToday,
+                              isOutsideMonth && styles.cellMuted,
+                            ]}
                             onPress={() => setSelectedDayStr(dStr)}
                             activeOpacity={0.7}
                           >
-                            <Text style={[styles.cellNum, isOutsideMonth && styles.cellNumMuted, isSelected && styles.cellNumSelected]}>
+                            <Text
+                              style={[
+                                styles.cellNum,
+                                isOutsideMonth && styles.cellNumMuted,
+                                isSelected && styles.cellNumSelected,
+                              ]}
+                            >
                               {format(cell, 'd')}
                             </Text>
                             <View style={[styles.densityDot, { backgroundColor: dotColor }]} />
@@ -679,7 +753,12 @@ export default function HorizonScreen() {
 
                   let dotColor = 'transparent';
                   if (stats && stats.total > 0) {
-                    dotColor = stats.completed === stats.total ? colors.success : stats.completed > 0 ? colors.priorityMediumBorder : colors.priorityHighBorder;
+                    dotColor =
+                      stats.completed === stats.total
+                        ? colors.success
+                        : stats.completed > 0
+                        ? colors.priorityMediumBorder
+                        : colors.priorityHighBorder;
                   }
 
                   return (
@@ -709,7 +788,9 @@ export default function HorizonScreen() {
             {filteredGoals.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Ionicons name="flag-outline" size={20} color={colors.textMuted} style={{ opacity: 0.5 }} />
-                <Text style={styles.emptyCardText}>{isFilterActive ? 'No matching goals.' : `No ${zoomLevel} goals set.`}</Text>
+                <Text style={styles.emptyCardText}>
+                  {isFilterActive ? 'No matching goals.' : `No ${zoomLevel} goals set.`}
+                </Text>
               </View>
             ) : (
               filteredGoals.map((task) => (
@@ -722,7 +803,9 @@ export default function HorizonScreen() {
                   subtaskCounts={goalSubtasks[task.id]}
                   selectionMode={selectionMode}
                   isSelected={selectedIds.includes(task.id)}
-                  onPress={() => { if (selectionMode) toggleSelectTask(task.id); }}
+                  onPress={() => {
+                    if (selectionMode) toggleSelectTask(task.id);
+                  }}
                   onLongPress={() => handleLongPressTask(task)}
                 />
               ))
@@ -734,7 +817,13 @@ export default function HorizonScreen() {
               <Text style={styles.sectionHeaderTitle}>CUSTOM GOALS</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Text style={styles.sectionItemCount}>{customGoals.length}</Text>
-                <TouchableOpacity onPress={() => { setEditingCustomGoal(null); customModalRef.current?.expand(); }} hitSlop={8}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setEditingCustomGoal(null);
+                    customModalRef.current?.expand();
+                  }}
+                  hitSlop={8}
+                >
                   <Ionicons name="add-circle-outline" size={18} color={colors.accent} />
                 </TouchableOpacity>
               </View>
@@ -750,11 +839,21 @@ export default function HorizonScreen() {
                   effectiveProgress={customGoalProgress[goal.id]}
                   completedOccurrences={customGoalOccurrences[goal.id]}
                   subtaskCounts={customGoalSubtasks[goal.id]}
-                  onPress={() => { setEditingCustomGoal(goal); customModalRef.current?.expand(); }}
+                  onPress={() => {
+                    setEditingCustomGoal(goal);
+                    customModalRef.current?.expand();
+                  }}
                   onLongPress={() => {
                     Alert.alert('Delete Goal', `Delete "${goal.title}"? This removes its generated daily tasks too.`, [
                       { text: 'Cancel', style: 'cancel' },
-                      { text: 'Delete', style: 'destructive', onPress: async () => { await deleteTaskCascade(goal.id); await loadCustomGoals(); } },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await deleteTaskCascade(goal.id);
+                          await loadCustomGoals();
+                        },
+                      },
                     ]);
                   }}
                 />
@@ -788,7 +887,9 @@ export default function HorizonScreen() {
                   return (
                     <View key={dateKey} style={styles.dayGroupContainer}>
                       <View style={styles.dayGroupHeader}>
-                        <Text style={styles.dayGroupTitle}>{format(parseISO(dateKey), 'EEEE, MMM d, yyyy')}</Text>
+                        <Text style={styles.dayGroupTitle}>
+                          {format(parseISO(dateKey), 'EEEE, MMM d, yyyy')}
+                        </Text>
                         {zoomLevel === 'month' && (
                           <TouchableOpacity style={styles.drillWeekBtn} onPress={() => handleDrillToWeek(dateKey)}>
                             <Text style={styles.drillWeekBtnText}>Open Week</Text>
@@ -797,7 +898,6 @@ export default function HorizonScreen() {
                         )}
                       </View>
 
-                      {/* Matching Events */}
                       {eventsOnDay.map((evt) => (
                         <View key={`event-search-${evt.id}`} style={styles.eventRowCard}>
                           <Ionicons name="calendar-outline" size={16} color={colors.accent} />
@@ -811,7 +911,6 @@ export default function HorizonScreen() {
                         </View>
                       ))}
 
-                      {/* Matching Activities */}
                       {activitiesOnDay.map((entry) => (
                         <ActivityCard
                           key={`activity-search-${entry.id}`}
@@ -825,9 +924,13 @@ export default function HorizonScreen() {
                         />
                       ))}
 
-                      {/* Matching Tasks */}
                       {tasksOnDay.length > 0 && (
-                        <View style={{ gap: 8, marginTop: eventsOnDay.length > 0 || activitiesOnDay.length > 0 ? 6 : 0 }}>
+                        <View
+                          style={{
+                            gap: 8,
+                            marginTop: eventsOnDay.length > 0 || activitiesOnDay.length > 0 ? 6 : 0,
+                          }}
+                        >
                           {tasksOnDay.map((task) => (
                             <TaskCard
                               key={task.id}
@@ -838,8 +941,12 @@ export default function HorizonScreen() {
                               pace={paceMap[task.id]}
                               subtaskCount={subtaskMap[task.id]}
                               isExpanded={Boolean(expandedTaskIds[task.id])}
-                              onToggleExpand={() => setExpandedTaskIds((prev) => ({ ...prev, [task.id]: !prev[task.id] }))}
-                              onSubtasksCountUpdate={(taskId, comp, tot) => setSubtaskMap((prev) => ({ ...prev, [taskId]: { completed: comp, total: tot } }))}
+                              onToggleExpand={() =>
+                                setExpandedTaskIds((prev) => ({ ...prev, [task.id]: !prev[task.id] }))
+                              }
+                              onSubtasksCountUpdate={(taskId, comp, tot) =>
+                                setSubtaskMap((prev) => ({ ...prev, [taskId]: { completed: comp, total: tot } }))
+                              }
                               selectionMode={selectionMode}
                               isSelected={selectedIds.includes(task.id)}
                               onLongPressCard={() => handleLongPressTask(task)}
@@ -858,9 +965,13 @@ export default function HorizonScreen() {
               <View style={styles.sectionBlock}>
                 <View style={styles.dayFocusHeader}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={styles.sectionHeaderTitle}>{format(parseISO(selectedDayStr), 'EEEE, MMM d')}</Text>
+                    <Text style={styles.sectionHeaderTitle}>
+                      {format(parseISO(selectedDayStr), 'EEEE, MMM d')}
+                    </Text>
                     {selectedDayStr === todayStr && (
-                      <View style={styles.todayBadge}><Text style={styles.todayBadgeText}>TODAY</Text></View>
+                      <View style={styles.todayBadge}>
+                        <Text style={styles.todayBadgeText}>TODAY</Text>
+                      </View>
                     )}
                   </View>
                   {zoomLevel === 'month' && (
@@ -871,7 +982,6 @@ export default function HorizonScreen() {
                   )}
                 </View>
 
-                {/* Events Section */}
                 {singleDayEvents.length > 0 && (
                   <View style={{ marginBottom: 12 }}>
                     <Text style={styles.subCategoryTitle}>EVENTS</Text>
@@ -890,7 +1000,6 @@ export default function HorizonScreen() {
                   </View>
                 )}
 
-                {/* Habits Section */}
                 {filteredHabits.length > 0 && (
                   <View style={{ marginBottom: 12 }}>
                     <Text style={styles.subCategoryTitle}>HABITS</Text>
@@ -915,7 +1024,6 @@ export default function HorizonScreen() {
                   </View>
                 )}
 
-                {/* Activities Section */}
                 {singleDayActivities.length > 0 && (
                   <View style={{ marginBottom: 12, gap: 8 }}>
                     <Text style={styles.subCategoryTitle}>ACTIVITIES</Text>
@@ -934,14 +1042,12 @@ export default function HorizonScreen() {
                   </View>
                 )}
 
-                {/* Tasks Section */}
                 <View>
                   <Text style={styles.subCategoryTitle}>TASKS</Text>
                   {singleDayTasks.length === 0 && singleDayGhosts.length === 0 ? (
                     <Text style={styles.emptyNotice}>No tasks scheduled or projected for this day.</Text>
                   ) : (
                     <View style={{ gap: 8 }}>
-                      {/* Real Tasks */}
                       {singleDayTasks.map((task) => (
                         <TaskCard
                           key={task.id}
@@ -952,8 +1058,12 @@ export default function HorizonScreen() {
                           pace={paceMap[task.id]}
                           subtaskCount={subtaskMap[task.id]}
                           isExpanded={Boolean(expandedTaskIds[task.id])}
-                          onToggleExpand={() => setExpandedTaskIds((prev) => ({ ...prev, [task.id]: !prev[task.id] }))}
-                          onSubtasksCountUpdate={(taskId, comp, tot) => setSubtaskMap((prev) => ({ ...prev, [taskId]: { completed: comp, total: tot } }))}
+                          onToggleExpand={() =>
+                            setExpandedTaskIds((prev) => ({ ...prev, [task.id]: !prev[task.id] }))
+                          }
+                          onSubtasksCountUpdate={(taskId, comp, tot) =>
+                            setSubtaskMap((prev) => ({ ...prev, [taskId]: { completed: comp, total: tot } }))
+                          }
                           selectionMode={selectionMode}
                           isSelected={selectedIds.includes(task.id)}
                           onLongPressCard={() => handleLongPressTask(task)}
@@ -961,7 +1071,6 @@ export default function HorizonScreen() {
                         />
                       ))}
 
-                      {/* Projected Ghost Tasks */}
                       {singleDayGhosts.map((ghost, index) => (
                         <GhostTaskCard
                           key={`ghost-${ghost.goalId}-${index}`}
@@ -1029,7 +1138,13 @@ export default function HorizonScreen() {
           scope={zoomLevel === 'week' ? 'weekly' : zoomLevel === 'month' ? 'monthly' : 'yearly'}
           dateKey={startStr}
           periodLabel={headerLabel}
-          getSeed={() => generatePeriodSeed(zoomLevel === 'week' ? 'weekly' : zoomLevel === 'month' ? 'monthly' : 'yearly', startStr, endStr)}
+          getSeed={() =>
+            generatePeriodSeed(
+              zoomLevel === 'week' ? 'weekly' : zoomLevel === 'month' ? 'monthly' : 'yearly',
+              startStr,
+              endStr
+            )
+          }
         />
       </SafeAreaView>
     </GestureHandlerRootView>

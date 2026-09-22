@@ -1,6 +1,6 @@
-// TaskCard.tsx
 import type { PaceResult } from '@/engine/pace';
 import { getEffectivePriority } from '@/engine/priority';
+import { commitProgressWithSurplusCheck } from '@/engine/surplus';
 import { taskHasProgress } from '@/engine/taskShape';
 import { useTagStore } from '@/store/tagStore';
 import { getAppToday } from '@/utils/date';
@@ -21,6 +21,7 @@ import {
   getTagsForTask,
   revertToPreviousProgress,
   setAbsoluteProgress,
+  updateTask,
 } from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
 import { useStore } from '../store/useStore';
@@ -92,7 +93,11 @@ export function TaskCard({
   const isSubmittingSubtask = useRef(false);
 
   const todayStr = useMemo(() => getAppToday(), []);
-  const isOverdueProxy = !task.isCompleted && task.sourceTaskId != null && !task.rolloverEnabled && task.scheduledDate < todayStr;
+  const isOverdueProxy =
+    !task.isCompleted &&
+    task.sourceTaskId != null &&
+    !task.rolloverEnabled &&
+    task.scheduledDate < todayStr;
 
   useEffect(() => {
     let active = true;
@@ -298,7 +303,10 @@ export function TaskCard({
 
   const handleSliderUpdate = async (taskId: number, val: number) => {
     const total = task.totalProgress ?? 0;
+    const curProg = currentProgress ?? task.currentProgress ?? 0;
+    const delta = val - curProg;
 
+    // 1. Completion alert branch
     if (!task.isCompleted && val >= total && total > 0) {
       await setAbsoluteProgress(taskId, val);
       onToggle(taskId, false);
@@ -306,6 +314,7 @@ export function TaskCard({
       return;
     }
 
+    // 2. Undo completion branch (dropping progress below total)
     if (task.isCompleted && val < total) {
       const dropDown = async () => {
         await setAbsoluteProgress(taskId, val);
@@ -340,6 +349,70 @@ export function TaskCard({
       return;
     }
 
+    // 3. Pace surplus evaluation branch
+    if (delta > 0 && pace) {
+      const { surplus, handled } = await commitProgressWithSurplusCheck(
+        task,
+        delta,
+        curProg,
+        pace.days_remaining,
+        pace.target_rate
+      );
+
+      // If handled automatically via 'bank_it' or 'raise_bar', the DB is already updated
+      if (handled) {
+        onProgressChanged?.();
+        return;
+      }
+
+      // If user has not chosen an automatic surplusMode, prompt them with options
+      if (surplus) {
+        Alert.alert(
+          `Surplus logged (+${surplus.surplusAmount} ${task.progressUnit ?? ''})`,
+          `You beat today's pace. Ease future pace to ${surplus.newDailyPace}/day, bank ${surplus.bankedDaysEarned} day(s), or raise the goal to ${surplus.suggestedNewTarget}?`,
+          [
+            {
+              text: 'Just log it',
+              style: 'cancel',
+              onPress: async () => {
+                await setAbsoluteProgress(taskId, val);
+                onProgressChanged?.();
+              },
+            },
+            {
+              text: 'Ease Pace',
+              onPress: async () => {
+                await setAbsoluteProgress(taskId, val);
+                onProgressChanged?.();
+              },
+            },
+            {
+              text: `Bank ${surplus.bankedDaysEarned}d`,
+              onPress: async () => {
+                await setAbsoluteProgress(taskId, val);
+                await updateTask(taskId, {
+                  bufferDays: (task.bufferDays ?? 0) + surplus.bankedDaysEarned,
+                });
+                onProgressChanged?.();
+              },
+            },
+            {
+              text: `Raise to ${surplus.suggestedNewTarget}`,
+              onPress: async () => {
+                await setAbsoluteProgress(taskId, val);
+                await updateTask(taskId, {
+                  totalProgress: surplus.suggestedNewTarget,
+                });
+                onProgressChanged?.();
+              },
+            },
+          ]
+        );
+        return;
+      }
+    }
+
+    // 4. Default fallback update
     await setAbsoluteProgress(taskId, val);
     onProgressChanged?.();
   };
@@ -477,7 +550,7 @@ export function TaskCard({
               </View>
             </View>
 
-{/* Bottom Meta & Sliders */}
+            {/* Bottom Meta & Sliders */}
             {(taskTags.length > 0 ||
               Boolean(task.procrastinationCount && task.procrastinationCount > 0) ||
               taskHasProgress(task) ||
