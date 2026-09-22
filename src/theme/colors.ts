@@ -1,35 +1,23 @@
-// Dark theme palette. No toggle yet (that's 7.3) — these are the only
-// values in use right now, swapped in directly at each hardcoded hex site.
-
-export const colors = {
-  // Surfaces
+const darkPalette = {
   background: '#121212',
   surface: '#1e1e1e',
   surfaceElevated: '#262626',
   surfaceSubtle: '#2a2a2a',
   border: '#3a3a3a',
   borderSubtle: '#333333',
-
-  // Text
   textPrimary: '#e8e8e8',
   textSecondary: '#a0a0a0',
   textMuted: '#777777',
   textPlaceholder: '#6b6b6b',
   textOnAccent: '#ffffff',
-
-  // Completed / muted states
   completedBg: '#232323',
   completedText: '#6b6b6b',
-
-  // Accent
   accent: '#3aa8d8',
   taskAccent: '#22c55e',
   accentPressed: '#2b7fa3',
-  habitAccent: '#a855f7', 
+  habitAccent: '#a855f7',
   eventAccent: '#f97316',
   activityAccent: '#0ea5e9',
-
-  // Priority
   priorityLowBg: '#1f3a12',
   priorityLowBorder: '#22c55e',
   priorityLowText: '#4df775',
@@ -39,32 +27,93 @@ export const colors = {
   priorityHighBg: '#3a1414',
   priorityHighBorder: '#ef4444',
   priorityHighText: '#f87171',
-
-  // Generic selector pill
   selectedBg: '#12331c',
   selectedBorder: '#4ade80',
   selectedText: '#4ade80',
-
-  // Status
   success: '#4caf50',
   successBg: '#13321a',
   danger: '#ef4444',
   dangerBg: '#3a1414',
   dangerBorder: '#8a3a3a',
-
-  // Pace indicator
-  paceCriticalBg: '#3a1414', paceCriticalText: '#f87171',
-  paceBehindBg: '#332b0a', paceBehindText: '#eab308',
-  paceSlightlyBehindBg: '#332b0a', paceSlightlyBehindText: '#d9a441',
-  paceOnTrackBg: '#12233a', paceOnTrackText: '#60a5fa',
-  paceAheadBg: '#13321a', paceAheadText: '#4ade80',
-
-  hybridBadgeBg: '#12233a', hybridBadgeText: '#60a5fa',
-  bankedBadgeBg: '#13321a', bankedBadgeText: '#4ade80',
-
+  paceCriticalBg: '#3a1414',
+  paceCriticalText: '#f87171',
+  paceBehindBg: '#332b0a',
+  paceBehindText: '#eab308',
+  paceSlightlyBehindBg: '#332b0a',
+  paceSlightlyBehindText: '#d9a441',
+  paceOnTrackBg: '#12233a',
+  paceOnTrackText: '#60a5fa',
+  paceAheadBg: '#13321a',
+  paceAheadText: '#4ade80',
+  hybridBadgeBg: '#12233a',
+  hybridBadgeText: '#60a5fa',
+  bankedBadgeBg: '#13321a',
+  bankedBadgeText: '#4ade80',
   shadowColor: '#000000',
-
   habitAccentPressed: '#7a5ce0',
-
   eventAccentPressed: '#b88733',
 };
+
+export type Palette = Record<keyof typeof darkPalette, string>;
+
+const lightPalette: Palette = {
+  background: '#f7f7f8',
+  surface: '#ffffff',
+  surfaceElevated: '#f0f0f2',
+  surfaceSubtle: '#ececef',
+  border: '#dcdce0',
+  borderSubtle: '#e4e4e8',
+  textPrimary: '#17181a',
+  textSecondary: '#54565c',
+  textMuted: '#8b8d94',
+  textPlaceholder: '#a6a8ae',
+  textOnAccent: '#ffffff',
+  completedBg: '#eeeeef',
+  completedText: '#9a9ca2',
+  accent: '#1c7fb8',
+  taskAccent: '#159a4c',
+  accentPressed: '#166694',
+  habitAccent: '#8a3fd6',
+  eventAccent: '#d9660a',
+  activityAccent: '#0a7fa8',
+  priorityLowBg: '#e5f6e8',
+  priorityLowBorder: '#22c55e',
+  priorityLowText: '#1a8f42',
+  priorityMediumBg: '#fbf1d8',
+  priorityMediumBorder: '#c9960a',
+  priorityMediumText: '#8f6c05',
+  priorityHighBg: '#fbe3e3',
+  priorityHighBorder: '#dc2626',
+  priorityHighText: '#a01717',
+  selectedBg: '#e2f7e9',
+  selectedBorder: '#16a34a',
+  selectedText: '#16a34a',
+  success: '#2f9e46',
+  successBg: '#e5f6e8',
+  danger: '#dc2626',
+  dangerBg: '#fbe3e3',
+  dangerBorder: '#e2a1a1',
+  paceCriticalBg: '#fbe3e3',
+  paceCriticalText: '#a01717',
+  paceBehindBg: '#fbf1d8',
+  paceBehindText: '#8f6c05',
+  paceSlightlyBehindBg: '#fbf1d8',
+  paceSlightlyBehindText: '#93710c',
+  paceOnTrackBg: '#e1ecfb',
+  paceOnTrackText: '#1d5db0',
+  paceAheadBg: '#e5f6e8',
+  paceAheadText: '#1a8f42',
+  hybridBadgeBg: '#e1ecfb',
+  hybridBadgeText: '#1d5db0',
+  bankedBadgeBg: '#e5f6e8',
+  bankedBadgeText: '#1a8f42',
+  shadowColor: '#000000',
+  habitAccentPressed: '#6b28b0',
+  eventAccentPressed: '#a1500a',
+};
+
+export const colors: Palette = { ...darkPalette };
+
+export function applyTheme(mode: 'dark' | 'light') {
+  Object.assign(colors, mode === 'light' ? lightPalette : darkPalette);
+}

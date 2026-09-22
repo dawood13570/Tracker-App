@@ -187,7 +187,6 @@ export default function HorizonScreen() {
   }, []);
 
   const loadData = useCallback(async () => {
-    // 1. Decompose both today's active window and the current viewing window if in the future
     await ensureDailyDecompositionForDate(todayStr);
     if (startStr > todayStr) {
       await ensureDailyDecompositionForDate(startStr);
@@ -328,7 +327,6 @@ export default function HorizonScreen() {
   useEffect(() => {
     let active = true;
     (async () => {
-      // Pull yearly goals for the active bounds so future views know the parent pacing schedule
       const yearStart = format(startOfYear(bounds.start), 'yyyy-MM-dd');
       const yearEnd = format(endOfYear(bounds.start), 'yyyy-MM-dd');
       const yearlyGoals = await getYearlyTasks(yearStart, yearEnd);
@@ -590,15 +588,6 @@ export default function HorizonScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    setSelectedTaskToEdit(null);
-                    activeModalRef.current?.expand();
-                  }}
-                  style={styles.addBtn}
-                >
-                  <Ionicons name="add" size={20} color={colors.textOnAccent} />
-                </TouchableOpacity>
               </View>
 
               <View style={styles.navRow}>
@@ -777,12 +766,24 @@ export default function HorizonScreen() {
             )}
           </View>
 
+          {/* Period Goals Section with inline + button */}
           <View style={styles.sectionBlock}>
             <View style={styles.sectionHeaderLine}>
               <Text style={styles.sectionHeaderTitle}>
                 {zoomLevel === 'week' ? 'WEEKLY GOALS' : zoomLevel === 'month' ? 'MONTHLY GOALS' : 'YEARLY GOALS'}
               </Text>
-              <Text style={styles.sectionItemCount}>{filteredGoals.length}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={styles.sectionItemCount}>{filteredGoals.length}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedTaskToEdit(null);
+                    activeModalRef.current?.expand();
+                  }}
+                  hitSlop={8}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color={colors.accent} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {filteredGoals.length === 0 ? (
@@ -812,6 +813,7 @@ export default function HorizonScreen() {
             )}
           </View>
 
+          {/* Custom Goals Section */}
           <View style={styles.sectionBlock}>
             <View style={styles.sectionHeaderLine}>
               <Text style={styles.sectionHeaderTitle}>CUSTOM GOALS</Text>
@@ -1155,11 +1157,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   stickyHeader: { backgroundColor: colors.surface, borderBottomWidth: 1, borderColor: colors.borderSubtle, elevation: 2 },
   headerContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerLeftGroup: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, marginRight: 10 },
+  headerTop: { flexDirection: 'row', alignItems: 'center' },
+  headerLeftGroup: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
   headerTitlePressable: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
   headerTitle: { fontSize: 16, fontWeight: '800', color: colors.textPrimary, flexShrink: 1 },
-  addBtn: { backgroundColor: colors.accent, width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   navRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
   navBtn: { padding: 4 },
   todayBtnText: { fontSize: 18, fontWeight: '700', color: colors.accent },

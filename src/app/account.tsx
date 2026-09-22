@@ -1,3 +1,4 @@
+import { useThemeStore } from '@/store/themeStore';
 import { useStore } from '@/store/useStore';
 import { colors } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ const SURPLUS_OPTIONS: { label: string; value: 'breathing_room' | 'raise_bar' | 
 ];
 
 export default function AccountScreen() {
+  const { mode, toggleTheme } = useThemeStore();
   const insets = useSafeAreaInsets();
   const {
     evolvingPriorityEnabled,
@@ -188,6 +190,13 @@ export default function AccountScreen() {
             onValueChange={setCriticalPaceNotificationsEnabled}
             trackColor={{ false: colors.borderSubtle, true: colors.accent }}
           />
+        </View>
+        <View style={styles.settingRow}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.settingTitle}>Light Mode</Text>
+            <Text style={styles.settingDesc}>Switch between dark and light appearance.</Text>
+          </View>
+          <Switch value={mode === 'light'} onValueChange={toggleTheme} trackColor={{ false: colors.borderSubtle, true: colors.accent }} />
         </View>
       </View>
 

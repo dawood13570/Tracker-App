@@ -873,7 +873,7 @@ export async function decomposeMonthlyProgressionToWeekly(
     return updated;
   }
 
-  const baseTitle = monthlyTask.title.replace(/\s*\((Monthly\vert{}Weekly)\)$/g, '');
+  const baseTitle = monthlyTask.title.replace(/\s*\((Monthly|Weekly)\)$/g, '');
 
   const [created] = await db
     .insert(tasks)
@@ -1024,7 +1024,7 @@ export async function previewOccurrenceSchedule(
   const children = await getChildTasks(parentTask.id);
   const existingDailyDates = new Set(children.filter((c) => c.scope === 'daily').map((c) => c.scheduledDate));
 
-  const baseTitle = parentTask.title.replace(/\s*\((Monthly\vert{}Weekly)\)$/g, '');
+  const baseTitle = parentTask.title.replace(/\s*\((Monthly|Weekly)\)$/g, '');
 
   return dates
     .filter((d) => !existingDailyDates.has(d))
@@ -1091,7 +1091,7 @@ export async function decomposeOccurrenceGoalToTier(
     return updated;
   }
 
-  const baseTitle = parentGoal.title.replace(/\s*\((Monthly\vert{}Weekly)\)$/g, '');
+  const baseTitle = parentGoal.title.replace(/\s*\((Monthly|Weekly)\)$/g, '');
 
   const [created] = await db
     .insert(tasks)
@@ -1262,7 +1262,7 @@ export async function decomposeCountGoalToNextOccurrence(
 
   if (nextDateStr > periodEndStr) return null;
 
-  const baseTitle = parentTask.title.replace(/\s*\((Monthly\vert{}Weekly)\)$/g, '');
+  const baseTitle = parentTask.title.replace(/\s*\((Monthly|Weekly)\)$/g, '');
 
   const [created] = await db
     .insert(tasks)
@@ -1315,7 +1315,7 @@ export async function decomposeYearlyProgressionToMonthly(
     return updated;
   }
 
-  const baseTitle = yearlyTask.title.replace(/\s*\((Monthly\vert{}Weekly)\)$/g, '');
+  const baseTitle = yearlyTask.title.replace(/\s*\((Monthly|Weekly)\)$/g, '');
 
   const [created] = await db
     .insert(tasks)
@@ -1456,13 +1456,24 @@ export async function decomposeProgressionCountGoal(
   const remainingOccurrences = occurrenceTarget - completedCount;
   if (remainingOccurrences <= 0) return null;
 
-  const children = await getChildTasks(parentTask.id);
-  const pending = children.find((c) => !c.isCompleted && c.scheduledDate >= todayStr);
-  if (pending) return pending;
-
   const quantityDoneSoFar = await getEffectiveProgress(parentTask.id);
   const remainingQuantity = Math.max(0, totalQuantity - quantityDoneSoFar);
   const perOccurrenceQuantity = Math.ceil(remainingQuantity / remainingOccurrences);
+
+  const children = await getChildTasks(parentTask.id);
+  const pending = children.find((c) => !c.isCompleted && c.scheduledDate >= todayStr);
+
+  if (pending) {
+    if (pending.totalProgress !== perOccurrenceQuantity) {
+      const [updated] = await db
+        .update(tasks)
+        .set({ totalProgress: perOccurrenceQuantity })
+        .where(eq(tasks.id, pending.id))
+        .returning();
+      return updated;
+    }
+    return pending;
+  }
 
   const mostRecent =
     children.length > 0
@@ -1470,7 +1481,6 @@ export async function decomposeProgressionCountGoal(
       : null;
 
   const interval = calculatePacingInterval(parentTask, todayStr, periodEndStr, remainingOccurrences);
-
   let nextDateStr: string;
   if (!mostRecent) {
     nextDateStr = todayStr;
@@ -1480,7 +1490,7 @@ export async function decomposeProgressionCountGoal(
   }
   if (nextDateStr > periodEndStr) return null;
 
-  const baseTitle = parentTask.title.replace(/\s*\((Monthly\vert{}Weekly)\)$/g, '');
+  const baseTitle = parentTask.title.replace(/\s*\((Monthly|Weekly)\)$/g, '');
 
   const [created] = await db
     .insert(tasks)
@@ -1546,7 +1556,7 @@ export async function decomposeHybridGoal(
 ): Promise<TaskRow | null> {
   if (todayStr > periodEndStr) return null;
 
-  const baseTitle = goal.title.replace(/\s*\((Monthly\vert{}Weekly)\)$/g, '');
+  const baseTitle = goal.title.replace(/\s*\((Monthly|Weekly)\)$/g, '');
 
   if (goal.occurrenceTarget) {
     const existingProxy = await db

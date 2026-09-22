@@ -1,4 +1,5 @@
 // src/app/_layout.tsx
+import { useThemeStore } from '@/store/themeStore';
 import { colors } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
@@ -130,6 +131,11 @@ function MainTabs() {
       />
 
       <Tabs.Screen
+        name="notes-history"
+        options={{ href: null }}
+      />
+
+      <Tabs.Screen
         name="today"
         options={{
           title: 'Today',
@@ -201,8 +207,9 @@ function MainTabs() {
 }
 
 export default function RootLayout() {
+  const mode = useThemeStore((s) => s.mode);
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1 }} key={mode}>
       <SafeAreaProvider>
         <MainTabs />
       </SafeAreaProvider>
