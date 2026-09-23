@@ -1,14 +1,24 @@
 // src/components/new-task.tsx
 import { useTagStore } from '@/store/tagStore';
+import { useColors } from '@/store/themeStore';
 import { useStore } from '@/store/useStore';
+import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { assignTag, deleteTask, getSubtasksByParent, getTagsForTask, insertSubtask, insertTask, removeTag as removeTagFromTask, updateTask } from '../db/queries';
+import {
+  assignTag,
+  deleteTask,
+  getSubtasksByParent,
+  getTagsForTask,
+  insertSubtask,
+  insertTask,
+  removeTag as removeTagFromTask,
+  updateTask,
+} from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
-import { colors } from '../theme/colors';
 import { getLocalDateString } from '../utils/date';
 import { AddType, AddTypeSwitcher } from './AddTypeSwitcher';
 import { PursuitPicker } from './PursuitPicker';
@@ -43,6 +53,9 @@ const DAYS_OF_WEEK = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'] as const;
 
 export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onClose, onSwitchType }: NewTaskModalProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Low');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -77,7 +90,10 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
   const handleToggleProgress = (value: boolean) => {
     if (value && hasAnySubtasks) {
-      Alert.alert('Choose one', 'A task can track progress or have subtasks, not both. Remove subtasks first, or give a subtask its own progress instead.');
+      Alert.alert(
+        'Choose one',
+        'A task can track progress or have subtasks, not both. Remove subtasks first, or give a subtask its own progress instead.'
+      );
       return;
     }
     setHasProgress(value);
@@ -89,7 +105,10 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
       Alert.alert('Choose one', 'Turn off progress tracking to add subtasks, or track progress on the subtask itself.');
       return;
     }
-    setSubtasks((prev) => [...prev, { id: `temp-${Date.now()}`, title: subtaskInput.trim(), isCompleted: false, isNew: true }]);
+    setSubtasks((prev) => [
+      ...prev,
+      { id: `temp-${Date.now()}`, title: subtaskInput.trim(), isCompleted: false, isNew: true },
+    ]);
     setSubtaskInput('');
   };
 
@@ -108,7 +127,8 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   const toggleSubtaskExpanded = (id: string) => {
     setExpandedSubtaskIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -165,21 +185,26 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
       }
 
       const hasAdvancedContent = Boolean(
-        hasProg || taskToEdit.deadline || taskToEdit.recurrenceType !== 'none' ||
-        (taskToEdit as any).pursuitId || !taskToEdit.rolloverEnabled
+        hasProg ||
+          taskToEdit.deadline ||
+          taskToEdit.recurrenceType !== 'none' ||
+          (taskToEdit as any).pursuitId ||
+          !taskToEdit.rolloverEnabled
       );
       setShowAdvanced(hasAdvancedContent);
 
       getSubtasksByParent(taskToEdit.id).then((items) => {
-        setSubtasks(items.map((sub) => ({
-          id: sub.id.toString(),
-          title: sub.title,
-          isCompleted: sub.isCompleted,
-          isNew: false,
-          hasProgress: sub.totalProgress != null,
-          targetValue: sub.totalProgress ? String(sub.totalProgress) : '',
-          unit: sub.progressUnit ?? '',
-        })));
+        setSubtasks(
+          items.map((sub) => ({
+            id: sub.id.toString(),
+            title: sub.title,
+            isCompleted: sub.isCompleted,
+            isNew: false,
+            hasProgress: sub.totalProgress != null,
+            targetValue: sub.totalProgress ? String(sub.totalProgress) : '',
+            unit: sub.progressUnit ?? '',
+          }))
+        );
         if (items.length > 0) setShowAdvanced(true);
       });
       setDeletedSubtaskIds([]);
@@ -270,7 +295,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
               priority: priority as 'Low' | 'Medium' | 'High',
               type: sub.hasProgress ? 'Progression' : 'Simple',
               totalProgress: sub.hasProgress ? Number(sub.targetValue) : null,
-              progressUnit: sub.hasProgress ? (sub.unit?.trim() || null) : null,
+              progressUnit: sub.hasProgress ? sub.unit?.trim() || null : null,
             });
           }
         }
@@ -285,7 +310,7 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
               priority: priority as 'Low' | 'Medium' | 'High',
               type: draft.hasProgress ? 'Progression' : 'Simple',
               totalProgress: draft.hasProgress ? Number(draft.targetValue) : null,
-              progressUnit: draft.hasProgress ? (draft.unit?.trim() || null) : null,
+              progressUnit: draft.hasProgress ? draft.unit?.trim() || null : null,
             });
           }
         }
@@ -313,7 +338,10 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
       handleIndicatorStyle={{ backgroundColor: colors.border }}
       keyboardBehavior="fillParent"
       keyboardBlurBehavior="restore"
-      onClose={() => { resetForm(); if (onClose) onClose(); }}
+      onClose={() => {
+        resetForm();
+        if (onClose) onClose();
+      }}
     >
       <BottomSheetScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
         {!taskToEdit && onSwitchType && (
@@ -343,7 +371,11 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                   High: { item: styles.selectedHigh, text: styles.textHigh },
                 };
                 return (
-                  <Pressable key={p} style={[styles.selectorItem, isSelected && priorityStyles[p].item]} onPress={() => setPriority(p)}>
+                  <Pressable
+                    key={p}
+                    style={[styles.selectorItem, isSelected && priorityStyles[p].item]}
+                    onPress={() => setPriority(p)}
+                  >
                     <Text style={[isSelected ? priorityStyles[p].text : styles.unselectedText]}>{p}</Text>
                   </Pressable>
                 );
@@ -382,18 +414,29 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                   <Text style={styles.label}>Rollover Task</Text>
                   <Text style={styles.subLabel}>Move incomplete work to the next day</Text>
                 </View>
-                <Switch value={allowRollover} onValueChange={setAllowRollover} trackColor={{ false: colors.border, true: colors.accent }} thumbColor={colors.textOnAccent} />
+                <Switch
+                  value={allowRollover}
+                  onValueChange={setAllowRollover}
+                  trackColor={{ false: colors.border, true: colors.accent }}
+                  thumbColor={colors.textOnAccent}
+                />
               </View>
 
               <View style={styles.divider} />
 
               <View style={styles.rowColumn}>
-                <View style={styles.rowHeader}><Text style={styles.label}>Repeats</Text></View>
+                <View style={styles.rowHeader}>
+                  <Text style={styles.label}>Repeats</Text>
+                </View>
                 <View style={[styles.selectorGroup, styles.recurrenceSelectorGroup]}>
                   {RECURRENCE_OPTIONS.map(({ value, label }) => {
                     const isSelected = recurrenceType === value;
                     return (
-                      <Pressable key={value} style={[styles.selectorItem, isSelected && styles.selectedItem]} onPress={() => setRecurrenceType(value)}>
+                      <Pressable
+                        key={value}
+                        style={[styles.selectorItem, isSelected && styles.selectedItem]}
+                        onPress={() => setRecurrenceType(value)}
+                      >
                         <Text style={isSelected ? styles.selectedText : styles.unselectedText}>{label}</Text>
                       </Pressable>
                     );
@@ -425,8 +468,14 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                     {DAYS_OF_WEEK.map((day) => {
                       const isSelected = recurrenceDaysOfWeek.includes(day);
                       return (
-                        <Pressable key={day} style={[styles.dayPill, isSelected && styles.selectedItem]} onPress={() => toggleRecurrenceDay(day)}>
-                          <Text style={isSelected ? styles.selectedText : styles.unselectedText}>{day.toUpperCase()}</Text>
+                        <Pressable
+                          key={day}
+                          style={[styles.dayPill, isSelected && styles.selectedItem]}
+                          onPress={() => toggleRecurrenceDay(day)}
+                        >
+                          <Text style={isSelected ? styles.selectedText : styles.unselectedText}>
+                            {day.toUpperCase()}
+                          </Text>
                         </Pressable>
                       );
                     })}
@@ -457,11 +506,24 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                   <View style={styles.divider} />
                   <View style={[styles.row, { marginTop: 8 }]}>
                     <Text style={styles.label}>Target Value</Text>
-                    <BottomSheetTextInput style={styles.inputs} value={targetValue} onChangeText={setTargetValue} placeholder="e.g., 30" keyboardType="numeric" placeholderTextColor={colors.textPlaceholder} />
+                    <BottomSheetTextInput
+                      style={styles.inputs}
+                      value={targetValue}
+                      onChangeText={setTargetValue}
+                      placeholder="e.g., 30"
+                      keyboardType="numeric"
+                      placeholderTextColor={colors.textPlaceholder}
+                    />
                   </View>
                   <View style={[styles.row, { marginTop: 12 }]}>
                     <Text style={styles.label}>Unit</Text>
-                    <BottomSheetTextInput style={styles.inputs} value={unit} onChangeText={setUnit} placeholder="e.g., pages, km" placeholderTextColor={colors.textPlaceholder} />
+                    <BottomSheetTextInput
+                      style={styles.inputs}
+                      value={unit}
+                      onChangeText={setUnit}
+                      placeholder="e.g., pages, km"
+                      placeholderTextColor={colors.textPlaceholder}
+                    />
                   </View>
                 </>
               )}
@@ -506,7 +568,11 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                   onSubmitEditing={handleAddSubtask}
                   editable={!hasProgress}
                 />
-                <TouchableOpacity style={[styles.addSubtaskButton, hasProgress && { opacity: 0.5 }]} onPress={handleAddSubtask} disabled={hasProgress}>
+                <TouchableOpacity
+                  style={[styles.addSubtaskButton, hasProgress && { opacity: 0.5 }]}
+                  onPress={handleAddSubtask}
+                  disabled={hasProgress}
+                >
                   <Text style={styles.addSubtaskButtonText}>Add</Text>
                 </TouchableOpacity>
               </View>
@@ -520,7 +586,10 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                           <Text style={styles.subtaskIndex}>{index + 1}</Text>
                           <Text
-                            style={[styles.subtaskTitle, item.isCompleted && { textDecorationLine: 'line-through', color: colors.textMuted }]}
+                            style={[
+                              styles.subtaskTitle,
+                              item.isCompleted && { textDecorationLine: 'line-through', color: colors.textMuted },
+                            ]}
                             numberOfLines={1}
                           >
                             {item.title}
@@ -577,7 +646,11 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
           <Pressable
             disabled={!title.trim()}
             onPress={handleSubmit}
-            style={({ pressed }) => [styles.submitButton, !title.trim() && styles.submitButtonDisabled, pressed && title.trim() ? { opacity: 0.85 } : null]}
+            style={({ pressed }) => [
+              styles.submitButton,
+              !title.trim() && styles.submitButtonDisabled,
+              pressed && title.trim() ? { opacity: 0.85 } : null,
+            ]}
           >
             <Text style={[styles.submitButtonText, !title.trim() && { color: colors.textMuted }]}>
               {taskToEdit ? 'Update Task' : 'Create Task'}
@@ -589,56 +662,162 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
   );
 }
 
-const styles = StyleSheet.create({
-  contentContainer: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 8 },
-  switcherWrapper: { marginBottom: 16 },
-  titleText: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 16, color: colors.textPrimary, letterSpacing: 0.3 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary, marginBottom: 16 },
-  sectionCard: { backgroundColor: colors.surfaceElevated, borderRadius: 12, borderWidth: 1, borderColor: colors.borderSubtle, padding: 16, marginBottom: 16 },
-  advancedToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, marginBottom: 8 },
-  advancedToggleText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.3 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  rowColumn: { flexDirection: 'column', alignItems: 'stretch' },
-  rowHeader: { marginBottom: 8 },
-  divider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: 12 },
-  label: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
-  subLabel: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
-  hintText: { fontSize: 11, color: colors.textMuted, marginTop: 8, fontStyle: 'italic' },
-  selectorGroup: { flexDirection: 'row', gap: 6 },
-  recurrenceSelectorGroup: { flexWrap: 'wrap', justifyContent: 'flex-start', marginTop: 4 },
-  selectorItem: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surfaceSubtle },
-  selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
-  unselectedText: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
-  selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 13 },
-  selectedLow: { backgroundColor: colors.priorityLowBg, borderColor: colors.priorityLowBorder, borderWidth: 1 },
-  textLow: { color: colors.priorityLowText, fontWeight: '600', fontSize: 13 },
-  selectedMedium: { backgroundColor: colors.priorityMediumBg, borderColor: colors.priorityMediumBorder, borderWidth: 1 },
-  textMedium: { color: colors.priorityMediumText, fontWeight: '600', fontSize: 13 },
-  selectedHigh: { backgroundColor: colors.priorityHighBg, borderColor: colors.priorityHighBorder, borderWidth: 1 },
-  textHigh: { color: colors.priorityHighText, fontWeight: '600', fontSize: 13 },
-  inputs: { flex: 1, maxWidth: 160, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary, textAlign: 'right' },
-  inlineInputWrapper: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  inlineInput: { width: 60, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 8, textAlign: 'center', fontSize: 14, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary },
-  unitLabel: { fontSize: 14, color: colors.textSecondary },
-  dayOfWeekRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  dayPill: { paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surfaceSubtle },
-  subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 12 },
-  addSubtaskRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  subtaskTextInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary },
-  addSubtaskButton: { backgroundColor: colors.accent, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  addSubtaskButtonText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 14 },
-  subtaskListContainer: { backgroundColor: colors.surfaceSubtle, borderRadius: 8, borderWidth: 1, borderColor: colors.borderSubtle, overflow: 'hidden' },
-  subtaskItemRow: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-  subtaskIndex: { fontSize: 12, fontWeight: '600', color: colors.textMuted, width: 20 },
-  subtaskTitle: { flex: 1, fontSize: 14, color: colors.textPrimary },
-  subtaskProgressPanel: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.borderSubtle },
-  removeSubtaskButton: { padding: 4 },
-  removeSubtaskButtonText: { fontSize: 14, color: colors.danger, fontWeight: '600' },
-  submitContainer: { marginTop: 8, width: '100%' },
-  submitButton: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
-  submitButtonDisabled: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.borderSubtle },
-  submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '700' },
-  deadlinePressable: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.surfaceSubtle, minWidth: 160, alignItems: 'flex-end' },
-  deadlineText: { fontSize: 15, color: colors.textPrimary },
-  deadlinePlaceholder: { fontSize: 15, color: colors.textPlaceholder },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    contentContainer: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 8 },
+    switcherWrapper: { marginBottom: 16 },
+    titleText: {
+      fontSize: 20,
+      fontWeight: '700',
+      textAlign: 'center',
+      marginBottom: 16,
+      color: colors.textPrimary,
+      letterSpacing: 0.3,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      fontSize: 16,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+      marginBottom: 16,
+    },
+    sectionCard: {
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      padding: 16,
+      marginBottom: 16,
+    },
+    advancedToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      marginBottom: 8,
+    },
+    advancedToggleText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.3 },
+    row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    rowColumn: { flexDirection: 'column', alignItems: 'stretch' },
+    rowHeader: { marginBottom: 8 },
+    divider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: 12 },
+    label: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+    subLabel: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+    hintText: { fontSize: 11, color: colors.textMuted, marginTop: 8, fontStyle: 'italic' },
+    selectorGroup: { flexDirection: 'row', gap: 6 },
+    recurrenceSelectorGroup: { flexWrap: 'wrap', justifyContent: 'flex-start', marginTop: 4 },
+    selectorItem: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceSubtle,
+    },
+    selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
+    unselectedText: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
+    selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 13 },
+    selectedLow: { backgroundColor: colors.priorityLowBg, borderColor: colors.priorityLowBorder, borderWidth: 1 },
+    textLow: { color: colors.priorityLowText, fontWeight: '600', fontSize: 13 },
+    selectedMedium: { backgroundColor: colors.priorityMediumBg, borderColor: colors.priorityMediumBorder, borderWidth: 1 },
+    textMedium: { color: colors.priorityMediumText, fontWeight: '600', fontSize: 13 },
+    selectedHigh: { backgroundColor: colors.priorityHighBg, borderColor: colors.priorityHighBorder, borderWidth: 1 },
+    textHigh: { color: colors.priorityHighText, fontWeight: '600', fontSize: 13 },
+    inputs: {
+      flex: 1,
+      maxWidth: 160,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 15,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+      textAlign: 'right',
+    },
+    inlineInputWrapper: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    inlineInput: {
+      width: 60,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      textAlign: 'center',
+      fontSize: 14,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+    },
+    unitLabel: { fontSize: 14, color: colors.textSecondary },
+    dayOfWeekRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    dayPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceSubtle,
+    },
+    subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 12 },
+    addSubtaskRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+    subtaskTextInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 14,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+    },
+    addSubtaskButton: {
+      backgroundColor: colors.accent,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    addSubtaskButtonText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 14 },
+    subtaskListContainer: {
+      backgroundColor: colors.surfaceSubtle,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      overflow: 'hidden',
+    },
+    subtaskItemRow: {
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSubtle,
+    },
+    subtaskIndex: { fontSize: 12, fontWeight: '600', color: colors.textMuted, width: 20 },
+    subtaskTitle: { flex: 1, fontSize: 14, color: colors.textPrimary },
+    subtaskProgressPanel: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.borderSubtle },
+    removeSubtaskButton: { padding: 4 },
+    removeSubtaskButtonText: { fontSize: 14, color: colors.danger, fontWeight: '600' },
+    submitContainer: { marginTop: 8, width: '100%' },
+    submitButton: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
+    submitButtonDisabled: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.borderSubtle },
+    submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '700' },
+    deadlinePressable: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: colors.surfaceSubtle,
+      minWidth: 160,
+      alignItems: 'flex-end',
+    },
+    deadlineText: { fontSize: 15, color: colors.textPrimary },
+    deadlinePlaceholder: { fontSize: 15, color: colors.textPlaceholder },
+  });

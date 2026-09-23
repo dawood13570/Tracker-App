@@ -3,6 +3,8 @@ import { getEffectivePriority } from '@/engine/priority';
 import { commitProgressWithSurplusCheck } from '@/engine/surplus';
 import { taskHasProgress } from '@/engine/taskShape';
 import { useTagStore } from '@/store/tagStore';
+import { useColors } from '@/store/themeStore';
+import type { Palette } from '@/theme/colors';
 import { getAppToday } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -25,7 +27,6 @@ import {
 } from '../db/queries';
 import { Task, useTaskStore } from '../store/taskStore';
 import { useStore } from '../store/useStore';
-import { colors } from '../theme/colors';
 import { PaceIndicator } from './PaceIndicator';
 import { ProcrastinationBadge } from './ProcrastinationBadge';
 import { ProgressionSlider } from './ProgressionSlider';
@@ -47,7 +48,7 @@ interface TaskCardProps {
   onToggleSelect: () => void;
 }
 
-function getPriorityAccentColor(priority: 'Low' | 'Medium' | 'High') {
+function getPriorityAccentColor(colors: Palette, priority: 'Low' | 'Medium' | 'High') {
   switch (priority) {
     case 'High':
       return colors.priorityHighBorder ?? '#ef4444';
@@ -73,6 +74,9 @@ export function TaskCard({
   onLongPressCard,
   onToggleSelect,
 }: TaskCardProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const {
     evolvingPriorityEnabled,
     skipProgressionAlerts,
@@ -482,7 +486,7 @@ export function TaskCard({
         <View
           style={[
             styles.priorityAccent,
-            { backgroundColor: getPriorityAccentColor(effectivePriority) },
+            { backgroundColor: getPriorityAccentColor(colors, effectivePriority) },
             !task.isCompleted && effectivePriority === 'High' && styles.priorityAccentHighGlow,
           ]}
         />
@@ -718,217 +722,218 @@ export function TaskCard({
   );
 }
 
-export const styles = StyleSheet.create({
-  taskCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    marginBottom: 10,
-    elevation: 2,
-    width: '100%',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  selectedCard: {
-    borderColor: colors.accent,
-    backgroundColor: colors.selectedBg ?? colors.surface,
-  },
-  cardInner: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    width: '100%',
-  },
-  priorityAccent: { width: 4 },
-  priorityAccentHighGlow: { width: 5 },
-  mainContainer: {
-    flex: 1,
-    minWidth: 0,
-  },
-  pressableBlock: {
-    padding: 12,
-    width: '100%',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-  },
-  leadSlot: {
-    width: 22,
-    height: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-    position: 'relative',
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-  },
-  checkboxChecked: {
-    backgroundColor: colors.accent,
-  },
-  checkmark: {
-    color: colors.textOnAccent ?? '#ffffff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  titleSlot: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: 'center',
-  },
-  taskTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    lineHeight: 20,
-  },
-  completedCard: { backgroundColor: colors.completedBg },
-  completedText: { textDecorationLine: 'line-through', color: colors.completedText },
-  trailingSlot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginLeft: 8,
-  },
-  hybridBadge: {
-    backgroundColor: colors.hybridBadgeBg,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  hybridBadgeText: { fontSize: 11, fontWeight: '700', color: colors.hybridBadgeText },
-  expandButton: {
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  arrowIcon: { fontSize: 11, color: colors.textMuted },
-  arrowIconExpanded: { color: colors.accent },
-  detailsBlock: {
-    marginTop: 8,
-    paddingLeft: 32,
-    width: '100%',
-  },
-  tagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  tagChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  tagChipText: { fontSize: 10, fontWeight: '600', color: colors.textPrimary },
-  progressContainer: {
-    width: '100%',
-    marginTop: 4,
-  },
-  progressMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  bankedBadge: {
-    backgroundColor: colors.bankedBadgeBg,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  bankedBadgeText: { fontSize: 10, fontWeight: '600', color: colors.bankedBadgeText },
-  inlineSubtaskContainer: {
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    paddingLeft: 44,
-  },
-  inlineDivider: { height: 1, backgroundColor: colors.borderSubtle, marginBottom: 6 },
-  emptySubtasksText: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', paddingVertical: 4 },
-  subtaskItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 5,
-    gap: 8,
-  },
-  subtaskLockedRow: {
-    opacity: 0.45,
-  },
-  subtaskCheckRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  subtaskCheckbox: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    backgroundColor: colors.surface,
-  },
-  subtaskCheckboxChecked: { backgroundColor: colors.accent },
-  subtaskCheckboxLocked: { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceElevated },
-  subtaskTitleText: { fontSize: 13, color: colors.textPrimary, flex: 1 },
-  subtaskCompletedText: { textDecorationLine: 'line-through', color: colors.textMuted },
-  subtaskLockedText: { color: colors.textMuted },
-  subtaskProgressSlot: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  subtaskInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  confirmSubtaskBtn: {
-    padding: 4,
-  },
-  subtaskValueBadge: {
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  subtaskValueBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.accent,
-  },
-  subtaskValueBadgeDone: {
-    color: colors.textMuted,
-    textDecorationLine: 'line-through',
-  },
-  subtaskInputBox: {
-    minWidth: 50,
-    height: 26,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    borderRadius: 6,
-    backgroundColor: colors.surfaceSubtle,
-    color: colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
-    paddingVertical: 0,
-    paddingHorizontal: 6,
-    textAlign: 'center',
-  },
-  cardPressed: { opacity: 0.8 },
-  leadOverlay: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overdueBadge: { backgroundColor: colors.dangerBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  overdueBadgeText: { fontSize: 11, fontWeight: '700', color: colors.danger },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    taskCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      marginBottom: 10,
+      elevation: 2,
+      width: '100%',
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
+    selectedCard: {
+      borderColor: colors.accent,
+      backgroundColor: colors.selectedBg ?? colors.surface,
+    },
+    cardInner: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      width: '100%',
+    },
+    priorityAccent: { width: 4 },
+    priorityAccentHighGlow: { width: 5 },
+    mainContainer: {
+      flex: 1,
+      minWidth: 0,
+    },
+    pressableBlock: {
+      padding: 12,
+      width: '100%',
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      width: '100%',
+    },
+    leadSlot: {
+      width: 22,
+      height: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+      position: 'relative',
+    },
+    checkbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      borderColor: colors.accent,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+    },
+    checkboxChecked: {
+      backgroundColor: colors.accent,
+    },
+    checkmark: {
+      color: colors.textOnAccent ?? '#ffffff',
+      fontSize: 10,
+      fontWeight: 'bold',
+    },
+    titleSlot: {
+      flex: 1,
+      minWidth: 0,
+      justifyContent: 'center',
+    },
+    taskTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      lineHeight: 20,
+    },
+    completedCard: { backgroundColor: colors.completedBg },
+    completedText: { textDecorationLine: 'line-through', color: colors.completedText },
+    trailingSlot: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginLeft: 8,
+    },
+    hybridBadge: {
+      backgroundColor: colors.hybridBadgeBg,
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    hybridBadgeText: { fontSize: 11, fontWeight: '700', color: colors.hybridBadgeText },
+    expandButton: {
+      paddingHorizontal: 4,
+      paddingVertical: 4,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    arrowIcon: { fontSize: 11, color: colors.textMuted },
+    arrowIconExpanded: { color: colors.accent },
+    detailsBlock: {
+      marginTop: 8,
+      paddingLeft: 32,
+      width: '100%',
+    },
+    tagRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 4,
+    },
+    tagChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+    tagChipText: { fontSize: 10, fontWeight: '600', color: colors.textPrimary },
+    progressContainer: {
+      width: '100%',
+      marginTop: 4,
+    },
+    progressMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 4,
+    },
+    bankedBadge: {
+      backgroundColor: colors.bankedBadgeBg,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+    },
+    bankedBadgeText: { fontSize: 10, fontWeight: '600', color: colors.bankedBadgeText },
+    inlineSubtaskContainer: {
+      paddingHorizontal: 14,
+      paddingBottom: 10,
+      paddingLeft: 44,
+    },
+    inlineDivider: { height: 1, backgroundColor: colors.borderSubtle, marginBottom: 6 },
+    emptySubtasksText: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', paddingVertical: 4 },
+    subtaskItemRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 5,
+      gap: 8,
+    },
+    subtaskLockedRow: {
+      opacity: 0.45,
+    },
+    subtaskCheckRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    subtaskCheckbox: {
+      width: 16,
+      height: 16,
+      borderRadius: 4,
+      borderWidth: 1.5,
+      borderColor: colors.accent,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 8,
+      backgroundColor: colors.surface,
+    },
+    subtaskCheckboxChecked: { backgroundColor: colors.accent },
+    subtaskCheckboxLocked: { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceElevated },
+    subtaskTitleText: { fontSize: 13, color: colors.textPrimary, flex: 1 },
+    subtaskCompletedText: { textDecorationLine: 'line-through', color: colors.textMuted },
+    subtaskLockedText: { color: colors.textMuted },
+    subtaskProgressSlot: {
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+    },
+    subtaskInputWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    confirmSubtaskBtn: {
+      padding: 4,
+    },
+    subtaskValueBadge: {
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    subtaskValueBadgeText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.accent,
+    },
+    subtaskValueBadgeDone: {
+      color: colors.textMuted,
+      textDecorationLine: 'line-through',
+    },
+    subtaskInputBox: {
+      minWidth: 50,
+      height: 26,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      borderRadius: 6,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+      fontSize: 12,
+      fontWeight: '700',
+      paddingVertical: 0,
+      paddingHorizontal: 6,
+      textAlign: 'center',
+    },
+    cardPressed: { opacity: 0.8 },
+    leadOverlay: {
+      position: 'absolute',
+      width: '100%',
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    overdueBadge: { backgroundColor: colors.dangerBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+    overdueBadgeText: { fontSize: 11, fontWeight: '700', color: colors.danger },
+  });

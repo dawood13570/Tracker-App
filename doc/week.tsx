@@ -26,7 +26,7 @@ import {
   getWeeklyTasks,
   HabitWithStatus,
   TaskRow,
-  updateTask
+  updateTask,
 } from '@/db/queries';
 import { generatePeriodSeed } from '@/engine/notesSeed';
 import { calculatePace, PaceResult } from '@/engine/pace';
@@ -35,7 +35,8 @@ import { useEventStore } from '@/store/eventStore';
 import { useHabitStore } from '@/store/habitStore';
 import { useTagStore } from '@/store/tagStore';
 import { useTaskStore } from '@/store/taskStore';
-import { colors } from '@/theme/colors';
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
 import { getLocalDateString } from '@/utils/date';
 import { isPeriodEligibleForReflection } from '@/utils/reflections';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,6 +61,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 type ItemType = 'task' | 'habit' | 'event' | 'activity';
 
 export default function WeekScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [currentPivotDate, setCurrentPivotDate] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState(false);
 
@@ -87,7 +91,6 @@ export default function WeekScreen() {
     activities: Record<number, number[]>;
   }>({ tasks: {}, habits: {}, events: {}, activities: {} });
 
-
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -109,7 +112,7 @@ export default function WeekScreen() {
   const newWeeklySheetRef = useRef<BottomSheet>(null);
 
   // Stores
-  const { toggleTask, removeTask } = useTaskStore();
+  const { toggleTask } = useTaskStore();
   const { removeHabit, logHabit } = useHabitStore();
   const { removeEvent } = useEventStore();
   const { removeActivityEntry } = useActivityStore();
@@ -152,7 +155,6 @@ export default function WeekScreen() {
       setEvents(evts);
       setHabits(rawHabits);
       setActivities(rawActivityLogs);
-
     } catch (error) {
       console.error('Failed to load week data:', error);
     } finally {
@@ -171,25 +173,25 @@ export default function WeekScreen() {
   }, [tagVersion, refreshTagMap]);
 
   useEffect(() => {
-  const allActiveTasks = [...weekTasks, ...dailyTasks];
-  const progressionTasks = allActiveTasks.filter((t) => t.type === 'Progression');
-  if (progressionTasks.length === 0) {
-    setProgressMap({});
-    setPaceMap({});
-    return;
-  }
-  Promise.all(
-    progressionTasks.map(async (t) => {
-      const currentProgress = t.scope === 'daily' ? await getCurrentProgress(t.id) : await getEffectiveProgress(t.id);
-      const logs = await getProgressLogsByTask(t.id);
-      const pace = calculatePace({ ...t, currentProgress }, logs);
-      return [t.id, currentProgress, pace] as const;
-    })
-  ).then((entries) => {
-    setProgressMap(Object.fromEntries(entries.map(([id, cp]) => [id, cp])));
-    setPaceMap(Object.fromEntries(entries.map(([id, , pace]) => [id, pace])));
-  });
-}, [weekTasks, dailyTasks]);
+    const allActiveTasks = [...weekTasks, ...dailyTasks];
+    const progressionTasks = allActiveTasks.filter((t) => t.type === 'Progression');
+    if (progressionTasks.length === 0) {
+      setProgressMap({});
+      setPaceMap({});
+      return;
+    }
+    Promise.all(
+      progressionTasks.map(async (t) => {
+        const currentProgress = t.scope === 'daily' ? await getCurrentProgress(t.id) : await getEffectiveProgress(t.id);
+        const logs = await getProgressLogsByTask(t.id);
+        const pace = calculatePace({ ...t, currentProgress }, logs);
+        return [t.id, currentProgress, pace] as const;
+      })
+    ).then((entries) => {
+      setProgressMap(Object.fromEntries(entries.map(([id, cp]) => [id, cp])));
+      setPaceMap(Object.fromEntries(entries.map(([id, , pace]) => [id, pace])));
+    });
+  }, [weekTasks, dailyTasks]);
 
   useEffect(() => {
     const allActiveTasks = [...weekTasks, ...dailyTasks];
@@ -209,8 +211,6 @@ export default function WeekScreen() {
     });
   }, [weekTasks, dailyTasks]);
 
-
-
   const handleToggleFilterTag = (tagId: number) => {
     setSelectedFilterTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
@@ -219,11 +219,6 @@ export default function WeekScreen() {
 
   const handleToggleExpand = (taskId: number) => {
     setExpandedTaskIds((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
-  };
-
-  const handleOpenProgressLog = (task: TaskRow) => {
-    setLoggingTask(task);
-    progressSheetRef.current?.expand();
   };
 
   const handleSubtasksCountUpdate = (taskId: number, completed: number, total: number) => {
@@ -256,10 +251,6 @@ export default function WeekScreen() {
           const matchesTags =
             selectedFilterTagIds.length === 0 ||
             selectedFilterTagIds.some((selected) => itemTags.includes(selected));
-
-          if (selectedFilterTagIds.length > 0 && strictTagFilter) {
-            return matchesText && matchesTags;
-          }
 
           return matchesText && matchesTags;
         })
@@ -309,8 +300,6 @@ export default function WeekScreen() {
     () => filterItem(activitiesForFilter, activitiesTagMap),
     [activitiesForFilter, activitiesTagMap, filterItem]
   );
-
-  const isFilteringActive = Boolean(searchQuery.trim()) || selectedFilterTagIds.length > 0;
 
   const handleLongPressItem = (type: ItemType, id: number) => {
     setSelectionMode(true);
@@ -383,17 +372,17 @@ export default function WeekScreen() {
     handleCancelSelection();
 
     if (type === 'task') {
-  const task = dailyTasks.find((t) => t.id === id) || weekTasks.find((t) => t.id === id);
-  if (task) {
-    if (task.scope === 'weekly') {
-      setEditingWeeklyGoal(task);
-      newWeeklySheetRef.current?.expand();
-    } else {
-      setEditingTask(task);
-      taskEditSheetRef.current?.expand();
-    }
-  }
-} else if (type === 'habit') {
+      const task = dailyTasks.find((t) => t.id === id) || weekTasks.find((t) => t.id === id);
+      if (task) {
+        if (task.scope === 'weekly') {
+          setEditingWeeklyGoal(task);
+          newWeeklySheetRef.current?.expand();
+        } else {
+          setEditingTask(task);
+          taskEditSheetRef.current?.expand();
+        }
+      }
+    } else if (type === 'habit') {
       const habit = habits.find((h) => h.id === id);
       if (habit) {
         setEditingHabit(habit);
@@ -509,115 +498,153 @@ export default function WeekScreen() {
           <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 40 }} />
         ) : (
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            {filteredWeekTasks.length > 0 }
-
             {/* Day strip */}
-<View style={styles.dayStripRow}>
-  {daysOfCurrentWeek.map((day) => {
-    const dayStr = getLocalDateString(day);
-    const isToday = isSameDay(day, new Date());
-    const isSelected = dayStr === activeDayStr;
-    const dayTasks = filteredDailyTasks.filter((t) => t.scheduledDate === dayStr);
-    const total = dayTasks.length;
-    const completed = dayTasks.filter((t) => t.isCompleted).length;
-    let dotColor = 'transparent';
-    if (total > 0) dotColor = completed === total ? colors.success : completed > 0 ? colors.priorityMediumBorder : colors.priorityHighBorder;
+            <View style={styles.dayStripRow}>
+              {daysOfCurrentWeek.map((day) => {
+                const dayStr = getLocalDateString(day);
+                const isToday = isSameDay(day, new Date());
+                const isSelected = dayStr === activeDayStr;
+                const dayTasks = filteredDailyTasks.filter((t) => t.scheduledDate === dayStr);
+                const total = dayTasks.length;
+                const completed = dayTasks.filter((t) => t.isCompleted).length;
+                let dotColor = 'transparent';
+                if (total > 0) {
+                  dotColor =
+                    completed === total
+                      ? colors.success
+                      : completed > 0
+                      ? colors.priorityMediumBorder
+                      : colors.priorityHighBorder;
+                }
 
-    return (
-      <TouchableOpacity
-        key={dayStr}
-        style={[styles.dayStripCell, isSelected && styles.dayStripCellSelected, isToday && styles.dayStripCellToday]}
-        onPress={() => setActiveDayStr(dayStr)}
-      >
-        <Text style={styles.dayStripLabel}>{format(day, 'EEE')}</Text>
-        <Text style={styles.dayStripNumber}>{format(day, 'd')}</Text>
-        <View style={[styles.dayStripDot, { backgroundColor: dotColor }]} />
-      </TouchableOpacity>
-    );
-  })}
-</View>
+                return (
+                  <TouchableOpacity
+                    key={dayStr}
+                    style={[
+                      styles.dayStripCell,
+                      isSelected && styles.dayStripCellSelected,
+                      isToday && styles.dayStripCellToday,
+                    ]}
+                    onPress={() => setActiveDayStr(dayStr)}
+                  >
+                    <Text style={styles.dayStripLabel}>{format(day, 'EEE')}</Text>
+                    <Text style={styles.dayStripNumber}>{format(day, 'd')}</Text>
+                    <View style={[styles.dayStripDot, { backgroundColor: dotColor }]} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
-{/* This Week's Goals */}
-<View style={styles.weeklySpanningBox}>
-  <View style={styles.sectionHeaderRow}>
-    <Text style={styles.sectionHeader}>THIS WEEK'S GOALS</Text>
-  </View>
-  {filteredWeekTasks.length === 0 ? (
-    <Text style={styles.emptyDayText}>No weekly goals set.</Text>
-  ) : (
-    filteredWeekTasks.map((task) => (
-      <GoalCard
-        key={task.id}
-        task={task}
-        scopeLabel="week"
-        effectiveProgress={progressMap[task.id]}
-        selectionMode={selectionMode}
-        isSelected={selectedIds.has(`task:${task.id}`)}
-        onPress={() => {
-          if (selectionMode) {
-            handleToggleSelectItem('task', task.id);
-          } 
-          //else {
-          //   setEditingWeeklyGoal(task);
-          //   newWeeklySheetRef.current?.expand();
-          // }
-        }}
-        onLongPress={() => handleLongPressItem('task', task.id)}
-      />
-    ))
-  )}
-</View>
+            {/* This Week's Goals */}
+            <View style={styles.weeklySpanningBox}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionHeader}>THIS WEEK'S GOALS</Text>
+              </View>
+              {filteredWeekTasks.length === 0 ? (
+                <Text style={styles.emptyDayText}>No weekly goals set.</Text>
+              ) : (
+                filteredWeekTasks.map((task) => (
+                  <GoalCard
+                    key={task.id}
+                    task={task}
+                    scopeLabel="week"
+                    effectiveProgress={progressMap[task.id]}
+                    selectionMode={selectionMode}
+                    isSelected={selectedIds.has(`task:${task.id}`)}
+                    onPress={() => {
+                      if (selectionMode) {
+                        handleToggleSelectItem('task', task.id);
+                      }
+                    }}
+                    onLongPress={() => handleLongPressItem('task', task.id)}
+                  />
+                ))
+              )}
+            </View>
 
-{/* Schedule for the selected day */}
-<View style={styles.dayCard}>
-  <Text style={[styles.dayTitleText, { padding: 12 }]}>{format(parseISO(activeDayStr), 'EEEE, MMM d')}</Text>
-  <View style={styles.expandedContent}>
-    {(() => {
-      const eventsForDay = filteredEvents.filter((e) => e.startTime.startsWith(activeDayStr));
-      const tasksForDay = filteredDailyTasks.filter((t) => t.scheduledDate === activeDayStr);
-      const isToday = activeDayStr === todayStr;
-      const habitsForDay = isToday ? filteredHabits : [];
-      const activitiesForDay = filteredActivities.filter((a) => a.date === activeDayStr);
-      const isPast = activeDayStr < todayStr;
+            {/* Schedule for the selected day */}
+            <View style={styles.dayCard}>
+              <Text style={styles.dayTitleText}>{format(parseISO(activeDayStr), 'EEEE, MMM d')}</Text>
+              <View style={styles.expandedContent}>
+                {(() => {
+                  const eventsForDay = filteredEvents.filter((e) => e.startTime.startsWith(activeDayStr));
+                  const tasksForDay = filteredDailyTasks.filter((t) => t.scheduledDate === activeDayStr);
+                  const isToday = activeDayStr === todayStr;
+                  const habitsForDay = isToday ? filteredHabits : [];
+                  const activitiesForDay = filteredActivities.filter((a) => a.date === activeDayStr);
+                  const isPast = activeDayStr < todayStr;
 
-      if (!eventsForDay.length && !tasksForDay.length && !habitsForDay.length && !activitiesForDay.length) {
-        return <Text style={styles.emptyDayText}>Nothing scheduled for this day.</Text>;
-      }
+                  if (!eventsForDay.length && !tasksForDay.length && !habitsForDay.length && !activitiesForDay.length) {
+                    return <Text style={styles.emptyDayText}>Nothing scheduled for this day.</Text>;
+                  }
 
-      return (
-        <>
-          {eventsForDay.map((event) => (
-            <EventCard key={`event-${event.id}`} event={event} selectionMode={selectionMode} isSelected={selectedIds.has(`event:${event.id}`)} onLongPressCard={() => handleLongPressItem('event', event.id)} onToggleSelect={() => handleToggleSelectItem('event', event.id)} />
-          ))}
-          {tasksForDay.map((task) => (
-            <TaskCard
-              key={`task-${task.id}`}
-              task={task as any}
-              onToggle={async (id, status) => { if (!isPast) await handleToggleTaskWithAutofill(id, status); }}
-              onProgressChanged={loadWeekData}
-              currentProgress={progressMap[task.id]}
-              pace={paceMap[task.id]}
-              subtaskCount={subtaskMap[task.id]}
-              isExpanded={Boolean(expandedTaskIds[task.id])}
-              onToggleExpand={() => handleToggleExpand(task.id)}
-              onSubtasksCountUpdate={handleSubtasksCountUpdate}
-              selectionMode={selectionMode}
-              isSelected={selectedIds.has(`task:${task.id}`)}
-              onLongPressCard={() => handleLongPressItem('task', task.id)}
-              onToggleSelect={() => handleToggleSelectItem('task', task.id)}
-            />
-          ))}
-          {isToday && habitsForDay.map((habit) => (
-            <HabitCard key={`habit-${habit.id}`} habit={habit} onLogToday={async () => { await logHabit(habit.id); await loadWeekData(); }} selectionMode={selectionMode} isSelected={selectedIds.has(`habit:${habit.id}`)} onLongPressCard={() => handleLongPressItem('habit', habit.id)} onToggleSelect={() => handleToggleSelectItem('habit', habit.id)} />
-          ))}
-          {activitiesForDay.map((entry) => (
-            <ActivityCard key={`act-${entry.id}`} entry={entry} tags={allTags.filter((t) => entry.tagIds.includes(t.id))} selectionMode={selectionMode} isSelected={selectedIds.has(`activity:${entry.id}`)} onPressCard={() => { setSelectedActivity(entry); activityModalSheetRef.current?.expand(); }} onLongPressCard={() => handleLongPressItem('activity', entry.id)} onToggleSelect={() => handleToggleSelectItem('activity', entry.id)} />
-          ))}
-        </>
-      );
-    })()}
-  </View>
-</View>
+                  return (
+                    <>
+                      {eventsForDay.map((event) => (
+                        <EventCard
+                          key={`event-${event.id}`}
+                          event={event}
+                          selectionMode={selectionMode}
+                          isSelected={selectedIds.has(`event:${event.id}`)}
+                          onLongPressCard={() => handleLongPressItem('event', event.id)}
+                          onToggleSelect={() => handleToggleSelectItem('event', event.id)}
+                        />
+                      ))}
+                      {tasksForDay.map((task) => (
+                        <TaskCard
+                          key={`task-${task.id}`}
+                          task={task as any}
+                          onToggle={async (id, status) => {
+                            if (!isPast) await handleToggleTaskWithAutofill(id, status);
+                          }}
+                          onProgressChanged={loadWeekData}
+                          currentProgress={progressMap[task.id]}
+                          pace={paceMap[task.id]}
+                          subtaskCount={subtaskMap[task.id]}
+                          isExpanded={Boolean(expandedTaskIds[task.id])}
+                          onToggleExpand={() => handleToggleExpand(task.id)}
+                          onSubtasksCountUpdate={handleSubtasksCountUpdate}
+                          selectionMode={selectionMode}
+                          isSelected={selectedIds.has(`task:${task.id}`)}
+                          onLongPressCard={() => handleLongPressItem('task', task.id)}
+                          onToggleSelect={() => handleToggleSelectItem('task', task.id)}
+                        />
+                      ))}
+                      {isToday &&
+                        habitsForDay.map((habit) => (
+                          <HabitCard
+                            key={`habit-${habit.id}`}
+                            habit={habit}
+                            onLogToday={async () => {
+                              await logHabit(habit.id);
+                              await loadWeekData();
+                            }}
+                            selectionMode={selectionMode}
+                            isSelected={selectedIds.has(`habit:${habit.id}`)}
+                            onLongPressCard={() => handleLongPressItem('habit', habit.id)}
+                            onToggleSelect={() => handleToggleSelectItem('habit', habit.id)}
+                          />
+                        ))}
+                      {activitiesForDay.map((entry) => (
+                        <ActivityCard
+                          key={`act-${entry.id}`}
+                          entry={entry}
+                          tags={allTags.filter((t) => entry.tagIds.includes(t.id))}
+                          selectionMode={selectionMode}
+                          isSelected={selectedIds.has(`activity:${entry.id}`)}
+                          onPressCard={() => {
+                            setSelectedActivity(entry);
+                            activityModalSheetRef.current?.expand();
+                          }}
+                          onLongPressCard={() => handleLongPressItem('activity', entry.id)}
+                          onToggleSelect={() => handleToggleSelectItem('activity', entry.id)}
+                        />
+                      ))}
+                    </>
+                  );
+                })()}
+              </View>
+            </View>
           </ScrollView>
         )}
 
@@ -666,6 +693,7 @@ export default function WeekScreen() {
           onLogged={loadWeekData}
           onClose={() => setLoggingTask(null)}
         />
+
         <NoteSheet
           sheetRef={noteSheetRef}
           scope="weekly"
@@ -678,159 +706,132 @@ export default function WeekScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  stickyHeader: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
-    elevation: 2,
-  },
-  headerContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 14 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: colors.textPrimary },
-  addWeeklyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.accent,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    gap: 4,
-  },
-  addWeeklyBtnText: { color: colors.textOnAccent, fontSize: 13, fontWeight: '700' },
-  navRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
-  navBtn: { padding: 4 },
-  rangeText: { fontSize: 14, fontWeight: '700', color: colors.accent },
-  selectionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  cancelBtn: { padding: 4 },
-  selectionCountText: { fontSize: 16, color: colors.textPrimary, fontWeight: '600' },
-  selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  iconActionBtn: { padding: 4 },
-  actionDisabled: { opacity: 0.35 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24 },
-  weeklySpanningBox: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  sectionHeader: { fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.5, marginBottom: 8 },
-  dayCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    marginBottom: 10,
-    borderWidth: 1.5,
-    borderColor: colors.borderSubtle,
-    overflow: 'hidden',
-  },
-  dayCardToday: {
-    borderColor: colors.accent,
-    backgroundColor: colors.surfaceElevated,
-  },
-  dayCardPast: {
-    opacity: 0.75,
-    borderColor: colors.borderSubtle,
-  },
-  dayCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  dayTitlePressable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  dayTitleText: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
-  dayTitleToday: { color: colors.accent },
-  dayTitlePast: { color: colors.textMuted },
-  todayPill: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  todayPillText: { fontSize: 9, fontWeight: '800', color: colors.textOnAccent },
-  pastPill: {
-    backgroundColor: colors.surfaceSubtle,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  pastPillText: { fontSize: 9, fontWeight: '700', color: colors.textMuted },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  summaryBadgeRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  taskBadge: {
-    backgroundColor: colors.hybridBadgeBg,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  taskBadgeText: { fontSize: 11, fontWeight: '700', color: colors.hybridBadgeText },
-  badgeMuted: {
-    backgroundColor: colors.surfaceSubtle,
-  },
-  badgeTextMuted: {
-    color: colors.textMuted,
-  },
-  eventBadge: {
-    backgroundColor: colors.surfaceElevated,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  eventBadgeText: { fontSize: 11, fontWeight: '600', color: colors.eventAccent },
-  chevronBtn: { padding: 4 },
-  expandedContent: {
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderSubtle,
-  },
-  emptyDayText: {
-    fontSize: 12,
-    color: colors.textMuted,
-    fontStyle: 'italic',
-    paddingVertical: 8,
-    textAlign: 'center',
-  },
-  dayStripRow: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 12, padding: 8, borderWidth: 1, borderColor: colors.borderSubtle, marginBottom: 16 },
-dayStripCell: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 8 },
-dayStripCellSelected: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.accent },
-dayStripCellToday: { backgroundColor: colors.surfaceSubtle },
-dayStripLabel: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
-dayStripNumber: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginTop: 2 },
-dayStripDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4 },
-sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  reflectionBtn: {padding: 4}
-});
-
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    stickyHeader: {
+      backgroundColor: colors.surface,
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+      elevation: 2,
+    },
+    headerContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 14 },
+    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    headerTitle: { fontSize: 22, fontWeight: '800', color: colors.textPrimary },
+    addWeeklyBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.accent,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 8,
+      gap: 4,
+    },
+    addWeeklyBtnText: { color: colors.textOnAccent, fontSize: 13, fontWeight: '700' },
+    navRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
+    navBtn: { padding: 4 },
+    rangeText: { fontSize: 14, fontWeight: '700', color: colors.accent },
+    selectionBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+    cancelBtn: { padding: 4 },
+    selectionCountText: { fontSize: 16, color: colors.textPrimary, fontWeight: '600' },
+    selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+    iconActionBtn: { padding: 4 },
+    actionDisabled: { opacity: 0.35 },
+    scrollContent: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24 },
+    weeklySpanningBox: {
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
+    sectionHeader: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textMuted,
+      letterSpacing: 0.5,
+      marginBottom: 8,
+    },
+    dayCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      marginBottom: 10,
+      borderWidth: 1.5,
+      borderColor: colors.borderSubtle,
+      overflow: 'hidden',
+    },
+    dayTitleText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      padding: 12,
+    },
+    expandedContent: {
+      paddingHorizontal: 12,
+      paddingBottom: 10,
+      paddingTop: 4,
+      borderTopWidth: 1,
+      borderTopColor: colors.borderSubtle,
+    },
+    emptyDayText: {
+      fontSize: 12,
+      color: colors.textMuted,
+      fontStyle: 'italic',
+      paddingVertical: 8,
+      textAlign: 'center',
+    },
+    dayStripRow: {
+      flexDirection: 'row',
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 8,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      marginBottom: 16,
+    },
+    dayStripCell: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    dayStripCellSelected: {
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.accent,
+    },
+    dayStripCellToday: {
+      backgroundColor: colors.surfaceSubtle,
+    },
+    dayStripLabel: {
+      fontSize: 10,
+      color: colors.textMuted,
+      fontWeight: '600',
+    },
+    dayStripNumber: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginTop: 2,
+    },
+    dayStripDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      marginTop: 4,
+    },
+    sectionHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    reflectionBtn: { padding: 4 },
+  });

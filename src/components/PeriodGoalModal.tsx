@@ -1,5 +1,7 @@
 // src/components/PeriodGoalModal.tsx
 import { useTagStore } from '@/store/tagStore';
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -7,25 +9,24 @@ import Slider from '@react-native-community/slider';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Alert,
-    Keyboard,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import {
-    assignTag,
-    deleteTask,
-    getSubtasksByParentOrdered,
-    insertSubtask,
-    insertTask,
-    updateTask,
+  assignTag,
+  deleteTask,
+  getSubtasksByParentOrdered,
+  insertSubtask,
+  insertTask,
+  updateTask,
 } from '../db/queries';
-import { colors } from '../theme/colors';
 import { PursuitPicker } from './PursuitPicker';
 import { TagPicker } from './TagPicker';
 
@@ -59,6 +60,9 @@ export function PeriodGoalModal({
   onTaskCreated,
   onClose,
 }: PeriodGoalModalProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
   const [selectedPursuitId, setSelectedPursuitId] = useState<number | null>(null);
@@ -317,7 +321,10 @@ export function PeriodGoalModal({
       return;
     }
     if (isRecurringGoal && (!occurrenceCount || Number(occurrenceCount) <= 0)) {
-      Alert.alert('Count required', `Enter how many times in this ${scope === 'weekly' ? 'week' : scope === 'monthly' ? 'month' : scope === 'yearly' ? 'year' : 'period'}.`);
+      Alert.alert(
+        'Count required',
+        `Enter how many times in this ${scope === 'weekly' ? 'week' : scope === 'monthly' ? 'month' : scope === 'yearly' ? 'year' : 'period'}.`
+      );
       return;
     }
 
@@ -693,34 +700,93 @@ export function PeriodGoalModal({
   );
 }
 
-const styles = StyleSheet.create({
-  contentContainer: { padding: 24 },
-  titleText: { fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.textPrimary },
-  subTitleText: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 4, marginBottom: 16 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 15, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 10 },
-  label: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
-  selectorGroup: { flexDirection: 'row' },
-  selectorItem: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 20, backgroundColor: colors.surfaceSubtle, marginLeft: 6 },
-  selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
-  unselectedText: { color: colors.textSecondary, fontSize: 12 },
-  selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 12 },
-  advancedToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
-  advancedToggleText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.3 },
-  dynamicContainer: { marginTop: 10, padding: 12, backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
-  inputNested: { flex: 1.5, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, fontSize: 15, backgroundColor: colors.surfaceSubtle, marginLeft: 12, color: colors.textPrimary },
-  hintText: { fontSize: 11, color: colors.textMuted, marginTop: 4, fontStyle: 'italic' },
-  subSectionTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
-  addSubtaskRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 6 },
-  subtaskInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14, backgroundColor: colors.surfaceSubtle, marginRight: 8, color: colors.textPrimary },
-  addBtn: { backgroundColor: colors.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
-  addBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
-  subtaskItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
-  subtaskTitle: { color: colors.textPrimary, fontSize: 13, flex: 1, marginRight: 8 },
-  removeText: { color: colors.danger, fontWeight: 'bold' },
-  submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
-  submitDisabled: { backgroundColor: colors.surfaceElevated },
-  submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '700' },
-  pickerPressable: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.surfaceSubtle },
-  pickerText: { fontSize: 14, color: colors.textPrimary },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    contentContainer: { padding: 24 },
+    titleText: { fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.textPrimary },
+    subTitleText: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 4, marginBottom: 16 },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 15,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+    },
+    row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 10 },
+    label: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
+    selectorGroup: { flexDirection: 'row' },
+    selectorItem: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 20,
+      backgroundColor: colors.surfaceSubtle,
+      marginLeft: 6,
+    },
+    selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
+    unselectedText: { color: colors.textSecondary, fontSize: 12 },
+    selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 12 },
+    advancedToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+    },
+    advancedToggleText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.3 },
+    dynamicContainer: {
+      marginTop: 10,
+      padding: 12,
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    inputNested: {
+      flex: 1.5,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      fontSize: 15,
+      backgroundColor: colors.surfaceSubtle,
+      marginLeft: 12,
+      color: colors.textPrimary,
+    },
+    hintText: { fontSize: 11, color: colors.textMuted, marginTop: 4, fontStyle: 'italic' },
+    subSectionTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
+    addSubtaskRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 6 },
+    subtaskInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      fontSize: 14,
+      backgroundColor: colors.surfaceSubtle,
+      marginRight: 8,
+      color: colors.textPrimary,
+    },
+    addBtn: { backgroundColor: colors.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
+    addBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
+    subtaskItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+    subtaskTitle: { color: colors.textPrimary, fontSize: 13, flex: 1, marginRight: 8 },
+    removeText: { color: colors.danger, fontWeight: 'bold' },
+    submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
+    submitDisabled: { backgroundColor: colors.surfaceElevated },
+    submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '700' },
+    pickerPressable: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: colors.surfaceSubtle,
+    },
+    pickerText: { fontSize: 14, color: colors.textPrimary },
+  });

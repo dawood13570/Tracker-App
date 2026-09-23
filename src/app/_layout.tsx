@@ -1,11 +1,12 @@
 // src/app/_layout.tsx
-import { useThemeStore } from '@/store/themeStore';
-import { colors } from '@/theme/colors';
+import { useColors, useThemeStore } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import * as Notifications from 'expo-notifications';
 import { Tabs } from 'expo-router';
-import { useEffect } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useMemo } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +30,9 @@ Notifications.setNotificationHandler({
 });
 
 function MainTabs() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const { success, error } = useMigrations(db, migrations);
   const insets = useSafeAreaInsets();
 
@@ -101,7 +105,7 @@ function MainTabs() {
   if (!success) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#1c8db9" />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.loadingText}>Applying migrations...</Text>
       </View>
     );
@@ -165,34 +169,6 @@ function MainTabs() {
         }}
       />
 
-      {/* <Tabs.Screen
-        name="week"
-        options={{
-          title: 'Week',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-number-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="month"
-        options={{
-          title: 'Month',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="grid-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="year"
-        options={{
-          title: 'Year',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
-          ),
-        }}
-      /> */}
       <Tabs.Screen
         name="account"
         options={{
@@ -208,48 +184,51 @@ function MainTabs() {
 
 export default function RootLayout() {
   const mode = useThemeStore((s) => s.mode);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }} key={mode}>
       <SafeAreaProvider>
+        <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         <MainTabs />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
 
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#121212',
-  },
-  errorTitle: {
-    color: '#ef4444',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginBottom: 6,
-  },
-  errorText: {
-    color: '#e8e8e8',
-    textAlign: 'center',
-    fontSize: 13,
-  },
-  loadingText: {
-    marginTop: 10,
-    color: '#a0a0a0',
-    fontSize: 14,
-  },
-  tabBar: {
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 6,
-    elevation: 8,
-  },
-  tabLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    center: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+      backgroundColor: colors.background,
+    },
+    errorTitle: {
+      color: colors.danger,
+      fontWeight: 'bold',
+      fontSize: 16,
+      marginBottom: 6,
+    },
+    errorText: {
+      color: colors.textPrimary,
+      textAlign: 'center',
+      fontSize: 13,
+    },
+    loadingText: {
+      marginTop: 10,
+      color: colors.textSecondary,
+      fontSize: 14,
+    },
+    tabBar: {
+      backgroundColor: colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: colors.borderSubtle,
+      paddingTop: 6,
+      elevation: 8,
+    },
+    tabLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+    },
+  });

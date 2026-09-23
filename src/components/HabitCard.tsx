@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { HabitWithStatus } from '../store/habitStore';
-import { colors } from '../theme/colors';
+import { useColors } from '../store/themeStore';
+import { Palette } from '../theme/colors';
 import { SelectionIndicator } from './SelectionIndicator';
 
 type HabitCardProps = {
@@ -20,6 +22,9 @@ export function HabitCard({
   onLongPressCard,
   onToggleSelect,
 }: HabitCardProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const isWeekly = habit.cadenceType === 'weekly_n_times';
   const weeklyMet =
     isWeekly && habit.weeklyProgress
@@ -90,57 +95,58 @@ export function HabitCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    marginVertical: 6,
-    minHeight: 56,
-    width: '100%',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  pressableContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    minHeight: 56,
-    paddingVertical: 12,
-    paddingRight: 14,
-  },
-  cardPressed: { opacity: 0.7 },
-  cardCompleted: { backgroundColor: colors.successBg },
-  cardSelected: {
-    borderColor: colors.accent,
-    backgroundColor: colors.selectedBg ?? colors.surface,
-  },
-  leftAccent: {
-    width: 4,
-    alignSelf: 'stretch',
-    backgroundColor: colors.habitAccent,
-    marginRight: 12,
-    borderTopLeftRadius: 10,
-    borderBottomLeftRadius: 10,
-  },
-  leadSlot: {
-    width: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  leadPlaceholder: {
-    width: 20,
-    height: 20,
-  },
-  content: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: 'center',
-  },
-  title: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
-  titleCompleted: { color: colors.success },
-  subtext: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  subtextMet: { color: colors.success, fontWeight: '600' },
-  streakBadge: { marginLeft: 8 },
-  streakText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      marginVertical: 6,
+      minHeight: 56,
+      width: '100%',
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+    },
+    pressableContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      width: '100%',
+      minHeight: 56,
+      paddingVertical: 12,
+      paddingRight: 14,
+    },
+    cardPressed: { opacity: 0.7 },
+    cardCompleted: { backgroundColor: colors.successBg },
+    cardSelected: {
+      borderColor: colors.accent,
+      backgroundColor: colors.selectedBg ?? colors.surface,
+    },
+    leftAccent: {
+      width: 4,
+      alignSelf: 'stretch',
+      backgroundColor: colors.habitAccent,
+      marginRight: 12,
+      borderTopLeftRadius: 10,
+      borderBottomLeftRadius: 10,
+    },
+    leadSlot: {
+      width: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+    },
+    leadPlaceholder: {
+      width: 20,
+      height: 20,
+    },
+    content: {
+      flex: 1,
+      minWidth: 0,
+      justifyContent: 'center',
+    },
+    title: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+    titleCompleted: { color: colors.success },
+    subtext: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+    subtextMet: { color: colors.success, fontWeight: '600' },
+    streakBadge: { marginLeft: 8 },
+    streakText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+  });

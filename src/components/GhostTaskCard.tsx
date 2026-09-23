@@ -1,7 +1,9 @@
 // src/components/GhostTaskCard.tsx
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../theme/colors';
 
 interface GhostTaskCardProps {
   title: string;
@@ -11,7 +13,16 @@ interface GhostTaskCardProps {
   onPress?: () => void;
 }
 
-export function GhostTaskCard({ title, priority = 'Medium', totalProgress, progressUnit, onPress }: GhostTaskCardProps) {
+export function GhostTaskCard({
+  title,
+  priority = 'Medium',
+  totalProgress,
+  progressUnit,
+  onPress,
+}: GhostTaskCardProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const accentColor =
     priority === 'High'
       ? colors.priorityHighBorder ?? '#ef4444'
@@ -45,69 +56,71 @@ export function GhostTaskCard({ title, priority = 'Medium', totalProgress, progr
       </View>
     </View>
   );
+
   return onPress ? <Pressable onPress={onPress}>{content}</Pressable> : content;
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: colors.borderSubtle,
-    opacity: 0.75,
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  priorityAccent: {
-    width: 4,
-    opacity: 0.5,
-  },
-  body: {
-    flex: 1,
-    padding: 12,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dashedBox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.textMuted,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-  },
-  badge: {
-    backgroundColor: colors.surfaceElevated,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  badgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textMuted,
-    letterSpacing: 0.5,
-  },
-  metaRow: {
-    marginTop: 6,
-    paddingLeft: 26,
-  },
-  metaText: {
-    fontSize: 11,
-    color: colors.textMuted,
-  },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: colors.surfaceSubtle,
+      borderRadius: 12,
+      marginBottom: 8,
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+      borderColor: colors.borderSubtle,
+      opacity: 0.75,
+      flexDirection: 'row',
+      overflow: 'hidden',
+    },
+    priorityAccent: {
+      width: 4,
+      opacity: 0.5,
+    },
+    body: {
+      flex: 1,
+      padding: 12,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    dashedBox: {
+      width: 18,
+      height: 18,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: colors.textMuted,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    title: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '500',
+      color: colors.textSecondary,
+      fontStyle: 'italic',
+    },
+    badge: {
+      backgroundColor: colors.surfaceElevated,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+    },
+    badgeText: {
+      fontSize: 9,
+      fontWeight: '700',
+      color: colors.textMuted,
+      letterSpacing: 0.5,
+    },
+    metaRow: {
+      marginTop: 6,
+      paddingLeft: 26,
+    },
+    metaText: {
+      fontSize: 11,
+      color: colors.textMuted,
+    },
+  });

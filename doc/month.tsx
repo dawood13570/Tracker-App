@@ -14,7 +14,8 @@ import {
 } from '@/db/queries';
 import { generatePeriodSeed } from '@/engine/notesSeed';
 import { useTaskStore } from '@/store/taskStore';
-import { colors } from '@/theme/colors';
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
 import { isPeriodEligibleForReflection } from '@/utils/reflections';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
@@ -39,6 +40,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function MonthScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const { setSelectedDate, loadTasks } = useTaskStore();
   const monthlyModalRef = useRef<BottomSheet>(null);
   const noteSheetRef = useRef<BottomSheet>(null);
@@ -357,101 +361,102 @@ export default function MonthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  outerContainer: { flex: 1, backgroundColor: colors.background },
-  container: { flex: 1, backgroundColor: colors.background },
-  contentContainer: { padding: 16, paddingBottom: 40 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    paddingHorizontal: 8,
-  },
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  reflectionBtn: {
-    padding: 4,
-  },
-  monthTitle: { fontSize: 20, fontWeight: '700', color: colors.textPrimary },
-  navButton: { padding: 10, backgroundColor: colors.surface, borderRadius: 8 },
-  navButtonText: { color: colors.accent, fontSize: 16, fontWeight: 'bold' },
-  weekHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 8,
-  },
-  weekHeaderText: { color: colors.textMuted, fontSize: 13, fontWeight: '600', width: '14%', textAlign: 'center' },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  dayCell: {
-    width: '14.28%',
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 4,
-    borderRadius: 8,
-  },
-  outsideMonthCell: { opacity: 0.3 },
-  selectedDayCell: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.accent },
-  todayCell: { backgroundColor: colors.surfaceSubtle },
-  dayText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
-  outsideMonthText: { color: colors.textMuted },
-  statusDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4 },
-  summaryContainer: { marginTop: 24, backgroundColor: colors.surface, borderRadius: 12, padding: 16 },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  summaryHeader: { fontSize: 16, fontWeight: '700', color: colors.textPrimary },
-  addButton: {
-    backgroundColor: colors.surfaceElevated,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.accent,
-  },
-  addButtonText: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  emptySummary: { fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
-  selectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  selectionCountText: { color: colors.textPrimary, fontSize: 15, fontWeight: '700' },
-  summaryCard: {
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
-  },
-  summaryTaskTitle: {
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  completedTaskTitle: {
-    color: colors.textMuted,
-    textDecorationLine: 'line-through',
-  },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    outerContainer: { flex: 1, backgroundColor: colors.background },
+    container: { flex: 1, backgroundColor: colors.background },
+    contentContainer: { padding: 16, paddingBottom: 40 },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+      paddingHorizontal: 8,
+    },
+    headerCenter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    reflectionBtn: {
+      padding: 4,
+    },
+    monthTitle: { fontSize: 20, fontWeight: '700', color: colors.textPrimary },
+    navButton: { padding: 10, backgroundColor: colors.surface, borderRadius: 8 },
+    navButtonText: { color: colors.accent, fontSize: 16, fontWeight: 'bold' },
+    weekHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      marginBottom: 8,
+    },
+    weekHeaderText: { color: colors.textMuted, fontSize: 13, fontWeight: '600', width: '14%', textAlign: 'center' },
+    gridContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 8,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
+    dayCell: {
+      width: '14.28%',
+      aspectRatio: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 4,
+      borderRadius: 8,
+    },
+    outsideMonthCell: { opacity: 0.3 },
+    selectedDayCell: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.accent },
+    todayCell: { backgroundColor: colors.surfaceSubtle },
+    dayText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+    outsideMonthText: { color: colors.textMuted },
+    statusDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4 },
+    summaryContainer: { marginTop: 24, backgroundColor: colors.surface, borderRadius: 12, padding: 16 },
+    sectionHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    summaryHeader: { fontSize: 16, fontWeight: '700', color: colors.textPrimary },
+    addButton: {
+      backgroundColor: colors.surfaceElevated,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.accent,
+    },
+    addButtonText: {
+      color: colors.accent,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    emptySummary: { fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
+    selectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.surface,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    selectionCountText: { color: colors.textPrimary, fontSize: 15, fontWeight: '700' },
+    summaryCard: {
+      paddingVertical: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.borderSubtle,
+    },
+    summaryTaskTitle: {
+      fontSize: 14,
+      color: colors.textPrimary,
+    },
+    completedTaskTitle: {
+      color: colors.textMuted,
+      textDecorationLine: 'line-through',
+    },
+  });

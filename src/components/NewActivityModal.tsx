@@ -22,7 +22,8 @@ import {
 } from '../db/queries';
 import { ActivityLogWithDetails, useActivityStore } from '../store/activityStore';
 import { useTagStore } from '../store/tagStore';
-import { colors } from '../theme/colors';
+import { useColors } from '../store/themeStore';
+import { Palette } from '../theme/colors';
 import { AddType, AddTypeSwitcher } from './AddTypeSwitcher';
 import { TagPicker } from './TagPicker';
 
@@ -41,6 +42,9 @@ export default function NewActivityModal({
   onClose,
   onSwitchType,
 }: NewActivityModalProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const isDetailMode = Boolean(entry);
   const snapPoints = useMemo(() => (isDetailMode ? ['55%', '75%'] : ['60%', '85%']), [isDetailMode]);
 
@@ -346,47 +350,55 @@ export default function NewActivityModal({
   );
 }
 
-const styles = StyleSheet.create({
-  contentContainer: { padding: 24 },
-  detailContainer: { padding: 24 },
-  titleText: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 6, color: colors.textPrimary },
-  subTitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginBottom: 16 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 15,
-    backgroundColor: colors.surfaceSubtle,
-    color: colors.textPrimary,
-  },
-  suggestionBox: {
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceElevated,
-    overflow: 'hidden',
-  },
-  suggestionRow: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle,
-  },
-  suggestionText: { fontSize: 14, color: colors.textPrimary },
-  matchedHint: { fontSize: 12, color: colors.accent, marginTop: 6, fontStyle: 'italic' },
-  dynamicContainer: { marginTop: 10, padding: 12, backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
-  subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
-  submitButton: { backgroundColor: colors.selectedBorder, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
-  submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
-  submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
-  logBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  logBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    contentContainer: { padding: 24 },
+    detailContainer: { padding: 24 },
+    titleText: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 6, color: colors.textPrimary },
+    subTitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginBottom: 16 },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 15,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+    },
+    suggestionBox: {
+      marginTop: 4,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceElevated,
+      overflow: 'hidden',
+    },
+    suggestionRow: {
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSubtle,
+    },
+    suggestionText: { fontSize: 14, color: colors.textPrimary },
+    matchedHint: { fontSize: 12, color: colors.accent, marginTop: 6, fontStyle: 'italic' },
+    dynamicContainer: {
+      marginTop: 10,
+      padding: 12,
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
+    submitButton: { backgroundColor: colors.selectedBorder, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
+    submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
+    submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
+    logBtn: {
+      backgroundColor: colors.accent,
+      borderRadius: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    logBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
+  });

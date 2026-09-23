@@ -1,4 +1,4 @@
-const darkPalette = {
+export const darkPalette = {
   background: '#121212',
   surface: '#1e1e1e',
   surfaceElevated: '#262626',
@@ -56,7 +56,7 @@ const darkPalette = {
 
 export type Palette = Record<keyof typeof darkPalette, string>;
 
-const lightPalette: Palette = {
+export const lightPalette: Palette = {
   background: '#f7f7f8',
   surface: '#ffffff',
   surfaceElevated: '#f0f0f2',
@@ -112,8 +112,4 @@ const lightPalette: Palette = {
   eventAccentPressed: '#a1500a',
 };
 
-export const colors: Palette = { ...darkPalette };
-
-export function applyTheme(mode: 'dark' | 'light') {
-  Object.assign(colors, mode === 'light' ? lightPalette : darkPalette);
-}
+export const colors: Palette = darkPalette;

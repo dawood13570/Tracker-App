@@ -1,5 +1,7 @@
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../theme/colors';
 
 export type AddType = 'Task' | 'Habit' | 'Event' | 'Activity';
 
@@ -8,21 +10,27 @@ interface AddTypeSwitcherProps {
   onSelect: (type: AddType) => void;
 }
 
-const TYPE_COLORS: Record<AddType, string> = {
-  Task: colors.taskAccent,
-  Habit: colors.habitAccent,
-  Event: colors.eventAccent,
-  Activity: colors.activityAccent ?? '#4ade80',
-};
-
 const TYPES: AddType[] = ['Task', 'Habit', 'Event', 'Activity'];
 
 export function AddTypeSwitcher({ active, onSelect }: AddTypeSwitcherProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const typeColors: Record<AddType, string> = useMemo(
+    () => ({
+      Task: colors.taskAccent,
+      Habit: colors.habitAccent,
+      Event: colors.eventAccent,
+      Activity: colors.activityAccent ?? '#4ade80',
+    }),
+    [colors]
+  );
+
   return (
     <View style={styles.row}>
       {TYPES.map((type) => {
         const isActive = active === type;
-        const typeColor = TYPE_COLORS[type];
+        const typeColor = typeColors[type];
         return (
           <Pressable
             key={type}
@@ -44,28 +52,29 @@ export function AddTypeSwitcher({ active, onSelect }: AddTypeSwitcherProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    gap: 6,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceSubtle,
-  },
-  tabText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    color: colors.textPrimary,
-  },
-  tabTextActive: {
-    color: colors.textOnAccent,
-  },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      marginBottom: 16,
+      gap: 6,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 8,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surfaceSubtle,
+    },
+    tabText: {
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      color: colors.textPrimary,
+    },
+    tabTextActive: {
+      color: colors.textOnAccent,
+    },
+  });

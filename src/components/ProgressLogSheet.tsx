@@ -6,7 +6,8 @@ import { Alert, Keyboard, Pressable, StyleSheet, Switch, Text, TouchableOpacity,
 import { getProgressLogsByTask, insertProgressLog } from '../db/queries';
 import { getSurplusChoices, PaceResult, SurplusOptions } from '../engine/pace';
 import { Task, useTaskStore } from '../store/taskStore';
-import { colors } from '../theme/colors';
+import { useColors } from '../store/themeStore';
+import { Palette } from '../theme/colors';
 
 interface ProgressLog {
   id: number;
@@ -32,6 +33,9 @@ export default function ProgressLogSheet({
   onClose,
   pace,
 }: ProgressLogSheetProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const { completeTask, updateTask } = useTaskStore();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -65,7 +69,13 @@ export default function ProgressLogSheet({
 
   if (!task) {
     return (
-      <BottomSheet ref={sheetRef} index={-1} snapPoints={snapPoints} enablePanDownToClose>
+      <BottomSheet
+        ref={sheetRef}
+        index={-1}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        backgroundStyle={{ backgroundColor: colors.surface }}
+      >
         <View />
       </BottomSheet>
     );
@@ -229,7 +239,11 @@ export default function ProgressLogSheet({
             {/* Remember Choice Toggle */}
             <View style={styles.saveChoiceRow}>
               <Text style={styles.saveChoiceLabel}>Remember my choice for this task</Text>
-              <Switch value={saveDecision} onValueChange={setSaveDecision} />
+              <Switch
+                value={saveDecision}
+                onValueChange={setSaveDecision}
+                trackColor={{ false: colors.borderSubtle, true: colors.accent }}
+              />
             </View>
 
             <TouchableOpacity style={styles.surplusSkipBtn} onPress={() => handleCommitLog('none')}>
@@ -254,7 +268,7 @@ export default function ProgressLogSheet({
               value={note}
               onChangeText={setNote}
               placeholder="Note (optional)"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textPlaceholder}
             />
 
             <Pressable
@@ -290,31 +304,32 @@ export default function ProgressLogSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  contentContainer: { padding: 24, paddingBottom: 40 },
-  titleText: { fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 16, color: colors.textPrimary },
-  summaryCard: { backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border, padding: 12, marginBottom: 16 },
-  summaryLine: { fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.textPrimary },
-  summarySubline: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginTop: 4 },
-  label: { fontSize: 14, fontWeight: '500', marginBottom: 6, color: colors.textPrimary },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary, marginBottom: 12 },
-  submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center', marginBottom: 24 },
-  submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
-  submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
-  subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
-  emptyHistoryText: { fontSize: 13, color: colors.textMuted },
-  historyRow: { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, paddingVertical: 8 },
-  historyAmount: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
-  historyDate: { fontSize: 12, color: colors.textMuted },
-  historyNote: { fontSize: 12, color: colors.textSecondary, marginTop: 2, fontStyle: 'italic' },
-  surplusContainer: { marginTop: 6, padding: 16, backgroundColor: colors.surfaceElevated, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 20 },
-  surplusHeading: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
-  surplusSubtext: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginTop: 4, marginBottom: 14 },
-  surplusOptionBtn: { backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, marginBottom: 10 },
-  surplusBtnTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
-  surplusBtnDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  saveChoiceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 4, marginVertical: 6 },
-  saveChoiceLabel: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
-  surplusSkipBtn: { paddingVertical: 8, alignItems: 'center' },
-  surplusSkipText: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    contentContainer: { padding: 24, paddingBottom: 40 },
+    titleText: { fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 16, color: colors.textPrimary },
+    summaryCard: { backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border, padding: 12, marginBottom: 16 },
+    summaryLine: { fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.textPrimary },
+    summarySubline: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginTop: 4 },
+    label: { fontSize: 14, fontWeight: '500', marginBottom: 6, color: colors.textPrimary },
+    input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary, marginBottom: 12 },
+    submitButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center', marginBottom: 24 },
+    submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
+    submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
+    subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
+    emptyHistoryText: { fontSize: 13, color: colors.textMuted },
+    historyRow: { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, paddingVertical: 8 },
+    historyAmount: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+    historyDate: { fontSize: 12, color: colors.textMuted },
+    historyNote: { fontSize: 12, color: colors.textSecondary, marginTop: 2, fontStyle: 'italic' },
+    surplusContainer: { marginTop: 6, padding: 16, backgroundColor: colors.surfaceElevated, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 20 },
+    surplusHeading: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+    surplusSubtext: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginTop: 4, marginBottom: 14 },
+    surplusOptionBtn: { backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, marginBottom: 10 },
+    surplusBtnTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+    surplusBtnDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+    saveChoiceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 4, marginVertical: 6 },
+    saveChoiceLabel: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+    surplusSkipBtn: { paddingVertical: 8, alignItems: 'center' },
+    surplusSkipText: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
+  });

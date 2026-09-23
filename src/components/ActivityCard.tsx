@@ -1,6 +1,8 @@
 import { SelectionIndicator } from '@/components/SelectionIndicator';
 import { ActivityLogWithDetails } from '@/store/activityStore';
-import { colors } from '@/theme/colors';
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface TagLite {
@@ -28,6 +30,9 @@ export function ActivityCard({
   onLongPressCard,
   onToggleSelect,
 }: ActivityCardProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const handlePress = () => {
     if (selectionMode) {
       onToggleSelect();
@@ -80,35 +85,82 @@ export function ActivityCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    marginBottom: 10,
-    elevation: 2,
-    minHeight: 56,
-    width: '100%',
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  selectedCard: { borderColor: colors.accent, backgroundColor: colors.selectedBg },
-  cardInner: { flexDirection: 'row', alignItems: 'stretch', minHeight: 56 },
-  accentBar: { width: 4, backgroundColor: colors.activityAccent },
-  pressableRow: { flex: 1 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
-  leadSlot: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  cardContent: { flex: 1, justifyContent: 'center' },
-  activityTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
-  noteSnippet: { fontSize: 11, color: colors.textMuted, fontStyle: 'italic', marginTop: 2 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  tagChip: {
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  tagChipText: { fontSize: 10, fontWeight: '600', color: colors.textSecondary },
-  cardPressed: { opacity: 0.7 },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      marginBottom: 10,
+      elevation: 2,
+      minHeight: 56,
+      width: '100%',
+      overflow: 'hidden',
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+    },
+    selectedCard: {
+      borderColor: colors.accent,
+      backgroundColor: colors.selectedBg,
+    },
+    cardInner: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      minHeight: 56,
+    },
+    accentBar: {
+      width: 4,
+      backgroundColor: colors.activityAccent,
+    },
+    pressableRow: {
+      flex: 1,
+    },
+    cardRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+    },
+    leadSlot: {
+      width: 24,
+      height: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+    cardContent: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    activityTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    noteSnippet: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontStyle: 'italic',
+      marginTop: 2,
+    },
+    tagRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 6,
+    },
+    tagChip: {
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      borderRadius: 10,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    tagChipText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    cardPressed: {
+      opacity: 0.7,
+    },
+  });

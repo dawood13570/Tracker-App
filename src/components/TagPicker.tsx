@@ -2,7 +2,8 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Tag } from '../store/tagStore';
-import { colors } from '../theme/colors';
+import { useColors } from '../store/themeStore';
+import { Palette } from '../theme/colors';
 
 interface TagPickerProps {
   allTags: Tag[];
@@ -18,11 +19,15 @@ function TagChip({
   isSelected,
   onPress,
   onDelete,
+  colors,
+  styles,
 }: {
   tag: Tag;
   isSelected: boolean;
   onPress: () => void;
   onDelete: () => void;
+  colors: Palette;
+  styles: ReturnType<typeof createStyles>;
 }) {
   const handleDeletePress = () => {
     Alert.alert(
@@ -34,12 +39,23 @@ function TagChip({
       ]
     );
   };
+
+  const selectedBgColor = tag.color ?? colors.accent;
+
   return (
     <View
-      style={[styles.chip,isSelected && { backgroundColor: tag.color ?? colors.accent, borderColor: tag.color ?? colors.accent },]}
+      style={[
+        styles.chip,
+        isSelected && {
+          backgroundColor: selectedBgColor,
+          borderColor: selectedBgColor,
+        },
+      ]}
     >
       <Pressable onPress={onPress}>
-        <Text style={isSelected ? styles.chipTextSelected : styles.chipText}>{tag.name}</Text>
+        <Text style={isSelected ? styles.chipTextSelected : styles.chipText}>
+          {tag.name}
+        </Text>
       </Pressable>
       <Pressable onPress={handleDeletePress} hitSlop={8} style={styles.chipDeleteX}>
         <Text style={isSelected ? styles.chipTextSelected : styles.chipText}>✕</Text>
@@ -56,6 +72,9 @@ export function TagPicker({
   onCreateTag,
   onDeleteTag,
 }: TagPickerProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [search, setSearch] = useState('');
 
   const selectedTags = allTags.filter((t) => selectedTagIds.includes(t.id));
@@ -87,6 +106,8 @@ export function TagPicker({
               key={tag.id}
               tag={tag}
               isSelected
+              colors={colors}
+              styles={styles}
               onPress={() => onToggleTag(tag.id)}
               onDelete={() => onDeleteTag(tag.id)}
             />
@@ -110,6 +131,8 @@ export function TagPicker({
               key={tag.id}
               tag={tag}
               isSelected={selectedTagIds.includes(tag.id)}
+              colors={colors}
+              styles={styles}
               onPress={() => {
                 onToggleTag(tag.id);
                 setSearch('');
@@ -134,6 +157,8 @@ export function TagPicker({
                   key={tag.id}
                   tag={tag}
                   isSelected={selectedTagIds.includes(tag.id)}
+                  colors={colors}
+                  styles={styles}
                   onPress={() => onToggleTag(tag.id)}
                   onDelete={() => onDeleteTag(tag.id)}
                 />
@@ -146,74 +171,75 @@ export function TagPicker({
   );
 }
 
-const styles = StyleSheet.create({
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 10,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-    gap: 6,
-  },
-  chipDeleteX: {
-    paddingLeft: 2,
-  },
-  chipText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  chipTextSelected: {
-    fontSize: 13,
-    color: colors.textOnAccent,
-    fontWeight: '600',
-  },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
-    backgroundColor: colors.surfaceSubtle,
-    color: colors.textPrimary,
-  },
-  resultsBox: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
-  },
-  createChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    backgroundColor: colors.selectedBg,
-  },
-  createChipText: {
-    fontSize: 13,
-    color: colors.accent,
-    fontWeight: '600',
-  },
-  quickAccessSection: {
-    marginTop: 10,
-  },
-  quickAccessLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 6,
-  },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 10,
+    },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSubtle,
+      gap: 6,
+    },
+    chipDeleteX: {
+      paddingLeft: 2,
+    },
+    chipText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+    },
+    chipTextSelected: {
+      fontSize: 13,
+      color: colors.textOnAccent,
+      fontWeight: '600',
+    },
+    searchInput: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      fontSize: 14,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+    },
+    resultsBox: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 8,
+    },
+    createChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      backgroundColor: colors.selectedBg,
+    },
+    createChipText: {
+      fontSize: 13,
+      color: colors.accent,
+      fontWeight: '600',
+    },
+    quickAccessSection: {
+      marginTop: 10,
+    },
+    quickAccessLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 6,
+    },
+  });

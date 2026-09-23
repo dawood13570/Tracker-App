@@ -12,7 +12,8 @@ import {
   getYearlyTasks,
 } from '@/db/queries';
 import { generatePeriodSeed } from '@/engine/notesSeed';
-import { colors } from '@/theme/colors';
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
 import { isPeriodEligibleForReflection } from '@/utils/reflections';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
@@ -34,6 +35,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function YearScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const yearlyModalRef = useRef<BottomSheet>(null);
   const noteSheetRef = useRef<BottomSheet>(null);
@@ -340,72 +343,89 @@ export default function YearScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  outerContainer: { flex: 1, backgroundColor: colors.background },
-  container: { flex: 1, backgroundColor: colors.background },
-  contentContainer: { padding: 16, paddingBottom: 40 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    paddingHorizontal: 8,
-  },
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  reflectionBtn: {
-    padding: 4,
-  },
-  yearTitle: { fontSize: 20, fontWeight: '700', color: colors.textPrimary },
-  navButton: { padding: 10, backgroundColor: colors.surface, borderRadius: 8 },
-  navButtonText: { color: colors.accent, fontSize: 16, fontWeight: 'bold' },
-  addYearlyHeaderBtn: {
-    backgroundColor: colors.accent,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  monthCell: { width: '25%', aspectRatio: 1.3, alignItems: 'center', justifyContent: 'center', padding: 4, borderRadius: 8 },
-  selectedMonthCell: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.accent },
-  todayMonthCell: { backgroundColor: colors.surfaceSubtle },
-  monthText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
-  statusDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4 },
-  summaryContainer: { marginTop: 24, backgroundColor: colors.surface, borderRadius: 12, padding: 16 },
-  summaryHeader: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, marginBottom: 12 },
-  emptySummary: { fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
-  summaryCard: {
-    backgroundColor: colors.surfaceElevated,
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.accent,
-  },
-  summaryTaskTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
-  completedTaskTitle: { textDecorationLine: 'line-through', color: colors.textMuted },
-  selectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  selectionCountText: { color: colors.textPrimary, fontSize: 15, fontWeight: '700' },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    outerContainer: { flex: 1, backgroundColor: colors.background },
+    container: { flex: 1, backgroundColor: colors.background },
+    contentContainer: { padding: 16, paddingBottom: 40 },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+      paddingHorizontal: 8,
+    },
+    headerCenter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    reflectionBtn: {
+      padding: 4,
+    },
+    yearTitle: { fontSize: 20, fontWeight: '700', color: colors.textPrimary },
+    navButton: { padding: 10, backgroundColor: colors.surface, borderRadius: 8 },
+    navButtonText: { color: colors.accent, fontSize: 16, fontWeight: 'bold' },
+    addYearlyHeaderBtn: {
+      backgroundColor: colors.accent,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    gridContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 8,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
+    monthCell: {
+      width: '25%',
+      aspectRatio: 1.3,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 4,
+      borderRadius: 8,
+    },
+    selectedMonthCell: {
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.accent,
+    },
+    todayMonthCell: { backgroundColor: colors.surfaceSubtle },
+    monthText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+    statusDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4 },
+    summaryContainer: {
+      marginTop: 24,
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+    },
+    summaryHeader: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, marginBottom: 12 },
+    emptySummary: { fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
+    summaryCard: {
+      backgroundColor: colors.surfaceElevated,
+      padding: 12,
+      borderRadius: 8,
+      marginBottom: 8,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.accent,
+    },
+    summaryTaskTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+    completedTaskTitle: { textDecorationLine: 'line-through', color: colors.textMuted },
+    selectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.surface,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    selectionCountText: { color: colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  });

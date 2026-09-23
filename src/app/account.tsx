@@ -1,7 +1,8 @@
-import { useThemeStore } from '@/store/themeStore';
+import { useColors, useThemeStore } from '@/store/themeStore';
 import { useStore } from '@/store/useStore';
-import { colors } from '@/theme/colors';
+import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useMemo } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -26,6 +27,9 @@ const SURPLUS_OPTIONS: { label: string; value: 'breathing_room' | 'raise_bar' | 
 ];
 
 export default function AccountScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const { mode, toggleTheme } = useThemeStore();
   const insets = useSafeAreaInsets();
   const {
@@ -196,10 +200,13 @@ export default function AccountScreen() {
             <Text style={styles.settingTitle}>Light Mode</Text>
             <Text style={styles.settingDesc}>Switch between dark and light appearance.</Text>
           </View>
-          <Switch value={mode === 'light'} onValueChange={toggleTheme} trackColor={{ false: colors.borderSubtle, true: colors.accent }} />
+          <Switch
+            value={mode === 'light'}
+            onValueChange={toggleTheme}
+            trackColor={{ false: colors.borderSubtle, true: colors.accent }}
+          />
         </View>
       </View>
-
 
       <Text style={styles.sectionLabel}>DATA</Text>
       <View style={styles.settingsCard}>
@@ -217,80 +224,81 @@ export default function AccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 20, paddingBottom: 60 },
-  pageTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginBottom: 24,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textMuted,
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  settingsCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: 4,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-  },
-  settingColumn: {
-    padding: 14,
-  },
-  settingTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  settingDesc: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.borderSubtle,
-    marginHorizontal: 14,
-  },
-  presetButtonRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-  presetButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  presetButtonSelected: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accent,
-  },
-  presetButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  presetButtonTextSelected: {
-    color: colors.textOnAccent,
-    fontWeight: '700',
-  },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    content: { padding: 20, paddingBottom: 60 },
+    pageTitle: {
+      fontSize: 22,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      marginBottom: 24,
+    },
+    sectionLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textMuted,
+      letterSpacing: 0.5,
+      marginBottom: 8,
+      marginTop: 16,
+    },
+    settingsCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      padding: 4,
+    },
+    settingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 14,
+    },
+    settingColumn: {
+      padding: 14,
+    },
+    settingTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    settingDesc: {
+      fontSize: 12,
+      color: colors.textMuted,
+      marginTop: 2,
+      lineHeight: 16,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: colors.borderSubtle,
+      marginHorizontal: 14,
+    },
+    presetButtonRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 14,
+    },
+    presetButton: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      backgroundColor: colors.surfaceSubtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    presetButtonSelected: {
+      borderColor: colors.accent,
+      backgroundColor: colors.accent,
+    },
+    presetButtonText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    presetButtonTextSelected: {
+      color: colors.textOnAccent,
+      fontWeight: '700',
+    },
+  });

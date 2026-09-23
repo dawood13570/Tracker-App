@@ -1,8 +1,9 @@
 // src/components/NewCustomReflectionModal.tsx
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import React, { useMemo, useState } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../theme/colors';
 
 interface Props {
   sheetRef: React.RefObject<BottomSheet | null>;
@@ -11,6 +12,9 @@ interface Props {
 }
 
 export default function NewCustomReflectionModal({ sheetRef, onConfirmed, onClose }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [title, setTitle] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -73,25 +77,42 @@ export default function NewCustomReflectionModal({ sheetRef, onConfirmed, onClos
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: 24, gap: 14 },
-  heading: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 8 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    backgroundColor: colors.surfaceSubtle,
-    color: colors.textPrimary,
-  },
-  dateRow: { flexDirection: 'row', gap: 10 },
-  submitBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  submitText: { color: colors.textOnAccent, fontWeight: '700', fontSize: 15 },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    content: {
+      padding: 24,
+      gap: 14,
+    },
+    heading: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 14,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+    },
+    dateRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    submitBtn: {
+      backgroundColor: colors.accent,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    submitText: {
+      color: colors.textOnAccent,
+      fontWeight: '700',
+      fontSize: 15,
+    },
+  });

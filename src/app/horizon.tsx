@@ -39,7 +39,8 @@ import { taskHasProgress } from '@/engine/taskShape';
 import { ActivityLogWithDetails } from '@/store/activityStore';
 import { useTagStore } from '@/store/tagStore';
 import { useTaskStore } from '@/store/taskStore';
-import { colors } from '@/theme/colors';
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
 import { getAppToday } from '@/utils/date';
 import { isPeriodEligibleForReflection } from '@/utils/reflections';
 import { Ionicons } from '@expo/vector-icons';
@@ -85,6 +86,9 @@ type ZoomLevel = 'week' | 'month' | 'year';
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export default function HorizonScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const todayStr = useMemo(() => getAppToday(), []);
 
   const weeklyModalRef = useRef<BottomSheet>(null);
@@ -533,7 +537,10 @@ export default function HorizonScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container} edges={['top']}>
-        <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
+        <StatusBar
+          barStyle={colors.background === '#121212' ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.surface}
+        />
 
         <View style={styles.stickyHeader}>
           {selectionMode ? (
@@ -1153,89 +1160,147 @@ export default function HorizonScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  stickyHeader: { backgroundColor: colors.surface, borderBottomWidth: 1, borderColor: colors.borderSubtle, elevation: 2 },
-  headerContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
-  headerTop: { flexDirection: 'row', alignItems: 'center' },
-  headerLeftGroup: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
-  headerTitlePressable: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: colors.textPrimary, flexShrink: 1 },
-  navRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-  navBtn: { padding: 4 },
-  todayBtnText: { fontSize: 18, fontWeight: '700', color: colors.accent },
-  selectionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
-  selectionCountText: { fontSize: 15, color: colors.textPrimary, fontWeight: '700' },
-  selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 60 },
-  matrixWrapper: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.borderSubtle, padding: 10, marginBottom: 16 },
-  weekLabelsRow: { flexDirection: 'row', marginBottom: 6, paddingBottom: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSubtle },
-  weekNumSpacer: { width: 26 },
-  weekLabelText: { flex: 1, fontSize: 10, fontWeight: '700', color: colors.textMuted, textAlign: 'center' },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap' },
-  gridContainerWeek: { flexWrap: 'nowrap' },
-  monthWeekRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 1 },
-  weekNumCell: { width: 26, alignItems: 'center', justifyContent: 'center' },
-  weekNumText: { fontSize: 10, fontWeight: '700', color: colors.textMuted },
-  monthDayCell: { flex: 1, aspectRatio: 1.15, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
-  weekCell: { flex: 1, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
-  cellActive: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.accent },
-  cellToday: { backgroundColor: colors.surfaceSubtle },
-  cellMuted: { opacity: 0.22 },
-  cellNum: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
-  cellNumMuted: { color: colors.textMuted },
-  cellNumSelected: { color: colors.accent, fontWeight: '700' },
-  densityDot: { width: 4, height: 4, borderRadius: 2, marginTop: 4 },
-  yearGridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  yearMonthCard: { width: '31%', backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.borderSubtle, padding: 10, gap: 6 },
-  yearMonthCardCurrent: { borderColor: colors.accent },
-  yearMonthCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  yearMonthName: { fontSize: 13, fontWeight: '700', color: colors.textPrimary },
-  yearMonthNameCurrent: { color: colors.accent },
-  yearProgressTrack: { height: 4, backgroundColor: colors.surfaceSubtle, borderRadius: 2, overflow: 'hidden' },
-  yearProgressFill: { height: 4, backgroundColor: colors.accent, borderRadius: 2 },
-  yearFooterText: { fontSize: 10, color: colors.textMuted },
-  sectionBlock: { marginBottom: 20 },
-  sectionHeaderLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  sectionHeaderTitle: { fontSize: 11, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.8 },
-  sectionItemCount: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
-  emptyCard: { backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.borderSubtle, borderStyle: 'dashed', padding: 20, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  emptyCardText: { fontSize: 12, color: colors.textMuted, fontWeight: '500' },
-  emptyNotice: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', paddingVertical: 8 },
-  dayFocusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  todayBadge: { backgroundColor: colors.accent, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 },
-  todayBadgeText: { fontSize: 9, fontWeight: '800', color: colors.textOnAccent },
-  drillWeekBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
-  drillWeekBtnText: { fontSize: 11, fontWeight: '700', color: colors.accent },
-  dayGroupContainer: { marginBottom: 14 },
-  dayGroupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingBottom: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSubtle },
-  dayGroupTitle: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
-  subCategoryTitle: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.6, marginBottom: 6, marginTop: 4 },
-  eventRowCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.surfaceElevated,
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  eventTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
-  eventMeta: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
-  habitRowCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.surfaceElevated,
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  habitTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary, flex: 1 },
-  habitDone: { textDecorationLine: 'line-through', color: colors.textMuted },
-  habitStreak: { fontSize: 12, fontWeight: '700', color: colors.accent },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    stickyHeader: {
+      backgroundColor: colors.surface,
+      borderBottomWidth: 1,
+      borderColor: colors.borderSubtle,
+      elevation: 2,
+    },
+    headerContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
+    headerTop: { flexDirection: 'row', alignItems: 'center' },
+    headerLeftGroup: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
+    headerTitlePressable: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
+    headerTitle: { fontSize: 16, fontWeight: '800', color: colors.textPrimary, flexShrink: 1 },
+    navRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
+    navBtn: { padding: 4 },
+    todayBtnText: { fontSize: 18, fontWeight: '700', color: colors.accent },
+    selectionBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+    selectionCountText: { fontSize: 15, color: colors.textPrimary, fontWeight: '700' },
+    selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+    scrollContent: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 60 },
+    matrixWrapper: {
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      padding: 10,
+      marginBottom: 16,
+    },
+    weekLabelsRow: {
+      flexDirection: 'row',
+      marginBottom: 6,
+      paddingBottom: 4,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.borderSubtle,
+    },
+    weekNumSpacer: { width: 26 },
+    weekLabelText: { flex: 1, fontSize: 10, fontWeight: '700', color: colors.textMuted, textAlign: 'center' },
+    gridContainer: { flexDirection: 'row', flexWrap: 'wrap' },
+    gridContainerWeek: { flexWrap: 'nowrap' },
+    monthWeekRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 1 },
+    weekNumCell: { width: 26, alignItems: 'center', justifyContent: 'center' },
+    weekNumText: { fontSize: 10, fontWeight: '700', color: colors.textMuted },
+    monthDayCell: { flex: 1, aspectRatio: 1.15, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
+    weekCell: { flex: 1, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+    cellActive: { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.accent },
+    cellToday: { backgroundColor: colors.surfaceSubtle },
+    cellMuted: { opacity: 0.22 },
+    cellNum: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
+    cellNumMuted: { color: colors.textMuted },
+    cellNumSelected: { color: colors.accent, fontWeight: '700' },
+    densityDot: { width: 4, height: 4, borderRadius: 2, marginTop: 4 },
+    yearGridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    yearMonthCard: {
+      width: '31%',
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      padding: 10,
+      gap: 6,
+    },
+    yearMonthCardCurrent: { borderColor: colors.accent },
+    yearMonthCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    yearMonthName: { fontSize: 13, fontWeight: '700', color: colors.textPrimary },
+    yearMonthNameCurrent: { color: colors.accent },
+    yearProgressTrack: { height: 4, backgroundColor: colors.surfaceSubtle, borderRadius: 2, overflow: 'hidden' },
+    yearProgressFill: { height: 4, backgroundColor: colors.accent, borderRadius: 2 },
+    yearFooterText: { fontSize: 10, color: colors.textMuted },
+    sectionBlock: { marginBottom: 20 },
+    sectionHeaderLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+    sectionHeaderTitle: { fontSize: 11, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.8 },
+    sectionItemCount: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
+    emptyCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      borderStyle: 'dashed',
+      padding: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    emptyCardText: { fontSize: 12, color: colors.textMuted, fontWeight: '500' },
+    emptyNotice: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', paddingVertical: 8 },
+    dayFocusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    todayBadge: { backgroundColor: colors.accent, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 },
+    todayBadgeText: { fontSize: 9, fontWeight: '800', color: colors.textOnAccent },
+    drillWeekBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
+    drillWeekBtnText: { fontSize: 11, fontWeight: '700', color: colors.accent },
+    dayGroupContainer: { marginBottom: 14 },
+    dayGroupHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 6,
+      paddingBottom: 4,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.borderSubtle,
+    },
+    dayGroupTitle: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+    subCategoryTitle: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: colors.textMuted,
+      letterSpacing: 0.6,
+      marginBottom: 6,
+      marginTop: 4,
+    },
+    eventRowCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.surfaceElevated,
+      padding: 10,
+      borderRadius: 8,
+      marginBottom: 6,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
+    eventTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
+    eventMeta: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+    habitRowCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.surfaceElevated,
+      padding: 10,
+      borderRadius: 8,
+      marginBottom: 6,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
+    habitTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary, flex: 1 },
+    habitDone: { textDecorationLine: 'line-through', color: colors.textMuted },
+    habitStreak: { fontSize: 12, fontWeight: '700', color: colors.accent },
+  });

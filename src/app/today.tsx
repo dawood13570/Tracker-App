@@ -13,7 +13,7 @@ import {
   getAllTagAssociations,
   getCurrentProgress,
   getProgressLogsByTask,
-  getSubtaskCountsForTaskIds
+  getSubtaskCountsForTaskIds,
 } from '@/db/queries';
 import { calculatePace, PaceResult } from '@/engine/pace';
 import { shouldShowPaceStatus } from '@/engine/paceConfidence';
@@ -24,9 +24,10 @@ import { EventRow, useEventStore } from '@/store/eventStore';
 import { HabitWithStatus, useHabitStore } from '@/store/habitStore';
 import { useTagStore } from '@/store/tagStore';
 import { Task, useTaskStore } from '@/store/taskStore';
+import { useColors } from '@/store/themeStore';
 import { useStore } from '@/store/useStore';
 import { runRolloverNow } from '@/tasks/rolloverTask';
-import { colors } from '@/theme/colors';
+import { Palette } from '@/theme/colors';
 import { getAppToday, getLocalDateString, isEligibleToFinalizeDay } from '@/utils/date';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
@@ -64,11 +65,15 @@ function SectionHeader({
   count,
   isExpanded,
   onToggle,
+  colors,
+  styles,
 }: {
   title: string;
   count: number;
   isExpanded: boolean;
   onToggle: () => void;
+  colors: Palette;
+  styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <TouchableOpacity style={styles.sectionHeaderRow} onPress={onToggle} activeOpacity={0.7}>
@@ -82,7 +87,17 @@ function SectionHeader({
   );
 }
 
-export function DateHeader({ dateStr, onOpenNote }: { dateStr: string; onOpenNote: () => void }) {
+export function DateHeader({
+  dateStr,
+  onOpenNote,
+  colors,
+  styles,
+}: {
+  dateStr: string;
+  onOpenNote: () => void;
+  colors: Palette;
+  styles: ReturnType<typeof createStyles>;
+}) {
   const displayDate = useMemo(() => {
     try {
       return parseISO(dateStr).toLocaleDateString('en-GB', {
@@ -112,6 +127,9 @@ export function DateHeader({ dateStr, onOpenNote }: { dateStr: string; onOpenNot
 }
 
 export default function AppDashboard() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const taskSheetRef = useRef<BottomSheet>(null);
   const progressSheetRef = useRef<BottomSheet>(null);
   const flashListRef = useRef<FlashListRef<any>>(null);
@@ -162,7 +180,7 @@ export default function AppDashboard() {
   const { habits, loadHabits, logHabit, removeHabit } = useHabitStore();
   const { events, loadEvents, removeEvent } = useEventStore();
   const { logsByDate, loadActivitiesForDate, removeActivityEntry } = useActivityStore();
-  const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, tagVersion } = useTagStore();
+  const { tags: allTags, loadTags, loadMostUsedTags, tagVersion } = useTagStore();
 
   const [todayStr, setTodayStr] = useState<string>(() => getAppToday());
   const canFinalize = useMemo(() => isEligibleToFinalizeDay(), [todayStr]);
@@ -297,11 +315,6 @@ export default function AppDashboard() {
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
     taskSheetRef.current?.expand();
-  };
-
-  const handleOpenProgressLog = (task: Task) => {
-    setLoggingTask(task);
-    progressSheetRef.current?.expand();
   };
 
   const handleToggleExpand = (taskId: number) => {
@@ -592,7 +605,12 @@ export default function AppDashboard() {
               </View>
             </View>
           ) : (
-            <DateHeader dateStr={todayStr} onOpenNote={() => router.push('/notes-history')} />
+            <DateHeader
+              dateStr={todayStr}
+              onOpenNote={() => router.push('/notes-history')}
+              colors={colors}
+              styles={styles}
+            />
           )}
         </View>
 
@@ -608,7 +626,7 @@ export default function AppDashboard() {
 
         <View style={{ flex: 1 }}>
           {isLoading ? (
-            <ActivityIndicator size="large" color="#1c8db9" style={{ marginTop: 40 }} />
+            <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 40 }} />
           ) : (
             <FlashList
               ref={flashListRef}
@@ -675,6 +693,8 @@ export default function AppDashboard() {
                         count={filteredEvents.length}
                         isExpanded={expandedSections.events}
                         onToggle={() => toggleSection('events')}
+                        colors={colors}
+                        styles={styles}
                       />
                       {expandedSections.events &&
                         filteredEvents.map((event) => (
@@ -697,6 +717,8 @@ export default function AppDashboard() {
                         count={filteredHabits.length}
                         isExpanded={expandedSections.habits}
                         onToggle={() => toggleSection('habits')}
+                        colors={colors}
+                        styles={styles}
                       />
                       {expandedSections.habits &&
                         filteredHabits.map((habit) => (
@@ -720,6 +742,8 @@ export default function AppDashboard() {
                         count={filteredActivities.length}
                         isExpanded={expandedSections.activities}
                         onToggle={() => toggleSection('activities')}
+                        colors={colors}
+                        styles={styles}
                       />
                       {expandedSections.activities &&
                         filteredActivities.map((entry) => (
@@ -753,6 +777,8 @@ export default function AppDashboard() {
                     count={incompleteTasks.length}
                     isExpanded={expandedSections.tasks}
                     onToggle={() => toggleSection('tasks')}
+                    colors={colors}
+                    styles={styles}
                   />
                 </View>
               }
@@ -764,6 +790,8 @@ export default function AppDashboard() {
                       count={completedTasks.length}
                       isExpanded={expandedSections.completedTasks}
                       onToggle={() => toggleSection('completedTasks')}
+                      colors={colors}
+                      styles={styles}
                     />
                     {expandedSections.completedTasks &&
                       completedTasks.map((item) => (
@@ -867,136 +895,136 @@ export default function AppDashboard() {
           }}
           onClose={() => setSelectedActivity(null)}
         />
-
       </SafeAreaView>
     </GestureHandlerRootView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  dateHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingLeft: 25,
-    paddingRight: 16,
-    paddingTop: 18,
-  },
-  dateHeaderText: { fontSize: 22, color: colors.textPrimary, fontWeight: '800' },
-  noteButton: { padding: 6 },
-  stickyHeader: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
-    elevation: 2,
-    paddingBottom: 16,
-  },
-  selectionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  cancelBtn: { padding: 4 },
-  selectionCountText: { fontSize: 16, color: colors.textPrimary, fontWeight: '600' },
-  selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  iconActionBtn: { padding: 4 },
-  actionDisabled: { opacity: 0.35 },
-  listContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 90 },
-  finalizeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginBottom: 14,
-  },
-  finalizeBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  finalizeBannerText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  finalizeActionBtn: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  finalizeActionText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textOnAccent,
-  },
-  buttonStuff: {
-    width: 60,
-    height: 60,
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 30,
-    elevation: 6,
-    shadowColor: colors.shadowColor,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-  },
-  buttonText: { color: colors.textOnAccent, fontSize: 32, fontWeight: '300', textAlign: 'center', marginTop: -3 },
-  emptyState: { marginTop: 10, alignItems: 'center', paddingHorizontal: 32 },
-  emptyStateText: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
-  emptyStateSubtext: { fontSize: 14, color: colors.textMuted, marginTop: 6, textAlign: 'center' },
-  archiveBanner: {
-    marginBottom: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: colors.dangerBg,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.dangerBorder,
-  },
-  archiveBannerText: { fontSize: 12, color: colors.danger, textAlign: 'center' },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  sectionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sectionHeaderIndicator: {
-    width: 3,
-    height: 12,
-    backgroundColor: colors.accent,
-    borderRadius: 1.5,
-  },
-  sectionHeaderTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  sectionCountText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textMuted,
-  },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    dateHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingLeft: 25,
+      paddingRight: 16,
+      paddingTop: 18,
+    },
+    dateHeaderText: { fontSize: 22, color: colors.textPrimary, fontWeight: '800' },
+    noteButton: { padding: 6 },
+    stickyHeader: {
+      backgroundColor: colors.surface,
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+      elevation: 2,
+      paddingBottom: 16,
+    },
+    selectionBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingTop: 16,
+    },
+    cancelBtn: { padding: 4 },
+    selectionCountText: { fontSize: 16, color: colors.textPrimary, fontWeight: '600' },
+    selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+    iconActionBtn: { padding: 4 },
+    actionDisabled: { opacity: 0.35 },
+    listContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 90 },
+    finalizeBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      borderRadius: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      marginBottom: 14,
+    },
+    finalizeBannerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flex: 1,
+    },
+    finalizeBannerText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    finalizeActionBtn: {
+      backgroundColor: colors.accent,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    finalizeActionText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textOnAccent,
+    },
+    buttonStuff: {
+      width: 60,
+      height: 60,
+      position: 'absolute',
+      bottom: 20,
+      right: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderRadius: 30,
+      elevation: 6,
+      shadowColor: colors.shadowColor,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.4,
+      shadowRadius: 4,
+    },
+    buttonText: { color: colors.textOnAccent, fontSize: 32, fontWeight: '300', textAlign: 'center', marginTop: -3 },
+    emptyState: { marginTop: 10, alignItems: 'center', paddingHorizontal: 32 },
+    emptyStateText: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
+    emptyStateSubtext: { fontSize: 14, color: colors.textMuted, marginTop: 6, textAlign: 'center' },
+    archiveBanner: {
+      marginBottom: 10,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      backgroundColor: colors.dangerBg,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.dangerBorder,
+    },
+    archiveBannerText: { fontSize: 12, color: colors.danger, textAlign: 'center' },
+    sectionHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 10,
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    sectionHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    sectionHeaderIndicator: {
+      width: 3,
+      height: 12,
+      backgroundColor: colors.accent,
+      borderRadius: 1.5,
+    },
+    sectionHeaderTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+    },
+    sectionCountText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+  });

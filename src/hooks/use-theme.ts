@@ -1,14 +1,27 @@
+import { useColors, useThemeStore } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
+
 /**
- * Learn more about light and dark modes:
- * https://docs.expo.dev/guides/color-schemes/
+ * Returns the active theme palette and mode from the app theme store.
+ * Reactive across all components when theme is toggled.
  */
+export function useTheme(): Palette {
+  return useColors();
+}
 
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+/**
+ * Optional helper if components also need the current mode ('light' | 'dark')
+ * or the ability to toggle it.
+ */
+export function useThemeContext() {
+  const { mode, setMode, toggleTheme } = useThemeStore();
+  const colors = useColors();
 
-export function useTheme() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'unspecified' ? 'light' : scheme;
-
-  return Colors[theme];
+  return {
+    mode,
+    colors,
+    setMode,
+    toggleTheme,
+    isDark: mode === 'dark',
+  };
 }

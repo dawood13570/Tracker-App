@@ -51,7 +51,7 @@ export const useStore = create<AppState>((set) => ({
   dayBoundaryHour: 3,
   setDayBoundaryHour: (hour: number) => set({ dayBoundaryHour: hour }),
 
-  nightOwlMode: true,
+  nightOwlMode: false,
   setNightOwlMode: (enabled: boolean) => set({ nightOwlMode: enabled }),
 
   manualDayOverrideDate: null,

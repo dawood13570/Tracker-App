@@ -1,15 +1,16 @@
 import { useTagStore } from '@/store/tagStore';
-import { colors } from '@/theme/colors';
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 interface TagFilterBarProps {
@@ -31,6 +32,9 @@ export function TagFilterBar({
   strictOnly,
   onToggleStrictOnly,
 }: TagFilterBarProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const { tags: allTags, mostUsedTags } = useTagStore();
 
   const activeTags = useMemo(
@@ -153,126 +157,127 @@ export function TagFilterBar({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 4,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    height: 38,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  searchIcon: { marginRight: 6 },
-  searchInput: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontSize: 13,
-    paddingVertical: 0,
-  },
-  clearInputBtn: { padding: 4 },
-  suggestionsBox: {
-    marginTop: 8,
-    marginBottom: 4,
-    backgroundColor: colors.surfaceElevated,
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  subHeading: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontWeight: '600',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  suggestChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-  },
-  suggestChipText: { fontSize: 12, color: colors.textPrimary, fontWeight: '600' },
-  activeRow: {
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  activeScroll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingBottom: 4,
-  },
-  activeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    gap: 6,
-  },
-  activeChipText: { fontSize: 12, fontWeight: '700', color: colors.textOnAccent },
-  removeChipBtn: {
-    padding: 2,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-  },
-  clearAllBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  clearAllText: { fontSize: 11, color: colors.danger, fontWeight: '600' },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: 4,
-  },
-  toggleLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginRight: 4,
-    fontWeight: '500',
-  },
-  quickPickRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-  },
-  quickPickLabel: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontWeight: '600',
-    marginRight: 2,
-  },
-  quickChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  quickChipText: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    container: {
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: 4,
+      backgroundColor: colors.surface,
+      borderBottomWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surfaceSubtle,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      height: 38,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    searchIcon: { marginRight: 6 },
+    searchInput: {
+      flex: 1,
+      color: colors.textPrimary,
+      fontSize: 13,
+      paddingVertical: 0,
+    },
+    clearInputBtn: { padding: 4 },
+    suggestionsBox: {
+      marginTop: 8,
+      marginBottom: 4,
+      backgroundColor: colors.surfaceElevated,
+      padding: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
+    subHeading: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontWeight: '600',
+      marginBottom: 6,
+      textTransform: 'uppercase',
+    },
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    suggestChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 14,
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+    },
+    suggestChipText: { fontSize: 12, color: colors.textPrimary, fontWeight: '600' },
+    activeRow: {
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    activeScroll: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingBottom: 4,
+    },
+    activeChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 14,
+      gap: 6,
+    },
+    activeChipText: { fontSize: 12, fontWeight: '700', color: colors.textOnAccent },
+    removeChipBtn: {
+      padding: 2,
+      borderRadius: 8,
+      backgroundColor: 'rgba(0,0,0,0.2)',
+    },
+    clearAllBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    clearAllText: { fontSize: 11, color: colors.danger, fontWeight: '600' },
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      marginTop: 4,
+    },
+    toggleLabel: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      marginRight: 4,
+      fontWeight: '500',
+    },
+    quickPickRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 6,
+    },
+    quickPickLabel: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontWeight: '600',
+      marginRight: 2,
+    },
+    quickChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    quickChipText: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      fontWeight: '500',
+    },
+  });

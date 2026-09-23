@@ -10,7 +10,8 @@ import {
 } from '../db/queries';
 import { EventRow, useEventStore } from '../store/eventStore';
 import { useTagStore } from '../store/tagStore';
-import { colors } from '../theme/colors';
+import { useColors } from '../store/themeStore';
+import { Palette } from '../theme/colors';
 import { AddType, AddTypeSwitcher } from './AddTypeSwitcher';
 import { TagPicker } from './TagPicker';
 
@@ -29,6 +30,9 @@ export default function NewEventModal({
   onClose,
   onSwitchType,
 }: NewEventModalProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
   const [date, setDate] = useState(new Date());
@@ -288,21 +292,95 @@ export default function NewEventModal({
   );
 }
 
-const styles = StyleSheet.create({
-  contentContainer: { padding: 24 },
-  titleText: { fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 20, color: colors.textPrimary },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 10 },
-  label: { fontSize: 16, fontWeight: '500', color: colors.textPrimary },
-  pickerPressable: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.surfaceSubtle },
-  pickerText: { fontSize: 15, color: colors.textPrimary },
-  toggleChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 6, backgroundColor: colors.surfaceSubtle },
-  toggleChipActive: { borderColor: colors.eventAccent, backgroundColor: colors.selectedBg },
-  toggleChipText: { fontSize: 13, color: colors.textSecondary },
-  toggleChipTextActive: { fontSize: 13, color: colors.eventAccent, fontWeight: '600' },
-  dynamicContainer: { marginTop: 10, padding: 12, backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
-  subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
-  submitButton: { backgroundColor: colors.eventAccent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
-  submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
-  submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    contentContainer: { padding: 24 },
+    titleText: {
+      fontSize: 18,
+      fontWeight: '600',
+      textAlign: 'center',
+      marginBottom: 20,
+      color: colors.textPrimary,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginVertical: 10,
+    },
+    label: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: colors.textPrimary,
+    },
+    pickerPressable: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: colors.surfaceSubtle,
+    },
+    pickerText: {
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    toggleChip: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      backgroundColor: colors.surfaceSubtle,
+    },
+    toggleChipActive: {
+      borderColor: colors.eventAccent,
+      backgroundColor: colors.selectedBg,
+    },
+    toggleChipText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+    },
+    toggleChipTextActive: {
+      fontSize: 13,
+      color: colors.eventAccent,
+      fontWeight: '600',
+    },
+    dynamicContainer: {
+      marginTop: 10,
+      padding: 12,
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    subSectionTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      marginBottom: 8,
+    },
+    submitButton: {
+      backgroundColor: colors.eventAccent,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    submitButtonDisabled: {
+      backgroundColor: colors.surfaceElevated,
+    },
+    submitButtonText: {
+      color: colors.textOnAccent,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });

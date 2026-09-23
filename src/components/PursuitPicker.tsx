@@ -1,5 +1,7 @@
 // src/components/PursuitPicker.tsx
-import { useEffect, useState } from 'react';
+import { useColors } from '@/store/themeStore';
+import { Palette } from '@/theme/colors';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -9,7 +11,6 @@ import {
   View,
 } from 'react-native';
 import { getAllPursuits, insertPursuit, PursuitRow } from '../db/queries';
-import { colors } from '../theme/colors';
 
 export interface PursuitPickerProps {
   selectedPursuitId: number | null;
@@ -17,6 +18,9 @@ export interface PursuitPickerProps {
 }
 
 export function PursuitPicker({ selectedPursuitId, onSelect }: PursuitPickerProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [pursuits, setPursuits] = useState<PursuitRow[]>([]);
   const [newTitle, setNewTitle] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -76,40 +80,41 @@ export function PursuitPicker({ selectedPursuitId, onSelect }: PursuitPickerProp
   );
 }
 
-const styles = StyleSheet.create({
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-    marginRight: 6,
-  },
-  chipSelected: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
-  chipText: { fontSize: 12, color: colors.textSecondary },
-  chipTextSelected: { fontSize: 12, fontWeight: '600', color: colors.selectedText },
-  chipCreate: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.accent,
-  },
-  chipCreateText: { fontSize: 12, color: colors.accent, fontWeight: '600' },
-  createRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  createInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    fontSize: 13,
-    backgroundColor: colors.surfaceSubtle,
-    color: colors.textPrimary,
-  },
-  createBtn: { backgroundColor: colors.accent, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 6 },
-  createBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    chip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceSubtle,
+      marginRight: 6,
+    },
+    chipSelected: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
+    chipText: { fontSize: 12, color: colors.textSecondary },
+    chipTextSelected: { fontSize: 12, fontWeight: '600', color: colors.selectedText },
+    chipCreate: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: colors.accent,
+    },
+    chipCreateText: { fontSize: 12, color: colors.accent, fontWeight: '600' },
+    createRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+    createInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      fontSize: 13,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+    },
+    createBtn: { backgroundColor: colors.accent, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 6 },
+    createBtnText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 13 },
+  });

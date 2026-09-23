@@ -8,7 +8,8 @@ import {
 } from '../db/queries';
 import { HabitWithStatus, useHabitStore } from '../store/habitStore';
 import { useTagStore } from '../store/tagStore';
-import { colors } from '../theme/colors';
+import { useColors } from '../store/themeStore';
+import { Palette } from '../theme/colors';
 import { AddType, AddTypeSwitcher } from './AddTypeSwitcher';
 import { TagPicker } from './TagPicker';
 
@@ -32,6 +33,9 @@ export default function NewHabitModal({
   onClose,
   onSwitchType,
 }: NewHabitModalProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [title, setTitle] = useState('');
   const [cadenceType, setCadenceType] = useState<'daily' | 'weekly_n_times'>('daily');
   const [cadenceTarget, setCadenceTarget] = useState('');
@@ -134,7 +138,7 @@ export default function NewHabitModal({
       index={-1}
       snapPoints={snapPoints}
       enablePanDownToClose
-      backgroundStyle={{ backgroundColor: colors.surface }}
+      backgroundStyle={styles.bottomSheetBackground}
       keyboardBehavior="fillParent"
       keyboardBlurBehavior="restore"
       onClose={() => {
@@ -218,21 +222,104 @@ export default function NewHabitModal({
   );
 }
 
-const styles = StyleSheet.create({
-  contentContainer: { padding: 24 },
-  titleText: { fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 20, color: colors.textPrimary },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: colors.surfaceSubtle, color: colors.textPrimary },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 10 },
-  label: { fontSize: 16, fontWeight: '500', color: colors.textPrimary },
-  selectorGroup: { flexDirection: 'row' },
-  selectorItem: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 20, backgroundColor: colors.surfaceSubtle, marginLeft: 6 },
-  selectedItem: { borderColor: colors.selectedBorder, backgroundColor: colors.selectedBg },
-  unselectedText: { color: colors.textSecondary, fontSize: 13 },
-  selectedText: { color: colors.selectedText, fontWeight: '600', fontSize: 13 },
-  inputs: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 16, backgroundColor: colors.surfaceSubtle, marginLeft: 12, color: colors.textPrimary },
-  dynamicContainer: { marginTop: 10, padding: 12, backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
-  subSectionTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
-  submitButton: { backgroundColor: colors.habitAccent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
-  submitButtonDisabled: { backgroundColor: colors.surfaceElevated },
-  submitButtonText: { color: colors.textOnAccent, fontSize: 16, fontWeight: '600' },
-});
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
+    bottomSheetBackground: {
+      backgroundColor: colors.surface,
+    },
+    contentContainer: {
+      padding: 24,
+    },
+    titleText: {
+      fontSize: 18,
+      fontWeight: '600',
+      textAlign: 'center',
+      marginBottom: 20,
+      color: colors.textPrimary,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginVertical: 10,
+    },
+    label: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: colors.textPrimary,
+    },
+    selectorGroup: {
+      flexDirection: 'row',
+    },
+    selectorItem: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 20,
+      backgroundColor: colors.surfaceSubtle,
+      marginLeft: 6,
+    },
+    selectedItem: {
+      borderColor: colors.selectedBorder,
+      backgroundColor: colors.selectedBg,
+    },
+    unselectedText: {
+      color: colors.textSecondary,
+      fontSize: 13,
+    },
+    selectedText: {
+      color: colors.selectedText,
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    inputs: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      fontSize: 16,
+      backgroundColor: colors.surfaceSubtle,
+      marginLeft: 12,
+      color: colors.textPrimary,
+    },
+    dynamicContainer: {
+      marginTop: 10,
+      padding: 12,
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    subSectionTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      marginBottom: 8,
+    },
+    submitButton: {
+      backgroundColor: colors.habitAccent,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    submitButtonDisabled: {
+      backgroundColor: colors.surfaceElevated,
+    },
+    submitButtonText: {
+      color: colors.textOnAccent,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });

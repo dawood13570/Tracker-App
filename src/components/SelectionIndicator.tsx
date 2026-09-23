@@ -1,16 +1,28 @@
-//selectionIndicator.tsx
+// selectionIndicator.tsx
+import { useColors } from '@/store/themeStore';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View } from 'react-native';
-import { colors } from '../theme/colors';
 
 interface SelectionIndicatorProps {
   isSelected: boolean;
 }
 
 export function SelectionIndicator({ isSelected }: SelectionIndicatorProps) {
+  const colors = useColors();
+
   return (
-    <View style={[styles.circle, isSelected && styles.circleSelected]}>
-      {isSelected && <Ionicons name="checkmark" size={14} color={colors.textOnAccent ?? '#ffffff'} />}
+    <View
+      style={[
+        styles.circle,
+        {
+          borderColor: isSelected ? colors.accent : colors.textMuted ?? '#888888',
+          backgroundColor: isSelected ? colors.accent : 'transparent',
+        },
+      ]}
+    >
+      {isSelected && (
+        <Ionicons name="checkmark" size={14} color={colors.textOnAccent ?? '#ffffff'} />
+      )}
     </View>
   );
 }
@@ -21,13 +33,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
-    borderColor: colors.textMuted ?? '#888888',
-    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  circleSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
   },
 });
