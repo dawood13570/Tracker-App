@@ -1,3 +1,4 @@
+import { reportError } from '../utils/errors';
 import { create } from 'zustand';
 import {
     deleteEvent,
@@ -6,11 +7,12 @@ import {
     updateEvent,
 } from '../db/queries';
 import { events as eventsTable } from '../db/schema';
-import { getLocalDateString } from '../utils/date';
+import { getAppToday } from '../utils/date';
 
 export type EventRow = typeof eventsTable.$inferSelect;
 
 export interface NewEventPayload {
+  pursuitId?: number | null;
   title: string;
   startTime: string;
   endTime?: string | null;
@@ -28,6 +30,7 @@ interface EventState {
   updateEvent: (
     id: number,
     data: Partial<{
+      pursuitId: number | null;
       title: string;
       startTime: string;
       endTime: string | null;
@@ -40,7 +43,7 @@ interface EventState {
 export const useEventStore = create<EventState>((set, get) => ({
   events: [],
   isLoading: false,
-  selectedDate: getLocalDateString(),
+  selectedDate: getAppToday(),
 
   setSelectedDate: (date: string) => {
     set({ selectedDate: date });
@@ -48,13 +51,14 @@ export const useEventStore = create<EventState>((set, get) => ({
   },
 
   loadEvents: async (date?: string) => {
-    const targetDate = date ?? get().selectedDate;
+    const targetDate = date ?? getAppToday();
+        set({ selectedDate: targetDate });
     set({ isLoading: true });
     try {
       const data = await getEventsByDate(targetDate);
       set({ events: data });
     } catch (error) {
-      console.error('Failed to load events:', error);
+      reportError(error);
     } finally {
       set({ isLoading: false });
     }
@@ -69,7 +73,7 @@ export const useEventStore = create<EventState>((set, get) => ({
       }
       return null;
     } catch (error) {
-      console.error('Failed to add event:', error);
+      reportError(error);
       return null;
     }
   },
@@ -79,7 +83,7 @@ export const useEventStore = create<EventState>((set, get) => ({
       await updateEvent(id, data);
       await get().loadEvents();
     } catch (error) {
-      console.error(`Failed to update event ${id}:`, error);
+      reportError(error);
     }
   },
 
@@ -90,7 +94,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         events: state.events.filter((e) => e.id !== id),
       }));
     } catch (error) {
-      console.error(`Failed to remove event ${id}:`, error);
+      reportError(error);
     }
   },
 }));

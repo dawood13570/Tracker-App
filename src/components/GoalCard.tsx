@@ -1,3 +1,7 @@
+import { isQuantityGoal, reconcileQuantityGoal } from '../db/quantityPlanning';
+import { getTaskById } from '../db/queries';
+import { getAppToday } from '../utils/date';
+import { reportError } from '../utils/errors';
 import { TaskRow } from '@/db/queries';
 import { useColors } from '@/store/themeStore';
 import { Palette } from '@/theme/colors';
@@ -12,6 +16,8 @@ interface GoalCardProps {
   subtaskCounts?: { completed: number; total: number };
   selectionMode?: boolean;
   isSelected?: boolean;
+  onChanged?: () => void;
+  onLogProgress?: (task: TaskRow) => void;
   onPress: () => void;
   onLongPress: () => void;
 }
@@ -26,6 +32,8 @@ export function GoalCard({
   isSelected,
   onPress,
   onLongPress,
+  onChanged,
+  onLogProgress,
 }: GoalCardProps) {
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -74,6 +82,12 @@ export function GoalCard({
             {task.title}
           </Text>
           <Text style={styles.meta}>{metaLine}</Text>
+          {(task.bufferDays ?? 0) > 0 && <Text style={styles.meta}>{Number(task.bufferDays!.toFixed(2))} days of coverage banked · applied automatically</Text>}
+          {(task.bankCovered ?? 0) > 0 && <Text style={styles.meta}>{Number(task.bankCovered.toFixed(2))} {task.progressUnit} covered by bank</Text>}
+          {!selectionMode && hasProgress && onLogProgress && <TouchableOpacity accessibilityRole="button" onPress={async () => {
+            try { let owner = task; while (owner.sourceTaskId != null) { const parent = await getTaskById(owner.sourceTaskId); if (!parent) break; owner = parent; } const daily = isQuantityGoal(owner) ? reconcileQuantityGoal(owner.id, getAppToday())?.daily : undefined; onLogProgress(daily ?? owner); } catch (error) { reportError(error); }
+          }} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>Log or correct progress</Text></TouchableOpacity>}
+          {task.pausedUntil && task.pausedUntil > getAppToday() && <Text style={styles.meta}>Rest day · Resumes {task.pausedUntil}</Text>}
           {showBar && (
             <View style={styles.barTrack}>
               <View style={[styles.barFill, { width: `${Math.round(percent * 100)}%` }]} />

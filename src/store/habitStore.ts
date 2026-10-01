@@ -1,3 +1,4 @@
+import { reportError } from '../utils/errors';
 import { create } from 'zustand';
 import {
   deleteHabit,
@@ -7,11 +8,12 @@ import {
   logHabitCompletion,
   updateHabit,
 } from '../db/queries';
-import { getLocalDateString } from '../utils/date';
+import { getAppToday } from '../utils/date';
 
 export type { HabitWithStatus };
 
 export interface NewHabitPayload {
+    pursuitId?: number | null;
     title: string;
     cadenceType: 'daily' | 'weekly_n_times';
     cadenceTarget?: number;
@@ -28,6 +30,7 @@ interface HabitState {
     updateHabit: (
         id: number,
         data: Partial<{
+            pursuitId: number | null;
             title: string;
             cadenceType: 'daily' | 'weekly_n_times';
             cadenceTarget: number | null;
@@ -49,7 +52,7 @@ const enqueueWrite = <T>(operation: () => Promise<T>): Promise<T> => {
 export const useHabitStore = create<HabitState>((set, get) => ({
     habits: [],
     isLoading: false,
-    selectedDate: getLocalDateString(),
+    selectedDate: getAppToday(),
 
     setSelectedDate: (date: string) => {
         set({ selectedDate: date });
@@ -57,13 +60,14 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     },
 
     loadHabits: async (date?: string) => {
-        const targetDate = date ?? get().selectedDate;
+        const targetDate = date ?? getAppToday();
+        set({ selectedDate: targetDate });
         set({ isLoading: true });
         try {
             const data = await getHabitsByDate(targetDate);
             set({ habits: data });
         } catch (error) {
-            console.error('Failed to load habits:', error);
+            reportError(error);
         } finally {
             set({ isLoading: false });
         }
@@ -81,7 +85,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
                 }
                 return null;
             } catch (error) {
-                console.error('Failed to add habit:', error);
+                reportError(error);
                 return null;
             }
         });
@@ -93,7 +97,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
                 await updateHabit(id, data);
                 await get().loadHabits();
             } catch (error) {
-                console.error(`Failed to update habit ${id}:`, error);
+                reportError(error);
             }
         });
     },
@@ -101,11 +105,11 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     logHabit: async (id: number) => {
         return enqueueWrite(async () => {
             try {
-                const today = get().selectedDate;
+                const today = getAppToday();
                 await logHabitCompletion(id, today);
                 await get().loadHabits();
             } catch (error) {
-                console.error(`Failed to log habit ${id}:`, error);
+                reportError(error);
             }
         });
     },
@@ -118,7 +122,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
                     habits: state.habits.filter((h) => h.id !== id),
                 }));
             } catch (error) {
-                console.error(`Failed to remove habit ${id}:`, error);
+                reportError(error);
             }
         });
     },

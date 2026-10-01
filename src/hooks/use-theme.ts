@@ -5,8 +5,9 @@ import { Palette } from '@/theme/colors';
  * Returns the active theme palette and mode from the app theme store.
  * Reactive across all components when theme is toggled.
  */
-export function useTheme(): Palette {
-  return useColors();
+export function useTheme() {
+  const colors = useColors();
+  return { ...colors, text: colors.textPrimary, backgroundElement: colors.surface, backgroundSelected: colors.selectedBg };
 }
 
 /**

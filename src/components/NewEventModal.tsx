@@ -1,3 +1,6 @@
+import { saveEventWithTags } from '../db/queries';
+import { reportError } from '../utils/errors';
+import { PursuitPicker } from './PursuitPicker';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
@@ -33,6 +36,7 @@ export default function NewEventModal({
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
+  const [selectedPursuitId, setSelectedPursuitId] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
   const [date, setDate] = useState(new Date());
@@ -52,6 +56,7 @@ export default function NewEventModal({
 
   const resetForm = () => {
     setTitle('');
+    setSelectedPursuitId(null);
     setLocation('');
     setDate(new Date());
     setStartTime(new Date());
@@ -67,6 +72,7 @@ export default function NewEventModal({
 
   useEffect(() => {
     if (eventToEdit) {
+      setSelectedPursuitId(eventToEdit.pursuitId ?? null);
       const start = new Date(eventToEdit.startTime);
       setTitle(eventToEdit.title);
       setLocation(eventToEdit.location ?? '');
@@ -92,13 +98,7 @@ export default function NewEventModal({
 
   const handleToggleTag = async (tagId: number) => {
     const isSelected = selectedTagIds.includes(tagId);
-    if (eventToEdit) {
-      if (isSelected) {
-        await removeTagFromEvent(eventToEdit.id, tagId);
-      } else {
-        await assignTagToEvent(eventToEdit.id, tagId);
-      }
-    }
+
     setSelectedTagIds((prev) =>
       isSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId]
     );
@@ -129,29 +129,21 @@ export default function NewEventModal({
 
     try {
       const payload = {
+        pursuitId: selectedPursuitId,
         title: title.trim(),
         startTime: format(startDateTime, "yyyy-MM-dd'T'HH:mm:ss"),
         endTime: endDateTime ? format(endDateTime, "yyyy-MM-dd'T'HH:mm:ss") : null,
         location: location.trim() || null,
       };
 
-      if (eventToEdit) {
-        await updateEvent(eventToEdit.id, payload);
-      } else {
-        const created = await addEvent(payload);
-        if (created && selectedTagIds.length > 0) {
-          for (const tagId of selectedTagIds) {
-            await assignTagToEvent(created.id, tagId);
-          }
-        }
-      }
+      saveEventWithTags(eventToEdit?.id, payload, selectedTagIds);
 
       resetForm();
       onEventCreated();
       if (onClose) onClose();
       sheetRef.current?.close();
     } catch (err) {
-      console.error('Failed to save event:', err);
+      reportError(err);
     }
   };
 
@@ -173,6 +165,7 @@ export default function NewEventModal({
         {!eventToEdit && onSwitchType && <AddTypeSwitcher active="Event" onSelect={onSwitchType} />}
         <Text style={styles.titleText}>{eventToEdit ? 'Edit Event' : 'New Event'}</Text>
 
+        <PursuitPicker selectedPursuitId={selectedPursuitId} onSelect={setSelectedPursuitId} />
         <BottomSheetTextInput
           style={styles.input}
           placeholder="Enter Event Here"

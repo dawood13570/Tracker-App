@@ -1,7 +1,9 @@
+import { useFocusEffect } from 'expo-router';
+import { reportError } from '../utils/errors';
 // src/components/PursuitPicker.tsx
 import { useColors } from '@/store/themeStore';
 import { Palette } from '@/theme/colors';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -25,21 +27,22 @@ export function PursuitPicker({ selectedPursuitId, onSelect }: PursuitPickerProp
   const [newTitle, setNewTitle] = useState('');
   const [showCreate, setShowCreate] = useState(false);
 
-  useEffect(() => {
-    getAllPursuits().then(setPursuits);
-  }, []);
+  const refresh = useCallback(() => { getAllPursuits().then(setPursuits).catch(reportError); }, []);
+  useFocusEffect(refresh);
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
+    try {
     const created = await insertPursuit({ title: newTitle.trim(), status: 'active' });
     setPursuits((prev) => [created, ...prev]);
     onSelect(created.id);
     setNewTitle('');
     setShowCreate(false);
+    } catch (error) { reportError(error); }
   };
 
   return (
-    <View>
+    <View onTouchStart={refresh}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
         <Pressable
           style={[styles.chip, selectedPursuitId === null && styles.chipSelected]}

@@ -1,3 +1,8 @@
+import { forecastOccurrenceGoals } from '../db/occurrencePlanning';
+import { forecastQuantityGoals } from '../db/quantityPlanning';
+import { materializeProjection } from '../db/lifecycle';
+import { reportError } from '../utils/errors';
+import { useAppDay } from '../hooks/use-app-day';
 import { ActivityCard } from '@/components/ActivityCard';
 import { GhostTaskCard } from '@/components/GhostTaskCard';
 import { GoalCard } from '@/components/GoalCard';
@@ -89,7 +94,7 @@ export default function HorizonScreen() {
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const todayStr = useMemo(() => getAppToday(), []);
+  const todayStr = useAppDay();
 
   const weeklyModalRef = useRef<BottomSheet>(null);
   const monthlyModalRef = useRef<BottomSheet>(null);
@@ -192,9 +197,7 @@ export default function HorizonScreen() {
 
   const loadData = useCallback(async () => {
     await ensureDailyDecompositionForDate(todayStr);
-    if (startStr > todayStr) {
-      await ensureDailyDecompositionForDate(startStr);
-    }
+
 
     const [rangeTasks, scopedGoals, rangeActivities, rangeEvents, currentDayHabits] = await Promise.all([
       getTasksForDateRange(startStr, endStr),
@@ -217,7 +220,7 @@ export default function HorizonScreen() {
     setPeriodEvents(rangeEvents);
     setDayHabits(currentDayHabits);
 
-    const progressionGoals = scopedGoals.filter((t) => t.type === 'Progression');
+    const progressionGoals = scopedGoals.filter(taskHasProgress);
     const hybridGoals = scopedGoals.filter((t) => t.type === 'Hybrid');
     const countGoals = scopedGoals.filter((t) => t.occurrenceTarget != null && t.occurrenceTarget > 0);
 
@@ -267,7 +270,7 @@ export default function HorizonScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      loadData().catch(reportError);
     }, [loadData])
   );
 
@@ -286,11 +289,11 @@ export default function HorizonScreen() {
         const matchesText = !q || itemTitle.toLowerCase().includes(q);
         const itemTags = tagAssociations[type][item.id] ?? [];
         const matchesTags =
-          selectedFilterTagIds.length === 0 || selectedFilterTagIds.some((id) => itemTags.includes(id));
+          selectedFilterTagIds.length === 0 || (strictTagFilter ? selectedFilterTagIds.every((id) => itemTags.includes(id)) : selectedFilterTagIds.some((id) => itemTags.includes(id)));
         return matchesText && matchesTags;
       });
     },
-    [searchQuery, selectedFilterTagIds, tagAssociations]
+    [searchQuery, selectedFilterTagIds, tagAssociations, strictTagFilter]
   );
 
   const isFilterActive = Boolean(searchQuery.trim()) || selectedFilterTagIds.length > 0;
@@ -309,19 +312,10 @@ export default function HorizonScreen() {
         {
           text: 'Schedule',
           onPress: async () => {
-            await insertTask({
-              title: ghost.goalTitle,
-              type: ghost.type,
-              priority: ghost.priority,
-              scheduledDate: ghost.date,
-              scope: 'daily',
-              sourceTaskId: ghost.goalId,
-              totalProgress: ghost.totalProgress ?? null,
-              progressUnit: ghost.progressUnit ?? null,
-              deadline: ghost.totalProgress ? ghost.date : null,
-              rolloverEnabled: false,
-            } as any);
+            try {
+              materializeProjection(ghost.goalId, ghost.date, ghost.totalProgress);
             await loadData();
+            } catch (error) { reportError(error); }
           },
         },
       ]
@@ -331,24 +325,7 @@ export default function HorizonScreen() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const yearStart = format(startOfYear(bounds.start), 'yyyy-MM-dd');
-      const yearEnd = format(endOfYear(bounds.start), 'yyyy-MM-dd');
-      const yearlyGoals = await getYearlyTasks(yearStart, yearEnd);
-
-      const allActiveGoals = [...filteredGoals, ...yearlyGoals.filter((y) => y.occurrenceTarget)];
-      const uniqueGoals = Array.from(new Map(allActiveGoals.map((g) => [g.id, g])).values());
-
-      const fromDate = todayStr > startStr ? todayStr : startStr;
-
-      const countResults = (
-        await Promise.all(
-          uniqueGoals
-            .filter((g) => g.occurrenceTarget != null && g.occurrenceTarget > 0)
-            .map((g) => previewOccurrenceSchedule(g, fromDate, endStr))
-        )
-      ).flat();
-
-      if (active) setProjectedOccurrences(countResults);
+      if (active) setProjectedOccurrences([...forecastOccurrenceGoals(startStr, endStr, todayStr), ...forecastQuantityGoals(startStr, endStr, todayStr)]);
     })();
     return () => {
       active = false;
@@ -398,7 +375,7 @@ export default function HorizonScreen() {
         a.activityTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (a.note ?? '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesTags =
-        selectedFilterTagIds.length === 0 || selectedFilterTagIds.some((id) => a.tagIds.includes(id));
+        selectedFilterTagIds.length === 0 || (strictTagFilter ? selectedFilterTagIds.every((id) => a.tagIds.includes(id)) : selectedFilterTagIds.some((id) => a.tagIds.includes(id)));
       if (matchesSearch && matchesTags) set.add(a.date);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -512,7 +489,7 @@ export default function HorizonScreen() {
   const loadCustomGoals = useCallback(async () => {
     const list = await getAllCustomGoals();
     setCustomGoals(list);
-    const progressionGoals = list.filter((t) => t.type === 'Progression');
+    const progressionGoals = list.filter(taskHasProgress);
     const hybridGoals = list.filter((t) => t.type === 'Hybrid');
     const countGoals = list.filter((t) => t.occurrenceTarget != null && t.occurrenceTarget > 0);
     const [progressEntries, subtaskEntries, countEntries] = await Promise.all([
@@ -644,7 +621,7 @@ export default function HorizonScreen() {
                   const stats = yearlyBreakdownMap[mKey];
                   const count = stats?.total ?? 0;
                   const completed = stats?.completed ?? 0;
-                  const isCurrent = isSameMonth(monthDate, new Date());
+                  const isCurrent = isSameMonth(monthDate, parseISO(todayStr));
 
                   return (
                     <TouchableOpacity
@@ -697,7 +674,7 @@ export default function HorizonScreen() {
                         const dStr = format(cell, 'yyyy-MM-dd');
                         const stats = densityMap[dStr];
                         const isSelected = dStr === selectedDayStr;
-                        const isToday = isSameDay(cell, new Date());
+                        const isToday = dStr === todayStr;
                         const isOutsideMonth = !isSameMonth(cell, anchorDate);
 
                         let dotColor = 'transparent';
@@ -731,7 +708,10 @@ export default function HorizonScreen() {
                             >
                               {format(cell, 'd')}
                             </Text>
-                            <View style={[styles.densityDot, { backgroundColor: dotColor }]} />
+                            <View style={{ flexDirection: 'row', gap: 3 }}>
+                              <View style={[styles.densityDot, { backgroundColor: dotColor }]} />
+                              {projectedOccurrences.some(g => g.date === dStr) && <View accessibilityLabel="Projected task" style={[styles.densityDot, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.accent }]} />}
+                            </View>
                           </TouchableOpacity>
                         );
                       })}
@@ -745,7 +725,7 @@ export default function HorizonScreen() {
                   const dStr = format(cell, 'yyyy-MM-dd');
                   const stats = densityMap[dStr];
                   const isSelected = dStr === selectedDayStr;
-                  const isToday = isSameDay(cell, new Date());
+                  const isToday = dStr === todayStr;
 
                   let dotColor = 'transparent';
                   if (stats && stats.total > 0) {
@@ -765,7 +745,10 @@ export default function HorizonScreen() {
                       activeOpacity={0.7}
                     >
                       <Text style={[styles.cellNum, isSelected && styles.cellNumSelected]}>{format(cell, 'd')}</Text>
-                      <View style={[styles.densityDot, { backgroundColor: dotColor }]} />
+                      <View style={{ flexDirection: 'row', gap: 3 }}>
+                              <View style={[styles.densityDot, { backgroundColor: dotColor }]} />
+                              {projectedOccurrences.some(g => g.date === dStr) && <View accessibilityLabel="Projected task" style={[styles.densityDot, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.accent }]} />}
+                            </View>
                     </TouchableOpacity>
                   );
                 })}
@@ -773,6 +756,7 @@ export default function HorizonScreen() {
             )}
           </View>
 
+          <Text style={{ color: colors.textMuted, paddingHorizontal: 16 }}>Hollow dot: projected work · Solid dot: scheduled work</Text>
           {/* Period Goals Section with inline + button */}
           <View style={styles.sectionBlock}>
             <View style={styles.sectionHeaderLine}>
@@ -803,8 +787,10 @@ export default function HorizonScreen() {
             ) : (
               filteredGoals.map((task) => (
                 <GoalCard
+                  onChanged={loadData}
                   key={task.id}
                   task={task}
+                  onLogProgress={goal => { setLoggingTask(goal); progressSheetRef.current?.expand(); }}
                   scopeLabel={zoomLevel}
                   effectiveProgress={goalProgress[task.id]}
                   completedOccurrences={goalOccurrences[task.id]}
@@ -842,8 +828,10 @@ export default function HorizonScreen() {
             ) : (
               customGoals.map((goal) => (
                 <GoalCard
+                  onChanged={loadData}
                   key={goal.id}
                   task={goal}
+                  onLogProgress={goal => { setLoggingTask(goal); progressSheetRef.current?.expand(); }}
                   scopeLabel="custom"
                   effectiveProgress={customGoalProgress[goal.id]}
                   completedOccurrences={customGoalOccurrences[goal.id]}
@@ -889,7 +877,7 @@ export default function HorizonScreen() {
                       a.activityTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
                       (a.note ?? '').toLowerCase().includes(searchQuery.toLowerCase());
                     const matchesTags =
-                      selectedFilterTagIds.length === 0 || selectedFilterTagIds.some((id) => a.tagIds.includes(id));
+                      selectedFilterTagIds.length === 0 || (strictTagFilter ? selectedFilterTagIds.every((id) => a.tagIds.includes(id)) : selectedFilterTagIds.some((id) => a.tagIds.includes(id)));
                     return matchesDate && matchesSearch && matchesTags;
                   });
 
@@ -946,7 +934,8 @@ export default function HorizonScreen() {
                               task={task as any}
                               onToggle={() => handleToggleTask(task.id)}
                               onProgressChanged={loadData}
-                              currentProgress={progressMap[task.id]}
+                              onLogProgress={() => { setLoggingTask(task); progressSheetRef.current?.expand(); }}
+                  currentProgress={progressMap[task.id]}
                               pace={paceMap[task.id]}
                               subtaskCount={subtaskMap[task.id]}
                               isExpanded={Boolean(expandedTaskIds[task.id])}
@@ -1063,7 +1052,8 @@ export default function HorizonScreen() {
                           task={task as any}
                           onToggle={() => handleToggleTask(task.id)}
                           onProgressChanged={loadData}
-                          currentProgress={progressMap[task.id]}
+                          onLogProgress={() => { setLoggingTask(task); progressSheetRef.current?.expand(); }}
+                  currentProgress={progressMap[task.id]}
                           pace={paceMap[task.id]}
                           subtaskCount={subtaskMap[task.id]}
                           isExpanded={Boolean(expandedTaskIds[task.id])}
@@ -1086,6 +1076,7 @@ export default function HorizonScreen() {
                           title={ghost.goalTitle}
                           priority={ghost.priority}
                           totalProgress={ghost.totalProgress}
+                          bankCovered={ghost.bankCovered}
                           progressUnit={ghost.progressUnit}
                           onPress={() => handleScheduleGhostNow(ghost)}
                         />
@@ -1137,9 +1128,9 @@ export default function HorizonScreen() {
         <ProgressLogSheet
           sheetRef={progressSheetRef}
           task={loggingTask}
-          currentProgress={loggingTask ? progressMap[loggingTask.id] ?? 0 : 0}
+          currentProgress={loggingTask ? progressMap[loggingTask.id] ?? goalProgress[loggingTask.id] ?? customGoalProgress[loggingTask.id] ?? 0 : 0}
           pace={loggingTask ? paceMap[loggingTask.id] : undefined}
-          onLogged={() => loadData()}
+          onLogged={() => { loadData(); loadCustomGoals(); }}
           onClose={() => setLoggingTask(null)}
         />
         <NoteSheet

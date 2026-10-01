@@ -1,56 +1,55 @@
-# Welcome to your Expo app 👋
+# Reckon / Tracker-App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+An offline personal tracker built with Expo SDK 57, React Native, SQLite/Drizzle, and Zustand.
 
-## Get started
+- **Today:** tasks, reversible habit logs, events, and activity logs.
+- **Horizon:** weekly, monthly, yearly, and custom goals, with generated daily work and read-only projections.
+- **Pursuits:** user-declared status and an overview linking tasks, habits, events, activities, and reflections.
+- **Notes:** editable titles, local drafts, correct period routing, and explicitly saved summary snapshots.
+- **Account:** persistent preferences, optional local reminders, task history, JSON export/import, and recovery from the last restore.
 
-1. Install dependencies
+## Development
 
-   ```bash
-   npm install
-   ```
+Use Node 24 (the regression harness uses built-in SQLite).
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```sh
+npm ci
+npm run check
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Use a native development build for device testing:
 
-### Other setup steps
+```sh
+npm run android
+# macOS + Xcode:
+npm run ios
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+The backup picker/sharing and notification integrations need their native modules. Rebuild the development client after dependency changes. Web is not the supported verification target for the native SQLite app.
 
-## Learn more
+```sh
+EXPO_OFFLINE=1 CI=1 npm run bundle:android
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+`npm test` exercises the real Drizzle queries against an in-memory SQLite database, applying all SQL migrations. CI runs type checks, regression tests, and an Android Metro export. A successful export does not replace a device smoke test.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Behavior that matters
 
-## Join the community
+Rollover preserves the old history row and carries unfinished work into one new occurrence with its metadata, progress, and milestones. Identity comes from a series ID, never the title. With Repeat and Rollover together, the carried occurrence stays a single task; completing it schedules the next repeat. Repeated done/undo/done does not create extra copies. Skipping a recurring occurrence schedules its successor without counting the skipped occurrence as completed.
 
-Join our community of developers creating universal apps.
+Completion, numeric progress, subtask completion, and ancestor updates share transactional lifecycle code. Started daily targets stay stable; future daily allocations and weekly/monthly summaries continue to adapt. A range owns its weeks directly, including weeks crossing months and years. Sequential milestones enforce their order in the database write path. Carried progress is excluded from aggregate totals when its original logs are already included.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Surplus choices share one path for the slider and progress sheet. “Keep pace” retains the baseline, “Ease pace” lowers future allocations with a 50% floor, “Bank” applies extra quantity automatically to upcoming allocations, and “Raise target” requires a deliberate choice. Covered allocations stay editable and show “Covered by bank”; actual work on a covered date moves its coverage forward. Actual progress is counted once. See [decomposition and banking](doc/DECOMPOSITION.md) for examples and limits.
+
+Night-owl cutoff, rollover, logging, and date refresh use the same app-day convention. Background execution is opportunistic; opening/resuming the app also reconciles rollover. Local reminder delivery depends on device permission and OS scheduling. The morning notification is a check-in reminder, not a live background-generated agenda.
+
+## Data and recovery
+
+Migrations are bundled in `drizzle/migrations.js`. Foreign keys are enabled after legacy table-rebuild migrations. New multi-record task, goal, habit, event, and activity saves use synchronous transactions: never put an async callback inside Expo's synchronous Drizzle transaction.
+
+Export backups from Account and save them outside the app. Import validates the schema, relationships, cycles, and preferences, writes a recovery copy, then replaces records in one transaction. “Recover before last restore” restores that copy. Device-local drafts and settings are included. Uninstalling the app can erase both live data and the local recovery copy.
+
+Historical completion times cannot be reconstructed. New history records carry exact timestamps and app dates. Legacy progress logs use their local calendar date because the historical night-owl settings were not recorded. Previously hidden notes are preserved and exposed as editable reflections.
+
+See [offline repair notes and device checks](doc/OFFLINE_REPAIR.md). The original [roadmap](doc/ROADMAP.md) is a historical planning record. Cloud accounts, sync, and online services remain deferred.

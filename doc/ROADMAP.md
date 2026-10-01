@@ -1,4 +1,6 @@
 # Development Roadmap
+
+> Historical planning record: older checkmarks and implementation descriptions are not release guarantees. See [the offline repair pass](OFFLINE_REPAIR.md) for current behavior, automated coverage, device checks, and deferred online scope.
 > Format: Milestone → Goal → Task (1 → 1.1 → 1.1.1)
 > Update status as you go: [ ] todo · [x] done · [~] in progress · [!] blocked/skipped
 

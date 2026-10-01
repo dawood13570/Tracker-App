@@ -1,3 +1,7 @@
+import { useStore } from '../store/useStore';
+import { saveTaskFamily } from '../db/lifecycle';
+import { reportError } from '../utils/errors';
+import { getTagsForTask, setTaskTags } from '../db/queries';
 // src/components/PeriodGoalModal.tsx
 import { useTagStore } from '@/store/tagStore';
 import { useColors } from '@/store/themeStore';
@@ -7,7 +11,7 @@ import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorho
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Slider from '@react-native-community/slider';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Keyboard,
@@ -242,6 +246,7 @@ export function PeriodGoalModal({
     loadTags();
     loadMostUsedTags();
     if (editTask) {
+      getTagsForTask(editTask.id).then(rows => setSelectedTagIds(rows.map(r => r.id)));
       setTitle(editTask.title ?? '');
       setPriority(editTask.priority ?? 'Medium');
       setSelectedPursuitId(editTask.pursuitId ?? null);
@@ -306,7 +311,9 @@ export function PeriodGoalModal({
     setSubtasks((prev) => prev.filter((s) => s.id !== id));
   };
 
+  const saving = useRef(false);
   const handleSubmit = async () => {
+    if (saving.current) return;
     Keyboard.dismiss();
     if (!title.trim()) {
       Alert.alert('Title required', 'Please enter a task title.');
@@ -332,82 +339,27 @@ export function PeriodGoalModal({
       const inferredType = hasMilestones ? 'Hybrid' : hasProgress ? 'Progression' : 'Simple';
       const shouldSaveRecurrence = isRecurringGoal;
 
-      if (editTask) {
-        await updateTask(editTask.id, {
-          title: title.trim(),
-          type: inferredType,
-          priority,
-          totalProgress: hasProgress ? Number(targetValue) : null,
-          progressUnit: hasProgress ? unit.trim() || null : null,
-          occurrenceTarget: shouldSaveRecurrence ? Number(occurrenceCount) : null,
-          maxGapDays: shouldSaveRecurrence ? maxGapDays : null,
-          pursuitId: selectedPursuitId,
-          isSequential: hasMilestones ? isSequential : false,
-          subtasksTotal: hasMilestones ? subtasks.length : 0,
-          ...(scope === 'custom' ? { scheduledDate: effectiveStartDate, deadline: effectiveEndDate } : {}),
-        } as any);
-
-        for (const delId of deletedSubtaskIds) {
-          await deleteTask(delId);
-        }
-
-        for (let i = 0; i < subtasks.length; i++) {
-          const s = subtasks[i];
-          if (s.isNew) {
-            await insertSubtask(editTask.id, {
-              title: s.title,
-              scheduledDate: effectiveStartDate,
-              priority,
-              subtaskOrder: i,
-            });
-          } else {
-            await updateTask(Number(s.id), {
-              title: s.title,
-              subtaskOrder: i,
-            } as any);
-          }
-        }
-      } else {
-        const parentGoal = await insertTask({
-          title: title.trim(),
-          type: inferredType,
-          priority,
-          scheduledDate: effectiveStartDate,
-          deadline: effectiveEndDate,
-          scope,
-          totalProgress: hasProgress ? Number(targetValue) : null,
-          progressUnit: hasProgress ? unit.trim() || null : null,
-          occurrenceTarget: shouldSaveRecurrence ? Number(occurrenceCount) : null,
-          maxGapDays: shouldSaveRecurrence ? maxGapDays : null,
-          rolloverEnabled: false,
-          subtasksTotal: hasMilestones ? subtasks.length : 0,
-          pursuitId: selectedPursuitId,
-          isSequential: hasMilestones ? isSequential : false,
-        } as any);
-
-        if (parentGoal) {
-          if (hasMilestones && subtasks.length > 0) {
-            for (let i = 0; i < subtasks.length; i++) {
-              await insertSubtask(parentGoal.id, {
-                title: subtasks[i].title,
-                scheduledDate: effectiveStartDate,
-                priority,
-                subtaskOrder: i,
-              });
-            }
-          }
-          for (const tagId of selectedTagIds) {
-            await assignTag(parentGoal.id, tagId);
-          }
-        }
-      }
+      saving.current = true;
+      saveTaskFamily(editTask?.id, {
+        title: title.trim(), type: inferredType, priority, scope,
+        scheduledDate: effectiveStartDate, deadline: effectiveEndDate,
+        totalProgress: hasProgress ? Number(targetValue) : null,
+        progressUnit: hasProgress ? unit.trim() || null : null,
+        occurrenceTarget: shouldSaveRecurrence ? Number(occurrenceCount) : null,
+        maxGapDays: shouldSaveRecurrence ? maxGapDays : null,
+        pursuitId: selectedPursuitId, isSequential: hasMilestones ? isSequential : false,
+        rolloverEnabled: false,
+        surplusMode: editTask?.surplusMode ?? useStore.getState().defaultSurplusMode,
+      }, hasMilestones ? subtasks.map(s => ({ id: s.isNew ? undefined : Number(s.id), title: s.title })) : [], selectedTagIds);
 
       resetForm();
       onTaskCreated();
       if (onClose) onClose();
       sheetRef.current?.close();
     } catch (error) {
-      console.error(`Failed to save ${scope} goal:`, error);
+      reportError(error);
+    } finally {
+      saving.current = false;
     }
   };
 
