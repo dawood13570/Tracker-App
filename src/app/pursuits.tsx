@@ -1,3 +1,7 @@
+import { getEffectiveProgress } from '../db/queries';
+import { PursuitContents } from '../components/PursuitContents';
+import { reportError } from '../utils/errors';
+import Storage from 'expo-sqlite/kv-store';
 // src/app/pursuits.tsx
 import {
   deletePursuit,
@@ -12,7 +16,7 @@ import { useTaskStore } from '@/store/taskStore';
 import { useColors } from '@/store/themeStore';
 import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
@@ -57,6 +61,8 @@ export default function PursuitsScreen() {
 
   const [pursuits, setPursuits] = useState<PursuitRow[]>([]);
   const [tasksByPursuitMap, setTasksByPursuitMap] = useState<Record<number, any[]>>({});
+  const [search, setSearch] = useState('');
+  const [descriptionDraft, setDescriptionDraft] = useState('');
   const [filter, setFilter] = useState<PursuitRow['status'] | 'all'>('all');
 
   // Detail Modal State
@@ -85,13 +91,13 @@ export default function PursuitsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadPursuits();
+      loadPursuits().catch(reportError);
     }, [loadPursuits])
   );
 
   const filteredPursuits = useMemo(
-    () => (filter === 'all' ? pursuits : pursuits.filter((p) => p.status === filter)),
-    [pursuits, filter]
+    () => pursuits.filter(p => (filter === 'all' || p.status === filter) && `${p.title} ${p.description ?? ''}`.toLowerCase().includes(search.toLowerCase())),
+    [pursuits, filter, search]
   );
 
   const fetchDetailSubtasks = async (tasks: any[]) => {
@@ -105,32 +111,40 @@ export default function PursuitsScreen() {
   };
 
   const openDetail = async (p: PursuitRow) => {
+    try {
     setDetailPursuit(p);
+    setDescriptionDraft(Storage.getItemSync(`reckon-pursuit-draft:${p.id}`) ?? p.description ?? '');
     setEditingTitle(p.title);
     setIsEditingTitle(false);
     setExpandedTaskIds({});
     const tasks = await getTasksByPursuit(p.id);
-    setDetailTasks(tasks);
+    setDetailTasks(await Promise.all(tasks.map(async t => ({ ...t, currentProgress: await getEffectiveProgress(t.id) }))));
     await fetchDetailSubtasks(tasks);
+    } catch (error) { reportError(error); }
   };
 
   const handleCreate = async () => {
+    try {
     if (!newTitle.trim()) return;
     await insertPursuit({ title: newTitle.trim(), status: newStatus });
     setNewTitle('');
     setNewStatus('active');
     setIsCreating(false);
     await loadPursuits();
+    } catch (error) { reportError(error); }
   };
 
   const handleStatusChange = async (status: PursuitRow['status']) => {
+    try {
     if (!detailPursuit) return;
     const updated = await updatePursuit(detailPursuit.id, { status });
     setDetailPursuit(updated);
     setPursuits((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (error) { reportError(error); }
   };
 
   const handleTitleSave = async () => {
+    try {
     if (!detailPursuit || !editingTitle.trim()) {
       setIsEditingTitle(false);
       return;
@@ -139,13 +153,17 @@ export default function PursuitsScreen() {
     setDetailPursuit(updated);
     setPursuits((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     setIsEditingTitle(false);
+    } catch (error) { reportError(error); }
   };
 
   const handleDescriptionSave = async (text: string) => {
+    try {
     if (!detailPursuit) return;
     const updated = await updatePursuit(detailPursuit.id, { description: text.trim() || null });
+    Storage.removeItemSync(`reckon-pursuit-draft:${detailPursuit.id}`);
     setDetailPursuit(updated);
     setPursuits((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (error) { reportError(error); }
   };
 
   const handleToggleLinkedTask = async (taskId: number) => {
@@ -172,7 +190,7 @@ export default function PursuitsScreen() {
 
   const handleDelete = () => {
     if (!detailPursuit) return;
-    Alert.alert('Delete Pursuit', `Delete "${detailPursuit.title}"? Linked tasks will stay, just unlinked.`, [
+    Alert.alert('Delete Pursuit', `Delete "${detailPursuit.title}"? Linked tasks, habits, events, activities, and notes will stay, just unlinked.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -217,6 +235,7 @@ export default function PursuitsScreen() {
         </ScrollView>
       </View>
 
+      <TextInput accessibilityLabel="Search pursuits" value={search} onChangeText={setSearch} placeholder="Search pursuits" placeholderTextColor={colors.textPlaceholder} style={{ margin: 16, padding: 12, color: colors.textPrimary, backgroundColor: colors.surface }} />
       {/* List */}
       <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
         {filteredPursuits.length === 0 ? (
@@ -259,16 +278,7 @@ export default function PursuitsScreen() {
                     </Text>
                   ) : null}
 
-                  {total > 0 && (
-                    <View style={styles.cardProgressBlock}>
-                      <View style={styles.progressBarTrack}>
-                        <View style={[styles.progressBarFill, { width: `${pct}%` }]} />
-                      </View>
-                      <Text style={styles.cardProgressText}>
-                        {completed}/{total} tasks ({pct}%)
-                      </Text>
-                    </View>
-                  )}
+                  <Text style={styles.cardProgressText}>{total} linked task records · status chosen by you</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -418,13 +428,16 @@ export default function PursuitsScreen() {
                   <Text style={styles.detailLabel}>NOTES</Text>
                   <TextInput
                     style={styles.descriptionInput}
-                    defaultValue={detailPursuit.description ?? ''}
-                    onEndEditing={(e) => handleDescriptionSave(e.nativeEvent.text)}
+                    value={descriptionDraft}
+                    onChangeText={text => { setDescriptionDraft(text); Storage.setItemSync(`reckon-pursuit-draft:${detailPursuit.id}`, text); }}
+                    onEndEditing={(e) => { handleDescriptionSave(e.nativeEvent.text).catch(reportError); }}
                     multiline
                     placeholder="Why this pursuit matters, milestones, current state..."
                     placeholderTextColor={colors.textPlaceholder}
                   />
 
+                  <Pressable accessibilityRole="button" onPress={() => handleDescriptionSave(descriptionDraft).catch(reportError)} style={{ paddingVertical: 12 }}><Text style={{ color: colors.accent }}>Save overview</Text></Pressable>
+                  <PursuitContents pursuitId={detailPursuit.id} onChanged={() => { void loadPursuits(); getTasksByPursuit(detailPursuit.id).then(setDetailTasks); }} onOpenNote={id => { setDetailPursuit(null); router.push({ pathname: '/notes-history', params: { noteId: id } }); }} />
                   {/* Interactive Linked Tasks with Subtask Accordions */}
                   <Text style={[styles.detailLabel, { marginTop: 12 }]}>
                     LINKED TASKS ({detailTasks.length})

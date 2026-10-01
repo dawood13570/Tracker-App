@@ -8,9 +8,8 @@ export function getLocalDateString(date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-export function getAppToday(): string {
+export function getAppToday(now = new Date()): string {
   const { dayBoundaryHour, nightOwlMode, manualDayOverrideDate } = useStore.getState();
-  const now = new Date();
   const currentCalendarDate = getLocalDateString(now);
 
   // If the user already tapped "Finalize Day" tonight, don't hold them in yesterday
@@ -20,7 +19,8 @@ export function getAppToday(): string {
 
   // If night owl mode is active and current hour is between 00:00 and boundaryHour (e.g. 3 AM)
   if (nightOwlMode && now.getHours() < (dayBoundaryHour ?? 3)) {
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
     return getLocalDateString(yesterday);
   }
 

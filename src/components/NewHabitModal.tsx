@@ -1,3 +1,6 @@
+import { saveHabitWithTags } from '../db/queries';
+import { reportError } from '../utils/errors';
+import { PursuitPicker } from './PursuitPicker';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -36,6 +39,7 @@ export default function NewHabitModal({
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
+  const [selectedPursuitId, setSelectedPursuitId] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [cadenceType, setCadenceType] = useState<'daily' | 'weekly_n_times'>('daily');
   const [cadenceTarget, setCadenceTarget] = useState('');
@@ -48,6 +52,7 @@ export default function NewHabitModal({
 
   const resetForm = () => {
     setTitle('');
+    setSelectedPursuitId(null);
     setCadenceType('daily');
     setCadenceTarget('');
     setSelectedTagIds([]);
@@ -60,6 +65,7 @@ export default function NewHabitModal({
 
   useEffect(() => {
     if (habitToEdit) {
+      setSelectedPursuitId(habitToEdit.pursuitId ?? null);
       setTitle(habitToEdit.title);
       setCadenceType(habitToEdit.cadenceType);
       setCadenceTarget(habitToEdit.cadenceTarget ? String(habitToEdit.cadenceTarget) : '');
@@ -71,13 +77,7 @@ export default function NewHabitModal({
 
   const handleToggleTag = async (tagId: number) => {
     const isSelected = selectedTagIds.includes(tagId);
-    if (habitToEdit) {
-      if (isSelected) {
-        await removeTagFromHabit(habitToEdit.id, tagId);
-      } else {
-        await assignTagToHabit(habitToEdit.id, tagId);
-      }
-    }
+
     setSelectedTagIds((prev) =>
       isSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId]
     );
@@ -104,31 +104,20 @@ export default function NewHabitModal({
 
     try {
       const payload = {
+        pursuitId: selectedPursuitId,
         title: title.trim(),
         cadenceType,
         cadenceTarget: cadenceType === 'weekly_n_times' ? Number(cadenceTarget) : undefined,
       };
 
-      if (habitToEdit) {
-        await updateHabit(habitToEdit.id, {
-          ...payload,
-          cadenceTarget: cadenceType === 'weekly_n_times' ? Number(cadenceTarget) : null,
-        });
-      } else {
-        const created = await addHabit(payload);
-        if (created && selectedTagIds.length > 0) {
-          for (const tagId of selectedTagIds) {
-            await assignTagToHabit(created.id, tagId);
-          }
-        }
-      }
+      saveHabitWithTags(habitToEdit?.id, payload, selectedTagIds);
 
       resetForm();
       onHabitCreated();
       if (onClose) onClose();
       sheetRef.current?.close();
     } catch (err) {
-      console.error('Failed to save habit:', err);
+      reportError(err);
     }
   };
 
@@ -150,6 +139,7 @@ export default function NewHabitModal({
         {!habitToEdit && onSwitchType && <AddTypeSwitcher active="Habit" onSelect={onSwitchType} />}
         <Text style={styles.titleText}>{habitToEdit ? 'Edit Habit' : 'New Habit'}</Text>
 
+        <PursuitPicker selectedPursuitId={selectedPursuitId} onSelect={setSelectedPursuitId} />
         <BottomSheetTextInput
           style={styles.input}
           placeholder="Enter Habit Here"

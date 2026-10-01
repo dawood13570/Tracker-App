@@ -1,3 +1,4 @@
+import { reportError } from '../utils/errors';
 import { create } from 'zustand';
 import {
   ActivityLogRow,
@@ -10,7 +11,7 @@ import {
   getAllActivityMasters,
   searchActivityLogs as searchActivityLogsQuery,
 } from '../db/queries';
-import { getLocalDateString } from '../utils/date';
+import { getAppToday } from '../utils/date';
 
 export type { ActivityLogRow, ActivityLogWithDetails, ActivityRow };
 
@@ -22,7 +23,7 @@ interface ActivityState {
   loadActivitiesForRange: (startDate: string, endDate: string) => Promise<ActivityLogWithDetails[]>;
   loadMasters: () => Promise<void>;
   addActivityEntry: (params: {
-    title: string;
+    pursuitId?: number | null; title: string;
     note?: string | null;
     date?: string;
     masterTagIds?: number[];
@@ -43,7 +44,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       const rows = await getActivityLogsForDate(date);
       set((state) => ({ logsByDate: { ...state.logsByDate, [date]: rows } }));
     } catch (error) {
-      console.error('Failed to load activity logs:', error);
+      reportError(error);
     } finally {
       set({ isLoading: false });
     }
@@ -66,13 +67,13 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       const rows = await getAllActivityMasters();
       set({ masters: rows });
     } catch (error) {
-      console.error('Failed to load activity masters:', error);
+      reportError(error);
     }
   },
 
   addActivityEntry: async (params) => {
     try {
-      const logDate = params.date ?? getLocalDateString(new Date());
+      const logDate = params.date ?? getAppToday();
       const newLog = await createActivityEntryWithTags({ ...params, date: logDate });
 
       await Promise.all([
@@ -82,7 +83,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
 
       return newLog;
     } catch (error) {
-      console.error('Failed to add activity entry:', error);
+      reportError(error);
       return null;
     }
   },
@@ -97,7 +98,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
         },
       }));
     } catch (error) {
-      console.error('Failed to remove activity entry:', error);
+      reportError(error);
     }
   },
 

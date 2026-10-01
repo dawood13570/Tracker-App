@@ -1,6 +1,11 @@
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { postponeTask, skipTask } from '../db/lifecycle';
+import { requestProgressChange } from '../services/progress';
+import { reportError } from '../utils/errors';
+import { useBankedDay } from '../db/lifecycle';
+import { useAppDay } from '../hooks/use-app-day';
 import type { PaceResult } from '@/engine/pace';
 import { getEffectivePriority } from '@/engine/priority';
-import { commitProgressWithSurplusCheck } from '@/engine/surplus';
 import { taskHasProgress } from '@/engine/taskShape';
 import { useTagStore } from '@/store/tagStore';
 import { useColors } from '@/store/themeStore';
@@ -86,7 +91,7 @@ export function TaskCard({
   const tagVersion = useTagStore((state) => state.tagVersion);
 
   // If this task is a daily portal to a macro goal, pull subtasks from the master source
-  const targetParentId = (task as any).sourceTaskId ?? task.id;
+  const targetParentId = task.id;
 
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [taskTags, setTaskTags] = useState<{ id: number; name: string; color: string | null }[]>([]);
@@ -96,7 +101,7 @@ export function TaskCard({
 
   const isSubmittingSubtask = useRef(false);
 
-  const todayStr = useMemo(() => getAppToday(), []);
+  const todayStr = useAppDay();
   const isOverdueProxy =
     !task.isCompleted &&
     task.sourceTaskId != null &&
@@ -123,7 +128,7 @@ export function TaskCard({
           (items ?? []).forEach((st) => {
             initialMap[st.id] = st.currentProgress ?? 0;
           });
-          setLocalSubtaskProg((prev) => ({ ...initialMap, ...prev }));
+          setLocalSubtaskProg(initialMap);
         }
       });
     }
@@ -177,7 +182,7 @@ export function TaskCard({
       onSubtasksCountUpdate(task.id, completed, updated.length);
     }
 
-    await toggleTask(subtaskId);
+    if (!taskHasProgress(sub)) await toggleTask(subtaskId);
     onProgressChanged?.();
   };
 
@@ -204,9 +209,7 @@ export function TaskCard({
     const shouldComplete = total > 0 && clamped >= total;
     const needsStatusToggle = sub.isCompleted !== shouldComplete;
 
-    if (needsStatusToggle) {
-      await toggleTask(subtaskId);
-    }
+
 
     const updated = subtasks.map((s) =>
       s.id === subtaskId
@@ -240,13 +243,13 @@ export function TaskCard({
   const executeComplete = async () => {
     const total = task.totalProgress ?? 1;
     await setAbsoluteProgress(task.id, total);
-    onToggle(task.id, false);
+
     onProgressChanged?.();
   };
 
   const executeUndo = async () => {
     await revertToPreviousProgress(task.id);
-    onToggle(task.id, true);
+
     onProgressChanged?.();
   };
 
@@ -305,120 +308,13 @@ export function TaskCard({
     }
   };
 
+  const progressBusy = useRef(false);
   const handleSliderUpdate = async (taskId: number, val: number) => {
-    const total = task.totalProgress ?? 0;
-    const curProg = currentProgress ?? task.currentProgress ?? 0;
-    const delta = val - curProg;
-
-    // 1. Completion alert branch
-    if (!task.isCompleted && val >= total && total > 0) {
-      await setAbsoluteProgress(taskId, val);
-      onToggle(taskId, false);
-      onProgressChanged?.();
-      return;
-    }
-
-    // 2. Undo completion branch (dropping progress below total)
-    if (task.isCompleted && val < total) {
-      const dropDown = async () => {
-        await setAbsoluteProgress(taskId, val);
-        onToggle(taskId, true);
-        onProgressChanged?.();
-      };
-
-      if (skipProgressionAlerts) {
-        await dropDown();
-        return;
-      }
-
-      Alert.alert(
-        'Undo completion?',
-        'Reducing progress below the target will mark this task as not done.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: "Don't Ask Again",
-            onPress: async () => {
-              setSkipProgressionAlerts(true);
-              await dropDown();
-            },
-          },
-          {
-            text: 'Continue',
-            style: 'destructive',
-            onPress: dropDown,
-          },
-        ]
-      );
-      return;
-    }
-
-    // 3. Pace surplus evaluation branch
-    if (delta > 0 && pace) {
-      const { surplus, handled } = await commitProgressWithSurplusCheck(
-        task,
-        delta,
-        curProg,
-        pace.days_remaining,
-        pace.target_rate
-      );
-
-      // If handled automatically via 'bank_it' or 'raise_bar', the DB is already updated
-      if (handled) {
-        onProgressChanged?.();
-        return;
-      }
-
-      // If user has not chosen an automatic surplusMode, prompt them with options
-      if (surplus) {
-        Alert.alert(
-          `Surplus logged (+${surplus.surplusAmount} ${task.progressUnit ?? ''})`,
-          `You beat today's pace. Ease future pace to ${surplus.newDailyPace}/day, bank ${surplus.bankedDaysEarned} day(s), or raise the goal to ${surplus.suggestedNewTarget}?`,
-          [
-            {
-              text: 'Just log it',
-              style: 'cancel',
-              onPress: async () => {
-                await setAbsoluteProgress(taskId, val);
-                onProgressChanged?.();
-              },
-            },
-            {
-              text: 'Ease Pace',
-              onPress: async () => {
-                await setAbsoluteProgress(taskId, val);
-                onProgressChanged?.();
-              },
-            },
-            {
-              text: `Bank ${surplus.bankedDaysEarned}d`,
-              onPress: async () => {
-                await setAbsoluteProgress(taskId, val);
-                await updateTask(taskId, {
-                  bufferDays: (task.bufferDays ?? 0) + surplus.bankedDaysEarned,
-                });
-                onProgressChanged?.();
-              },
-            },
-            {
-              text: `Raise to ${surplus.suggestedNewTarget}`,
-              onPress: async () => {
-                await setAbsoluteProgress(taskId, val);
-                await updateTask(taskId, {
-                  totalProgress: surplus.suggestedNewTarget,
-                });
-                onProgressChanged?.();
-              },
-            },
-          ]
-        );
-        return;
-      }
-    }
-
-    // 4. Default fallback update
-    await setAbsoluteProgress(taskId, val);
-    onProgressChanged?.();
+    if (progressBusy.current) return;
+    progressBusy.current = true;
+    try { if (await requestProgressChange(taskId, val)) onProgressChanged?.(); }
+    catch (error) { reportError(error); }
+    finally { progressBusy.current = false; }
   };
 
   const handleParentToggle = async () => {
@@ -426,23 +322,6 @@ export function TaskCard({
     await onToggle(task.id, task.isCompleted);
 
     if (hasSubtasks) {
-      const items = await getSubtasksByParentOrdered(targetParentId);
-      const progSubtasks = (items ?? []).filter(taskHasProgress);
-
-      if (nextCompleted) {
-        for (const sub of progSubtasks) {
-          const total = sub.totalProgress ?? 0;
-          const current = sub.currentProgress ?? 0;
-          if (total > 0 && current < total) {
-            await setAbsoluteProgress(sub.id, total);
-          }
-        }
-      } else {
-        for (const sub of progSubtasks) {
-          await revertToPreviousProgress(sub.id);
-        }
-      }
-
       if (isExpanded) {
         const refreshed = await getSubtasksByParentOrdered(targetParentId);
         setSubtasks(refreshed ?? []);
@@ -474,6 +353,10 @@ export function TaskCard({
   };
 
   return (
+    <Swipeable enabled={!selectionMode} overshootLeft={false} overshootRight={false} dragOffsetFromLeftEdge={48} dragOffsetFromRightEdge={48}
+      renderLeftActions={(_progress, _translation, methods) => <Pressable accessibilityRole="button" accessibilityLabel={task.isCompleted ? 'Reopen task' : 'Complete task'} onPress={() => { methods.close(); handlePress(); }} style={{ padding: 20, justifyContent: 'center', backgroundColor: colors.surfaceSubtle }}><Text style={{ color: colors.accent }}>{task.isCompleted ? 'Reopen' : 'Complete'}</Text></Pressable>}
+      renderRightActions={task.isCompleted ? undefined : (_progress, _translation, methods) => <View style={{ justifyContent: 'center', backgroundColor: colors.surfaceSubtle }}><Pressable accessibilityRole="button" accessibilityLabel="Postpone until tomorrow" onPress={() => { try { postponeTask(task.id); methods.close(); onProgressChanged?.(); } catch (error) { reportError(error); } }} style={{ padding: 20, justifyContent: 'center', backgroundColor: colors.surfaceSubtle }}><Text style={{ color: colors.accent }}>Postpone</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Skip this occurrence" onPress={() => { methods.close(); Alert.alert('Skip this occurrence?', 'It stays in history. Repeating tasks schedule their next occurrence.', [{ text: 'Cancel' }, { text: 'Skip', onPress: () => { try { skipTask(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } } }]); }} style={{ minHeight: 44, padding: 12 }}><Text style={{ color: colors.textSecondary }}>Skip</Text></Pressable></View>}
+    >
     <View
       style={[
         styles.taskCard,
@@ -493,6 +376,11 @@ export function TaskCard({
 
         <View style={styles.mainContainer}>
           <Pressable
+            accessibilityRole="checkbox"
+            accessibilityLabel={task.title}
+            accessibilityState={{ checked: task.isCompleted }}
+            accessibilityActions={[{ name: 'activate', label: task.isCompleted ? 'Reopen' : 'Complete' }, { name: 'postpone', label: 'Postpone until tomorrow' }, { name: 'skip', label: 'Skip this occurrence' }]}
+            onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'activate') handlePress(); else { try { if (event.nativeEvent.actionName === 'skip') skipTask(task.id); else postponeTask(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } } }}
             onPress={handlePress}
             onLongPress={handleLongPress}
             style={({ pressed }) => [styles.pressableBlock, pressed && styles.cardPressed]}
@@ -595,7 +483,7 @@ export function TaskCard({
 
                     <View style={styles.progressMetaRow}>
                       {Boolean(pace) && <PaceIndicator status={pace!.status} />}
-                      {task.surplusMode === 'bank_it' && (task.bufferDays ?? 0) > 0 && (
+                      {(task.bufferDays ?? 0) > 0 && (
                         <View style={styles.bankedBadge}>
                           <Text style={styles.bankedBadgeText}>
                             {task.bufferDays} {task.bufferDays === 1 ? 'day' : 'days'} banked
@@ -609,6 +497,9 @@ export function TaskCard({
             )}
           </Pressable>
 
+          {task.skippedAt && <Text style={{ color: colors.textMuted, padding: 12 }}>Skipped · {task.skippedAt.slice(0, 10)}</Text>}
+
+          {!selectionMode && (task.bufferDays ?? 0) > 0 && <Pressable accessibilityRole="button" accessibilityLabel="Use one banked rest day" onPress={() => { try { useBankedDay(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } }} style={{ padding: 12 }}><Text style={{ color: colors.accent }}>Use a banked day</Text></Pressable>}
           {/* Subtasks Accordion */}
           {!selectionMode && hasSubtasks && isExpanded && (
             <View style={styles.inlineSubtaskContainer}>
@@ -719,6 +610,7 @@ export function TaskCard({
         </View>
       </View>
     </View>
+    </Swipeable>
   );
 }
 

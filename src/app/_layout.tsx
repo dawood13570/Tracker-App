@@ -1,3 +1,9 @@
+import { scheduleMorningReminder } from '../services/notifications';
+import { useStore } from '../store/useStore';
+import { Welcome } from '../components/Welcome';
+import { useAppDay } from '../hooks/use-app-day';
+import { prepareDatabase } from '../db/initialize';
+import { reportError } from '../utils/errors';
 // src/app/_layout.tsx
 import { useColors, useThemeStore } from '@/store/themeStore';
 import { Palette } from '@/theme/colors';
@@ -6,12 +12,12 @@ import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import * as Notifications from 'expo-notifications';
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import migrations from '../../drizzle/migrations';
-import { registerRolloverTask, runRolloverNow } from '../../src/tasks/rolloverTask';
+import { registerRolloverTask, runRolloverNow, checkCriticalPace } from '../../src/tasks/rolloverTask';
 import { db } from '../db/client';
 import { useActivityStore } from '../store/activityStore';
 import { useEventStore } from '../store/eventStore';
@@ -33,7 +39,13 @@ function MainTabs() {
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const { success, error } = useMigrations(db, migrations);
+  const [error, setError] = useState<Error | null>(null);
+  const [ready, setReady] = useState(false);
+  const appDay = useAppDay();
+  const morningEnabled = useStore(s => s.morningDigestEnabled);
+  const morningHour = useStore(s => s.morningDigestHour);
+  useEffect(() => { if (ready) scheduleMorningReminder(morningEnabled, morningHour).catch(reportError); }, [ready, morningEnabled, morningHour]);
+  useEffect(() => { prepareDatabase().then(() => setReady(true)).catch(setError); }, []);
   const insets = useSafeAreaInsets();
 
   const { loadTasks, setSelectedDate } = useTaskStore();
@@ -42,56 +54,21 @@ function MainTabs() {
   const { loadActivitiesForDate } = useActivityStore();
 
   useEffect(() => {
-    async function initBackgroundJobs() {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status === 'granted') {
-        await registerRolloverTask(60 * 60 * 24);
-      }
-    }
-
-    if (success) {
-      initBackgroundJobs();
-    }
-  }, [success]);
+    if (!ready) return;
+    registerRolloverTask(60 * 60 * 24).catch(reportError);
+  }, [ready]);
 
   useEffect(() => {
-    let timerId: ReturnType<typeof setTimeout>;
-
-    const scheduleMidnightRefresh = () => {
-      const now = new Date();
-      const nextMidnight = new Date(now);
-      nextMidnight.setHours(24, 0, 1, 0);
-      const msUntilMidnight = nextMidnight.getTime() - now.getTime();
-
-      timerId = setTimeout(async () => {
-        const todayStr = getLocalDateString(new Date());
-        setSelectedDate(todayStr);
-        await runRolloverNow();
-        await Promise.all([loadTasks(), loadHabits(), loadEvents(), loadActivitiesForDate(todayStr)]);
-        scheduleMidnightRefresh();
-      }, msUntilMidnight);
+    if (!ready) return;
+    const refresh = async () => {
+      await runRolloverNow();
+      if (useStore.getState().criticalPaceNotificationsEnabled) await checkCriticalPace();
+      await Promise.all([loadTasks(appDay), loadHabits(appDay), loadEvents(appDay), loadActivitiesForDate(appDay)]);
     };
-
-    scheduleMidnightRefresh();
-
-    let lastKnownDate = getLocalDateString(new Date());
-    const subscription = AppState.addEventListener('change', async (nextState) => {
-      if (nextState === 'active') {
-        const currentDate = getLocalDateString(new Date());
-        if (currentDate !== lastKnownDate) {
-          lastKnownDate = currentDate;
-          setSelectedDate(currentDate);
-          await runRolloverNow();
-          await Promise.all([loadTasks(), loadHabits(), loadEvents(), loadActivitiesForDate(currentDate)]);
-        }
-      }
-    });
-
-    return () => {
-      clearTimeout(timerId);
-      subscription.remove();
-    };
-  }, []);
+    refresh().catch(reportError);
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') refresh().catch(reportError); });
+    return () => listener.remove();
+  }, [ready, appDay, loadTasks, loadHabits, loadEvents, loadActivitiesForDate]);
 
   if (error) {
     return (
@@ -102,7 +79,7 @@ function MainTabs() {
     );
   }
 
-  if (!success) {
+  if (!ready) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.accent} />
@@ -112,6 +89,8 @@ function MainTabs() {
   }
 
   return (
+    <>
+    <Welcome />
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -178,7 +157,9 @@ function MainTabs() {
           ),
         }}
       />
+      <Tabs.Screen name="task-history" options={{ href: null }} />
     </Tabs>
+    </>
   );
 }
 
@@ -186,7 +167,7 @@ export default function RootLayout() {
   const mode = useThemeStore((s) => s.mode);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }} key={mode}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         <MainTabs />

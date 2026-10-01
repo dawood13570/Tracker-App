@@ -1,3 +1,6 @@
+import { reportError } from '../utils/errors';
+import { PursuitPicker } from './PursuitPicker';
+import { getPursuitEntities, setEntityPursuit } from '../db/queries';
 import BottomSheet, {
   BottomSheetScrollView,
   BottomSheetTextInput,
@@ -52,6 +55,7 @@ export default function NewActivityModal({
   const { tags: allTags, mostUsedTags, loadTags, loadMostUsedTags, addTag, removeTag } = useTagStore();
 
   // --- Create-mode state ---
+  const [selectedPursuitId, setSelectedPursuitId] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [matchedMasterId, setMatchedMasterId] = useState<number | null>(null);
   const [note, setNote] = useState('');
@@ -67,6 +71,7 @@ export default function NewActivityModal({
 
   const resetCreateForm = () => {
     setTitle('');
+    setSelectedPursuitId(null);
     setMatchedMasterId(null);
     setNote('');
     setMasterTagIds([]);
@@ -81,6 +86,7 @@ export default function NewActivityModal({
 
   useEffect(() => {
     if (entry) {
+      getPursuitEntities().then(data => setSelectedPursuitId(data.activities.find(a => a.id === entry.activityId)?.pursuitId ?? null));
       setDetailNote(entry.note ?? '');
       Promise.all([getTagsForActivity(entry.activityId), getTagsForActivityLog(entry.id)]).then(
         ([masterRows, logRows]) => {
@@ -109,6 +115,7 @@ export default function NewActivityModal({
     setMatchedMasterId(masterId);
     const rows = await getTagsForActivity(masterId);
     setMasterTagIds(rows.map((r) => r.id));
+    setSelectedPursuitId(masters.find(m => m.id === masterId)?.pursuitId ?? null);
   };
 
   const handleToggleMasterTag = (tagId: number) => {
@@ -136,6 +143,7 @@ export default function NewActivityModal({
     try {
       const created = await addActivityEntry({
         title: title.trim(),
+        pursuitId: selectedPursuitId,
         note: note.trim() || null,
         masterTagIds,
         extraTagIds,
@@ -148,7 +156,7 @@ export default function NewActivityModal({
         sheetRef.current?.close();
       }
     } catch (err) {
-      console.error('Failed to save activity:', err);
+      reportError(err);
     } finally {
       setIsSubmitting(false);
     }
@@ -199,7 +207,7 @@ export default function NewActivityModal({
       await updateActivityLogNote(entry.id, detailNote.trim() || null);
       onActivityCreated?.();
     } catch (err) {
-      console.error('Failed to update note:', err);
+      reportError(err);
     } finally {
       setIsSavingNote(false);
     }
@@ -221,6 +229,7 @@ export default function NewActivityModal({
     >
       {isDetailMode && entry ? (
         <BottomSheetScrollView contentContainerStyle={styles.detailContainer} keyboardShouldPersistTaps="handled">
+        <PursuitPicker selectedPursuitId={selectedPursuitId} onSelect={id => { setSelectedPursuitId(id); if (entry) void setEntityPursuit("activity", entry.activityId, id); }} />
           <Text style={styles.titleText}>{entry.activityTitle}</Text>
           <Text style={styles.subTitle}>Logged {entry.date}</Text>
 

@@ -1,3 +1,5 @@
+import { saveTaskFamily } from '../db/lifecycle';
+import { reportError } from '../utils/errors';
 // src/components/new-task.tsx
 import { useTagStore } from '@/store/tagStore';
 import { useColors } from '@/store/themeStore';
@@ -6,7 +8,7 @@ import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import {
   assignTag,
@@ -228,10 +230,6 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
 
   const handleToggleTag = async (tagId: number) => {
     const isSelected = selectedTagIds.includes(tagId);
-    if (taskToEdit) {
-      if (isSelected) await removeTagFromTask(taskToEdit.id, tagId);
-      else await assignTag(taskToEdit.id, tagId);
-    }
     setSelectedTagIds((prev) => (isSelected ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
   };
 
@@ -241,7 +239,9 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
     await removeTag(tagId);
   };
 
+  const saving = useRef(false);
   const handleSubmit = async () => {
+    if (saving.current) return;
     Keyboard.dismiss();
     if (!title.trim()) {
       Alert.alert('Title required', 'Please enter a task title.');
@@ -281,50 +281,25 @@ export default function NewTaskModal({ sheetRef, onTaskCreated, taskToEdit, onCl
         totalProgress: hasProgress ? Number(targetValue) : null,
         progressUnit: hasProgress ? unit.trim() || null : null,
         deadline: deadline ? getLocalDateString(deadline) : null,
-        surplusMode: hasProgress ? defaultSurplusMode : null,
+        surplusMode: hasProgress ? (taskToEdit?.surplusMode ?? defaultSurplusMode) : null,
       };
 
-      if (taskToEdit) {
-        await updateTask(taskToEdit.id, sharedFields);
-        for (const delId of deletedSubtaskIds) await deleteTask(delId);
-        for (const sub of subtasks) {
-          if (sub.isNew) {
-            await insertSubtask(taskToEdit.id, {
-              title: sub.title,
-              scheduledDate: taskToEdit.scheduledDate,
-              priority: priority as 'Low' | 'Medium' | 'High',
-              type: sub.hasProgress ? 'Progression' : 'Simple',
-              totalProgress: sub.hasProgress ? Number(sub.targetValue) : null,
-              progressUnit: sub.hasProgress ? sub.unit?.trim() || null : null,
-            });
-          }
-        }
-      } else {
-        const createdParent = await insertTask({ ...sharedFields, scheduledDate: selectedDate, scope: 'daily' });
-
-        if (createdParent && subtasks.length > 0) {
-          for (const draft of subtasks) {
-            await insertSubtask(createdParent.id, {
-              title: draft.title,
-              scheduledDate: selectedDate,
-              priority: priority as 'Low' | 'Medium' | 'High',
-              type: draft.hasProgress ? 'Progression' : 'Simple',
-              totalProgress: draft.hasProgress ? Number(draft.targetValue) : null,
-              progressUnit: draft.hasProgress ? draft.unit?.trim() || null : null,
-            });
-          }
-        }
-        if (createdParent && selectedTagIds.length > 0) {
-          for (const tagId of selectedTagIds) await assignTag(createdParent.id, tagId);
-        }
-      }
+      saving.current = true;
+      saveTaskFamily(taskToEdit?.id, { ...sharedFields, scheduledDate: taskToEdit?.scheduledDate ?? selectedDate, scope: 'daily' }, subtasks.map(sub => ({
+        id: sub.isNew ? undefined : Number(sub.id), title: sub.title,
+        type: sub.hasProgress ? 'Progression' : 'Simple',
+        totalProgress: sub.hasProgress ? Number(sub.targetValue) : null,
+        progressUnit: sub.hasProgress ? sub.unit?.trim() || null : null,
+      })), selectedTagIds);
 
       resetForm();
       onTaskCreated();
       if (onClose) onClose();
       sheetRef.current?.close();
     } catch (err) {
-      console.error('Failed to save task:', err);
+      reportError(err);
+    } finally {
+      saving.current = false;
     }
   };
 

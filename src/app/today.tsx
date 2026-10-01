@@ -1,3 +1,4 @@
+import { useAppDay, useCanFinalizeDay } from '../hooks/use-app-day';
 // src/app/(tabs)/today.tsx
 import { AddType } from '@/components/AddTypeSwitcher';
 import { EventCard } from '@/components/EventCard';
@@ -182,8 +183,8 @@ export default function AppDashboard() {
   const { logsByDate, loadActivitiesForDate, removeActivityEntry } = useActivityStore();
   const { tags: allTags, loadTags, loadMostUsedTags, tagVersion } = useTagStore();
 
-  const [todayStr, setTodayStr] = useState<string>(() => getAppToday());
-  const canFinalize = useMemo(() => isEligibleToFinalizeDay(), [todayStr]);
+  const todayStr = useAppDay();
+  const canFinalize = useCanFinalizeDay();
   const todaysActivities = logsByDate[todayStr] ?? [];
 
   const handleSwitchAddType = (type: AddType) => {
@@ -210,17 +211,17 @@ export default function AppDashboard() {
 
   const refreshDashboard = useCallback(async () => {
     const currentAppDay = getAppToday();
-    setTodayStr(currentAppDay);
+
 
     await ensureDailyDecompositionForDate(currentAppDay);
     await Promise.all([
       loadTasks(currentAppDay),
-      loadHabits(),
-      loadEvents(),
+      loadHabits(currentAppDay),
+      loadEvents(currentAppDay),
       loadActivitiesForDate(currentAppDay),
       refreshTagMap(),
     ]);
-  }, [loadTasks, loadHabits, loadEvents, loadActivitiesForDate, refreshTagMap]);
+  }, [todayStr, loadTasks, loadHabits, loadEvents, loadActivitiesForDate, refreshTagMap]);
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -389,7 +390,7 @@ export default function AppDashboard() {
           const itemTags = idMap[item.id] ?? [];
           const matchesTags =
             selectedFilterTagIds.length === 0 ||
-            selectedFilterTagIds.some((selected) => itemTags.includes(selected));
+            (strictTagFilter ? selectedFilterTagIds.every((selected) => itemTags.includes(selected)) : selectedFilterTagIds.some((selected) => itemTags.includes(selected)));
 
           if (selectedFilterTagIds.length > 0 && strictTagFilter) {
             return matchesText && matchesTags;
@@ -410,15 +411,15 @@ export default function AppDashboard() {
   );
 
   const filteredTasks = useMemo(
-    () => filterItem(sortedTasks, tagAssociations.tasks),
-    [sortedTasks, tagAssociations.tasks, filterItem]
+    () => filterItem(sortedTasks.filter(t => !t.skippedAt && (!t.pausedUntil || t.pausedUntil <= todayStr)), tagAssociations.tasks),
+    [sortedTasks, tagAssociations.tasks, filterItem, todayStr]
   );
 
   const { visibleTasks, archivedCount } = useMemo(() => {
     let list = filteredTasks;
 
     if (autoArchiveEnabled && selectedFilterTagIds.length === 0 && !searchQuery.trim()) {
-      const archiveInputs = tasks.map((t) => ({
+      const archiveInputs = tasks.filter(t => !t.isCompleted).map((t) => ({
         id: t.id,
         priority: t.priority,
         procrastinationCount: t.procrastinationCount ?? 0,
@@ -431,7 +432,7 @@ export default function AppDashboard() {
       });
     }
 
-    return { visibleTasks: list, archivedCount: sortedTasks.length - list.length };
+    return { visibleTasks: list, archivedCount: filteredTasks.length - list.length };
   }, [filteredTasks, sortedTasks, tasks, autoArchiveEnabled, selectedFilterTagIds.length, searchQuery]);
 
   const { incompleteTasks, completedTasks } = useMemo(() => {

@@ -1,7 +1,12 @@
 // src/store/useStore.ts
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { settingsStorage } from './storage';
 
 interface AppState {
+  morningDigestEnabled: boolean;
+  morningDigestHour: number;
+  setMorningDigest: (enabled: boolean, hour?: number) => void;
   isSidebarOpen: boolean;
   toggleSidebar: () => void;
   userId: string | null;
@@ -36,7 +41,10 @@ interface AppState {
   setCriticalPaceNotificationsEnabled: (enabled: boolean) => void;
 }
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>()(persist((set) => ({
+  morningDigestEnabled: false,
+  morningDigestHour: 8,
+  setMorningDigest: (enabled, hour) => set(state => ({ morningDigestEnabled: enabled, morningDigestHour: hour ?? state.morningDigestHour })),
   isSidebarOpen: false,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   userId: null,
@@ -66,7 +74,7 @@ export const useStore = create<AppState>((set) => ({
   defaultSurplusMode: 'none',
   setDefaultSurplusMode: (mode) => set({ defaultSurplusMode: mode }),
 
-  criticalPaceNotificationsEnabled: true,
+  criticalPaceNotificationsEnabled: false,
   setCriticalPaceNotificationsEnabled: (enabled) => set({ criticalPaceNotificationsEnabled: enabled }),
-}));
+}), { name: 'reckon-settings', storage: createJSONStorage(() => settingsStorage), partialize: ({ isSidebarOpen, userId, ...state }) => state }));
 

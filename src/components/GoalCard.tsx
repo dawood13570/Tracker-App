@@ -1,3 +1,6 @@
+import { useBankedDay } from '../db/lifecycle';
+import { getAppToday } from '../utils/date';
+import { reportError } from '../utils/errors';
 import { TaskRow } from '@/db/queries';
 import { useColors } from '@/store/themeStore';
 import { Palette } from '@/theme/colors';
@@ -12,6 +15,7 @@ interface GoalCardProps {
   subtaskCounts?: { completed: number; total: number };
   selectionMode?: boolean;
   isSelected?: boolean;
+  onChanged?: () => void;
   onPress: () => void;
   onLongPress: () => void;
 }
@@ -26,6 +30,7 @@ export function GoalCard({
   isSelected,
   onPress,
   onLongPress,
+  onChanged,
 }: GoalCardProps) {
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -74,6 +79,8 @@ export function GoalCard({
             {task.title}
           </Text>
           <Text style={styles.meta}>{metaLine}</Text>
+          {(task.bufferDays ?? 0) > 0 && <TouchableOpacity accessibilityRole="button" onPress={() => { try { useBankedDay(task.id); onChanged?.(); } catch (error) { reportError(error); } }} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>Use a banked day ({task.bufferDays} available)</Text></TouchableOpacity>}
+          {task.pausedUntil && task.pausedUntil > getAppToday() && <Text style={styles.meta}>Rest day · Resumes {task.pausedUntil}</Text>}
           {showBar && (
             <View style={styles.barTrack}>
               <View style={[styles.barFill, { width: `${Math.round(percent * 100)}%` }]} />
