@@ -96,16 +96,6 @@ test('backup round trip retains all records and rejects broken relationships wit
   assert.throws(() => q.restoreBackup(badPrefs), /hour/);
   assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []); close();
 });
-test('banked rest day pauses existing descendants without deleting work', async () => {
-  const { q, close } = await fixture();
-  const root = await q.insertTask(task({ type: 'Progression', scope: 'weekly', totalProgress: 70, bufferDays: 1 }));
-  const daily = await q.decomposeWeeklyProgressionToDaily(root, q.getAppToday(), 7);
-  q.useBankedDay(root.id);
-  assert.equal((await q.getTaskById(root.id)).bufferDays, 0);
-  assert.ok((await q.getTaskById(daily.id)).pausedUntil > q.getAppToday());
-  assert.throws(() => q.useBankedDay(root.id), /No banked/); close();
-});
-
 test('upgrade preserves legacy notes and rollover records and assigns historical progress dates', async () => {
   const { q, sqlite, close } = await fixture(db => {
     db.exec("INSERT INTO notes (id, scope, date_key, title, content, is_auto_generated) VALUES (1, 'weekly', '2026-09-28', 'Reflection', 'My own writing', 1)");
@@ -159,11 +149,12 @@ test('habit and event saves roll back tags and reject invalid values', async () 
 
 test('manual projection scheduling is idempotent and daily decomposition reuses it', async () => {
   const { q, close } = await fixture();
-  const root = await q.insertTask(task({ scope: 'monthly', type: 'Progression', totalProgress: 100, deadline: '2026-10-31' }));
-  const manual = q.materializeProjection(root.id, '2026-10-01', 10);
-  assert.equal(q.materializeProjection(root.id, '2026-10-01', 10).id, manual.id);
-  const week = await q.decomposeMonthlyProgressionToWeekly(root, '2026-09-28', 5);
-  assert.equal((await q.decomposeWeeklyProgressionToDaily(week, '2026-10-01', 4)).id, manual.id); close();
+  const date = q.getAppToday();
+  const root = await q.insertTask(task({ scope: 'monthly', type: 'Progression', scheduledDate: date, totalProgress: 100, deadline: '2027-10-31' }));
+  const manual = q.materializeProjection(root.id, date, 10);
+  assert.equal(q.materializeProjection(root.id, date, 10).id, manual.id);
+  await q.ensureDailyDecompositionForDate(date);
+  assert.equal((await q.getTaskByDate(date)).filter(t => t.scope === 'daily').length, 1); close();
 });
 test('goal completion fills only the remaining aggregate amount and undo restores prior work', async () => {
   const { q, close } = await fixture();

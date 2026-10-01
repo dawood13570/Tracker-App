@@ -22,7 +22,7 @@ async function fixture(beforeUpgrade) {
   global.__auditNative = { execSync: sql => sqlite.exec(sql), getAllSync: (sql,...params) => sqlite.prepare(sql).all(...params), getFirstSync: (sql,...params) => sqlite.prepare(sql).get(...params), runSync: (sql,...params) => sqlite.prepare(sql).run(...params) };
   global.__auditStorage = new Map();
   if (!bundle) bundle = (await build({
-    stdin: { contents: "export * from './src/db/backup'; export * from './src/db/queries'; export * from './src/db/lifecycle'; export * from './src/utils/date'; export { useStore } from './src/store/useStore';", resolveDir: process.cwd(), loader: 'ts' },
+    stdin: { contents: "export * from './src/db/occurrencePlanning'; export * from './src/db/quantityPlanning'; export * from './src/engine/quantityPlan'; export * from './src/db/backup'; export * from './src/db/queries'; export * from './src/db/lifecycle'; export * from './src/utils/date'; export { useStore } from './src/store/useStore';", resolveDir: process.cwd(), loader: 'ts' },
     bundle: true, platform: 'node', format: 'cjs', packages: 'external', write: false,
     plugins: [{ name: 'native-adapter', setup(b) {
       b.onLoad({ filter: /src\/db\/client\.ts$/ }, () => ({ contents: 'export const db = globalThis.__auditDb; export const expoDb = globalThis.__auditNative;', loader: 'ts' }));

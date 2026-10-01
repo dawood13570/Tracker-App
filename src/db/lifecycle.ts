@@ -1,8 +1,11 @@
+import { isOccurrenceGoal, occurrenceSchedule } from './occurrencePlanning';
+import { bankRoot, planRoot, readPlanData } from './planData';
+import { isQuantityGoal, reconcileQuantityGoal } from './quantityPlanning';
 /** Synchronous transactions are intentional: Expo Drizzle commits before an async callback resumes. */
 import { and, eq, isNull, lt, sql } from 'drizzle-orm';
 import { addDays, differenceInCalendarDays, parseISO } from 'date-fns';
 import { db } from './client';
-import { tasks, progressLogs, taskTags, taskHistory } from './schema';
+import { tasks, progressLogs, taskTags, taskHistory, surplusCredits } from './schema';
 import { getNextOccurrence } from '../engine/recurrence';
 import { getAppToday, getLocalDateString } from '../utils/date';
 
@@ -19,15 +22,47 @@ function record(tx: Tx, task: Task, action: string, details?: object) {
 }
 function writeProgress(tx: Tx, task: Task, value: number, kind = 'progress', notes?: string | null) {
   const delta = value - progress(tx, task.id);
-  if (delta !== 0) tx.insert(progressLogs).values({ taskId: task.id, amount: delta, appDate: getAppToday(), loggedAt: now(), kind, notes }).run();
+  const date = task.scope === 'daily' ? task.scheduledDate : getAppToday();
+  const all = tx.select().from(tasks).all();
+  const owner = bankRoot(task, all);
+  if (kind !== 'carry' && (owner.totalProgress ?? 0) > 0 && !owner.occurrenceTarget) {
+    const data = readPlanData(owner, getAppToday(), tx, all);
+    const baseline = task.scope === 'daily' ? task.totalProgress ?? data.baseline : data.baseline;
+    tx.insert(surplusCredits).values({ ownerId: owner.id, appDate: date, baseline, bankRequested: owner.surplusMode === 'bank_it' })
+      .onConflictDoUpdate({ target: [surplusCredits.ownerId, surplusCredits.appDate], set: owner.surplusMode === 'bank_it' ? { bankRequested: true } : { ownerId: owner.id } }).run();
+    if (owner.nominalDailyTarget == null) tx.update(tasks).set({ nominalDailyTarget: data.baseline }).where(eq(tasks.id, owner.id)).run();
+  }
+  const insert = (amount: number, creditDate: string) => tx.insert(progressLogs).values({ taskId: task.id, amount, creditDate, appDate: getAppToday(), loggedAt: now(), kind, notes }).run();
+  if (delta < 0 && kind !== 'carry') {
+    // Corrections reverse the dates that earned the work, not the date of the edit.
+    const buckets: Record<string, number> = {};
+    for (const log of tx.select().from(progressLogs).where(eq(progressLogs.taskId, task.id)).all()) {
+      const key = log.creditDate ?? (task.scope === 'daily' ? task.scheduledDate : log.appDate ?? log.loggedAt.slice(0, 10));
+      buckets[key] = (buckets[key] ?? 0) + log.amount;
+    }
+    let left = -delta;
+    for (const key of Object.keys(buckets).sort().reverse()) {
+      const amount = Math.min(left, Math.max(0, buckets[key])); if (amount > 0) insert(-amount, key); left -= amount;
+    }
+    if (left > 1e-8) insert(-left, date);
+  } else if (delta !== 0) insert(delta, date);
   tx.update(tasks).set({ currentProgress: value, updatedAt: now() }).where(eq(tasks.id, task.id)).run();
+  refreshCredits(tx, owner.id);
 }
+function refreshCredits(tx: Tx, id: number) {
+  const owner = row(tx, id); if (!owner) return;
+  const data = readPlanData(owner, getAppToday(), tx);
+  data.creditRows.forEach((c, i) => tx.update(surplusCredits).set({ earned: data.credits[i].amount }).where(eq(surplusCredits.id, c.id)).run());
+  const balance = Math.max(0, data.credits.reduce((n, c) => n + c.amount, 0) - data.spent);
+  tx.update(tasks).set({ bufferDays: data.baseline > 0 ? balance / data.baseline : 0 }).where(eq(tasks.id, id)).run();
+}
+
 function clone(tx: Tx, source: Task, date: string, carry: boolean): Task {
   const { id, createdAt, updatedAt, completedAt, completedDate, completionPreviousProgress, ...data } = source;
   const deadline = !carry && source.deadline
     ? getLocalDateString(addDays(parseISO(date), differenceInCalendarDays(parseISO(source.deadline), parseISO(source.scheduledDate)))) : source.deadline;
   const result = tx.insert(tasks).values({ ...data, scheduledDate: date, deadline, seriesId: source.seriesId ?? `task:${id}`, occurrenceDate: date,
-    rolloverFromId: carry ? id : null, skippedAt: null, nextOccurrenceGenerated: false, isCompleted: false, currentProgress: 0,
+    rolloverFromId: carry ? id : null, skippedAt: null, nextOccurrenceGenerated: false, isCompleted: false, currentProgress: 0, bankCovered: 0, bufferDays: 0,
     procrastinationCount: carry ? (source.procrastinationCount ?? 0) + differenceInCalendarDays(parseISO(date), parseISO(source.scheduledDate)) : 0,
     createdAt: now(), updatedAt: now(), subtasksCompleted: 0,
   }).returning().get();
@@ -120,7 +155,7 @@ function setCompletion(tx: Tx, task: Task, completed: boolean) {
   mark(tx, task, completed);
   refreshAncestors(tx, { ...task, isCompleted: completed });
 }
-export function getAggregateProgress(id: number) { return db.transaction(tx => generated(tx, id).length ? effective(tx, id) : progress(tx, id)); }
+export function getAggregateProgress(id: number) { return db.transaction(tx => row(tx, id)?.planSummary ? row(tx, id)!.currentProgress ?? 0 : generated(tx, id).length ? effective(tx, id) : progress(tx, id)); }
 export function changeTaskCompletion(id: number, completed?: boolean) {
   return db.transaction(tx => {
     const task = row(tx, id);
@@ -151,23 +186,23 @@ export function commitProgressAction(id: number, value: number, ownerId: number,
     if (!owner) throw new Error('Goal no longer exists.');
     const base = owner.nominalDailyTarget ?? options.targetRate;
     const update = { nominalDailyTarget: base, surplusMode: action, updatedAt: now(),
-      ...(action === 'bank_it' ? { bufferDays: (owner.bufferDays ?? 0) + options.bankedDaysEarned } : {}),
       ...(action === 'raise_bar' ? { totalProgress: options.suggestedNewTarget } : {}),
     };
     tx.update(tasks).set(update).where(eq(tasks.id, owner.id)).run();
+    const task = row(tx, id)!;
+    const date = task.scope === 'daily' ? task.scheduledDate : getAppToday();
+    tx.insert(surplusCredits).values({ ownerId, appDate: date, baseline: options.targetRate, bankRequested: action === 'bank_it' })
+      .onConflictDoUpdate({ target: [surplusCredits.ownerId, surplusCredits.appDate], set: { bankRequested: action === 'bank_it' } }).run();
     changeProgressIn(tx, id, value, notes);
+    refreshCredits(tx, ownerId);
   });
 }
-export function useBankedDay(id: number) {
-  return db.transaction(tx => {
-    const task = row(tx, id);
-    if (!task || (task.bufferDays ?? 0) < 1) throw new Error('No banked days available.');
-    if (task.pausedUntil && task.pausedUntil > getAppToday()) throw new Error('A rest day is already active.');
-    const tomorrow = getLocalDateString(addDays(parseISO(getAppToday()), 1));
-    tx.update(tasks).set({ bufferDays: task.bufferDays! - 1, pausedUntil: tomorrow, updatedAt: now() }).where(eq(tasks.id, id)).run();
-    const pause = (parentId: number) => { for (const child of generated(tx, parentId)) { tx.update(tasks).set({ pausedUntil: tomorrow }).where(eq(tasks.id, child.id)).run(); pause(child.id); } };
-    pause(id);
-    record(tx, task, 'rest_day', { until: tomorrow });
+/** Covered occurrences can advance their repeat without fabricating a completion log. */
+export function advanceCoveredRepeats(today = getAppToday()) {
+  db.transaction(tx => {
+    for (const task of tx.select().from(tasks).all()) {
+      if (task.scope === 'daily' && task.scheduledDate <= today && !task.skippedAt && (task.bankCovered ?? 0) > 0 && (task.currentProgress ?? 0) + task.bankCovered >= (task.totalProgress ?? Infinity)) repeat(tx, { ...task, isCompleted: true });
+    }
   });
 }
 export function addProgress(id: number, amount: number, notes?: string | null) {
@@ -180,6 +215,7 @@ export function rolloverTo(date: string): number {
     const candidates = tx.select().from(tasks).where(and(eq(tasks.isCompleted, false), eq(tasks.rolloverEnabled, true), eq(tasks.scope, 'daily'), isNull(tasks.parentId), lt(tasks.scheduledDate, date))).all();
     for (const task of candidates) {
       if (task.pausedUntil && task.pausedUntil > date) continue;
+      if (task.bankCovered > 0 && (task.currentProgress ?? 0) + task.bankCovered >= (task.totalProgress ?? Infinity)) continue;
       const seriesId = task.seriesId ?? `task:${task.id}`;
       tx.update(tasks).set({ seriesId, occurrenceDate: task.occurrenceDate ?? task.scheduledDate, rolloverEnabled: false, updatedAt: now() }).where(eq(tasks.id, task.id)).run();
       const existing = tx.select().from(tasks).where(and(eq(tasks.seriesId, seriesId), eq(tasks.occurrenceDate, date))).get();
@@ -214,7 +250,7 @@ function deleteTreeIn(tx: Tx, id: number, seen = new Set<number>()) {
   for (const child of [...children(tx, id), ...generated(tx, id)]) deleteTreeIn(tx, child.id, seen);
   tx.delete(tasks).where(eq(tasks.id, id)).run();
 }
-export function deleteTaskTree(id: number) { db.transaction(tx => deleteTreeIn(tx, id)); }
+export function deleteTaskTree(id: number) { db.transaction(tx => { const all = tx.select().from(tasks).all(); const task = all.find(t => t.id === id); const owner = task && bankRoot(task, all); deleteTreeIn(tx, id); if (owner && owner.id !== id) refreshCredits(tx, owner.id); }); }
 
 /** Save a complete editor draft atomically; an invalid tag or child rolls everything back. */
 export function saveTaskFamily(id: number | undefined, data: typeof tasks.$inferInsert, drafts: Array<Partial<typeof tasks.$inferInsert>>, tagIds: number[]) {
@@ -265,6 +301,17 @@ export function copyMilestones(sourceId: number, destinationId: number) { db.tra
 
 /** Explicitly materialize a projection once, even if its daily task exists below a generated tier. */
 export function materializeProjection(sourceId: number, date: string, target?: number | null) {
+  const all = db.select().from(tasks).all(); const source = all.find(t => t.id === sourceId);
+  if (source && isQuantityGoal(planRoot(source, all))) {
+    const result = reconcileQuantityGoal(sourceId, getAppToday(), date);
+    if (!result?.daily) throw new Error('There is no remaining allocation on this date.');
+    return result.daily;
+  }
+  if (source && isOccurrenceGoal(planRoot(source, all))) {
+    const root = planRoot(source, all);
+    const planned = occurrenceSchedule(root, getAppToday(), all).find(d => d.date === date);
+    if (planned) target = planned.target;
+  }
   return db.transaction(tx => {
     const source = row(tx, sourceId);
     if (!source) throw new Error('This goal no longer exists.');

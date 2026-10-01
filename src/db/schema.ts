@@ -20,6 +20,8 @@ export const tasks = sqliteTable('tasks', {
   completionPreviousProgress: integer('completion_previous_progress'),
   pausedUntil: text('paused_until'),
   nominalDailyTarget: integer('nominal_daily_target'),
+  planSummary: integer('plan_summary', { mode: 'boolean' }).notNull().default(false),
+  bankCovered: integer('bank_covered').notNull().default(0),
 
   // Scope & Decomposition
   scope: text('scope', { enum: ['daily', 'weekly', 'monthly', 'yearly', 'custom'] }).default('daily').notNull(),
@@ -69,6 +71,7 @@ export const progressLogs = sqliteTable('progress_logs', {
   taskId: integer('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
   amount: integer('amount').notNull(),
   appDate: text('app_date'),
+  creditDate: text('credit_date'),
   kind: text('kind').notNull().default('progress'),
   loggedAt: text('logged_at').default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   notes: text('notes'),
@@ -195,3 +198,22 @@ export const taskHistory = sqliteTable('task_history', {
   details: text('details'),
   createdAt: text('created_at').notNull(),
 });
+
+// Earned credits are recomputed from real daily work; rest-day receipts are never fabricated progress.
+export const surplusCredits = sqliteTable('surplus_credits', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ownerId: integer('owner_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  appDate: text('app_date').notNull(),
+  baseline: integer('baseline').notNull(),
+  earned: integer('earned').notNull().default(0),
+  bankRequested: integer('bank_requested', { mode: 'boolean' }).notNull().default(false),
+  legacy: integer('legacy', { mode: 'boolean' }).notNull().default(false),
+}, table => ({ day: uniqueIndex('surplus_owner_day').on(table.ownerId, table.appDate) }));
+export const goalRestDays = sqliteTable('goal_rest_days', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ownerId: integer('owner_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  appDate: text('app_date').notNull(),
+  target: integer('target').notNull().default(0),
+  covered: integer('covered').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+}, table => ({ day: uniqueIndex('rest_owner_day').on(table.ownerId, table.appDate) }));
