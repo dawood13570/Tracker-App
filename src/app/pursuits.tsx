@@ -1,7 +1,3 @@
-import { getEffectiveProgress } from '../db/queries';
-import { PursuitContents } from '../components/PursuitContents';
-import { reportError } from '../utils/errors';
-import Storage from 'expo-sqlite/kv-store';
 // src/app/pursuits.tsx
 import {
   deletePursuit,
@@ -17,12 +13,16 @@ import { useColors } from '@/store/themeStore';
 import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import Storage from 'expo-sqlite/kv-store';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
+  Dimensions,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -34,6 +34,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PursuitContents } from '../components/PursuitContents';
+import { getEffectiveProgress } from '../db/queries';
+import { reportError } from '../utils/errors';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const STATUS_CONFIG: Record<PursuitRow['status'], { label: string; color: string }> = {
   active: { label: 'Active', color: '#22c55e' },
@@ -65,13 +70,53 @@ export default function PursuitsScreen() {
   const [descriptionDraft, setDescriptionDraft] = useState('');
   const [filter, setFilter] = useState<PursuitRow['status'] | 'all'>('all');
 
-  // Detail Modal State
+  // Detail Sheet State
   const [detailPursuit, setDetailPursuit] = useState<PursuitRow | null>(null);
   const [detailTasks, setDetailTasks] = useState<any[]>([]);
   const [subtasksMap, setSubtasksMap] = useState<Record<number, any[]>>({});
   const [expandedTaskIds, setExpandedTaskIds] = useState<Record<number, boolean>>({});
   const [editingTitle, setEditingTitle] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+
+  // Swipe-to-dismiss gesture setup
+  const panY = useRef(new Animated.Value(0)).current;
+  const resetPositionAnim = Animated.timing(panY, {
+    toValue: 0,
+    duration: 200,
+    useNativeDriver: true,
+  });
+
+  const closeDetail = useCallback(() => {
+    Animated.timing(panY, {
+      toValue: SCREEN_HEIGHT,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setDetailPursuit(null);
+      panY.setValue(0);
+    });
+  }, [panY]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 5,
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dy > 0) {
+            panY.setValue(gestureState.dy);
+          }
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (gestureState.dy > 120 || gestureState.vy > 0.6) {
+            closeDetail();
+          } else {
+            resetPositionAnim.start();
+          }
+        },
+      }),
+    [closeDetail, panY, resetPositionAnim]
+  );
 
   // Create Modal State
   const [isCreating, setIsCreating] = useState(false);
@@ -96,7 +141,12 @@ export default function PursuitsScreen() {
   );
 
   const filteredPursuits = useMemo(
-    () => pursuits.filter(p => (filter === 'all' || p.status === filter) && `${p.title} ${p.description ?? ''}`.toLowerCase().includes(search.toLowerCase())),
+    () =>
+      pursuits.filter(
+        (p) =>
+          (filter === 'all' || p.status === filter) &&
+          `${p.title} ${p.description ?? ''}`.toLowerCase().includes(search.toLowerCase())
+      ),
     [pursuits, filter, search]
   );
 
@@ -112,65 +162,82 @@ export default function PursuitsScreen() {
 
   const openDetail = async (p: PursuitRow) => {
     try {
-    setDetailPursuit(p);
-    setDescriptionDraft(Storage.getItemSync(`reckon-pursuit-draft:${p.id}`) ?? p.description ?? '');
-    setEditingTitle(p.title);
-    setIsEditingTitle(false);
-    setExpandedTaskIds({});
-    const tasks = await getTasksByPursuit(p.id);
-    setDetailTasks(await Promise.all(tasks.map(async t => ({ ...t, currentProgress: await getEffectiveProgress(t.id) }))));
-    await fetchDetailSubtasks(tasks);
-    } catch (error) { reportError(error); }
+      panY.setValue(0);
+      setDetailPursuit(p);
+      setDescriptionDraft(Storage.getItemSync(`reckon-pursuit-draft:${p.id}`) ?? p.description ?? '');
+      setEditingTitle(p.title);
+      setIsEditingTitle(false);
+      setExpandedTaskIds({});
+      const tasks = await getTasksByPursuit(p.id);
+      const tasksWithProgress = await Promise.all(
+        tasks.map(async (t) => ({ ...t, currentProgress: await getEffectiveProgress(t.id) }))
+      );
+      setDetailTasks(tasksWithProgress);
+      await fetchDetailSubtasks(tasks);
+    } catch (error) {
+      reportError(error);
+    }
   };
 
   const handleCreate = async () => {
     try {
-    if (!newTitle.trim()) return;
-    await insertPursuit({ title: newTitle.trim(), status: newStatus });
-    setNewTitle('');
-    setNewStatus('active');
-    setIsCreating(false);
-    await loadPursuits();
-    } catch (error) { reportError(error); }
+      if (!newTitle.trim()) return;
+      await insertPursuit({ title: newTitle.trim(), status: newStatus });
+      setNewTitle('');
+      setNewStatus('active');
+      setIsCreating(false);
+      await loadPursuits();
+    } catch (error) {
+      reportError(error);
+    }
   };
 
   const handleStatusChange = async (status: PursuitRow['status']) => {
     try {
-    if (!detailPursuit) return;
-    const updated = await updatePursuit(detailPursuit.id, { status });
-    setDetailPursuit(updated);
-    setPursuits((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    } catch (error) { reportError(error); }
+      if (!detailPursuit) return;
+      const updated = await updatePursuit(detailPursuit.id, { status });
+      setDetailPursuit(updated);
+      setPursuits((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (error) {
+      reportError(error);
+    }
   };
 
   const handleTitleSave = async () => {
     try {
-    if (!detailPursuit || !editingTitle.trim()) {
+      if (!detailPursuit || !editingTitle.trim()) {
+        setIsEditingTitle(false);
+        return;
+      }
+      const updated = await updatePursuit(detailPursuit.id, { title: editingTitle.trim() });
+      setDetailPursuit(updated);
+      setPursuits((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       setIsEditingTitle(false);
-      return;
+    } catch (error) {
+      reportError(error);
     }
-    const updated = await updatePursuit(detailPursuit.id, { title: editingTitle.trim() });
-    setDetailPursuit(updated);
-    setPursuits((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    setIsEditingTitle(false);
-    } catch (error) { reportError(error); }
   };
 
   const handleDescriptionSave = async (text: string) => {
     try {
-    if (!detailPursuit) return;
-    const updated = await updatePursuit(detailPursuit.id, { description: text.trim() || null });
-    Storage.removeItemSync(`reckon-pursuit-draft:${detailPursuit.id}`);
-    setDetailPursuit(updated);
-    setPursuits((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    } catch (error) { reportError(error); }
+      if (!detailPursuit) return;
+      const updated = await updatePursuit(detailPursuit.id, { description: text.trim() || null });
+      Storage.removeItemSync(`reckon-pursuit-draft:${detailPursuit.id}`);
+      setDetailPursuit(updated);
+      setPursuits((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (error) {
+      reportError(error);
+    }
   };
 
   const handleToggleLinkedTask = async (taskId: number) => {
     if (!detailPursuit) return;
     await toggleTask(taskId);
     const updatedTasks = await getTasksByPursuit(detailPursuit.id);
-    setDetailTasks(updatedTasks);
+    const tasksWithProgress = await Promise.all(
+      updatedTasks.map(async (t) => ({ ...t, currentProgress: await getEffectiveProgress(t.id) }))
+    );
+    setDetailTasks(tasksWithProgress);
     setTasksByPursuitMap((prev) => ({ ...prev, [detailPursuit.id]: updatedTasks }));
     await fetchDetailSubtasks(updatedTasks);
   };
@@ -179,7 +246,10 @@ export default function PursuitsScreen() {
     if (!detailPursuit) return;
     await toggleTask(subtaskId);
     const updatedTasks = await getTasksByPursuit(detailPursuit.id);
-    setDetailTasks(updatedTasks);
+    const tasksWithProgress = await Promise.all(
+      updatedTasks.map(async (t) => ({ ...t, currentProgress: await getEffectiveProgress(t.id) }))
+    );
+    setDetailTasks(tasksWithProgress);
     setTasksByPursuitMap((prev) => ({ ...prev, [detailPursuit.id]: updatedTasks }));
     await fetchDetailSubtasks(updatedTasks);
   };
@@ -190,18 +260,22 @@ export default function PursuitsScreen() {
 
   const handleDelete = () => {
     if (!detailPursuit) return;
-    Alert.alert('Delete Pursuit', `Delete "${detailPursuit.title}"? Linked tasks, habits, events, activities, and notes will stay, just unlinked.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deletePursuit(detailPursuit.id);
-          setDetailPursuit(null);
-          await loadPursuits();
+    Alert.alert(
+      'Delete Pursuit',
+      `Delete "${detailPursuit.title}"? Linked tasks, habits, events, activities, and notes will stay, just unlinked.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deletePursuit(detailPursuit.id);
+            setDetailPursuit(null);
+            await loadPursuits();
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   return (
@@ -235,8 +309,16 @@ export default function PursuitsScreen() {
         </ScrollView>
       </View>
 
-      <TextInput accessibilityLabel="Search pursuits" value={search} onChangeText={setSearch} placeholder="Search pursuits" placeholderTextColor={colors.textPlaceholder} style={{ margin: 16, padding: 12, color: colors.textPrimary, backgroundColor: colors.surface }} />
-      {/* List */}
+      <TextInput
+        accessibilityLabel="Search pursuits"
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search pursuits"
+        placeholderTextColor={colors.textPlaceholder}
+        style={styles.searchInput}
+      />
+
+      {/* Pursuit Card List */}
       <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
         {filteredPursuits.length === 0 ? (
           <View style={styles.emptyState}>
@@ -247,8 +329,6 @@ export default function PursuitsScreen() {
           filteredPursuits.map((p) => {
             const linked = tasksByPursuitMap[p.id] ?? [];
             const total = linked.length;
-            const completed = linked.filter((t) => t.isCompleted).length;
-            const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
             return (
               <TouchableOpacity key={p.id} style={styles.pursuitCard} onPress={() => openDetail(p)}>
@@ -286,7 +366,7 @@ export default function PursuitsScreen() {
         )}
       </ScrollView>
 
-      {/* Create Modal */}
+      {/* Create Pursuit Modal */}
       <Modal visible={isCreating} transparent animationType="slide" onRequestClose={() => setIsCreating(false)}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <KeyboardAvoidingView
@@ -343,24 +423,36 @@ export default function PursuitsScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Detail Modal */}
+      {/* Draggable Slide-to-Dismiss Detail Sheet */}
       <Modal
         visible={Boolean(detailPursuit)}
         transparent
-        animationType="slide"
-        onRequestClose={() => setDetailPursuit(null)}
+        animationType="fade"
+        onRequestClose={closeDetail}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.modalOverlay}>
+          {/* Backdrop Tap to Close */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeDetail} />
+
           <KeyboardAvoidingView
-            style={styles.modalOverlay}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', justifyContent: 'flex-end' }}
           >
-            <View
+            <Animated.View
               style={[
                 styles.modalCard,
-                { maxHeight: '88%', paddingBottom: Math.max(insets.bottom, 20) },
+                {
+                  maxHeight: SCREEN_HEIGHT * 0.9,
+                  paddingBottom: Math.max(insets.bottom, 16),
+                  transform: [{ translateY: panY }],
+                },
               ]}
             >
+              {/* Drag Handle Bar */}
+              <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
+                <View style={styles.dragIndicator} />
+              </View>
+
               {detailPursuit && (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                   {/* Title & Delete Header */}
@@ -424,123 +516,51 @@ export default function PursuitsScreen() {
                     ))}
                   </ScrollView>
 
-                  {/* Notes */}
+                  {/* Notes / Overview */}
                   <Text style={styles.detailLabel}>NOTES</Text>
                   <TextInput
                     style={styles.descriptionInput}
                     value={descriptionDraft}
-                    onChangeText={text => { setDescriptionDraft(text); Storage.setItemSync(`reckon-pursuit-draft:${detailPursuit.id}`, text); }}
-                    onEndEditing={(e) => { handleDescriptionSave(e.nativeEvent.text).catch(reportError); }}
+                    onChangeText={(text) => {
+                      setDescriptionDraft(text);
+                      Storage.setItemSync(`reckon-pursuit-draft:${detailPursuit.id}`, text);
+                    }}
+                    onEndEditing={(e) => {
+                      handleDescriptionSave(e.nativeEvent.text).catch(reportError);
+                    }}
                     multiline
                     placeholder="Why this pursuit matters, milestones, current state..."
                     placeholderTextColor={colors.textPlaceholder}
                   />
 
-                  <Pressable accessibilityRole="button" onPress={() => handleDescriptionSave(descriptionDraft).catch(reportError)} style={{ paddingVertical: 12 }}><Text style={{ color: colors.accent }}>Save overview</Text></Pressable>
-                  <PursuitContents pursuitId={detailPursuit.id} onChanged={() => { void loadPursuits(); getTasksByPursuit(detailPursuit.id).then(setDetailTasks); }} onOpenNote={id => { setDetailPursuit(null); router.push({ pathname: '/notes-history', params: { noteId: id } }); }} />
-                  {/* Interactive Linked Tasks with Subtask Accordions */}
-                  <Text style={[styles.detailLabel, { marginTop: 12 }]}>
-                    LINKED TASKS ({detailTasks.length})
-                  </Text>
-                  {detailTasks.length === 0 ? (
-                    <Text style={styles.emptyNotice}>
-                      No tasks linked yet. Assign this pursuit when creating a weekly, monthly, or yearly goal.
-                    </Text>
-                  ) : (
-                    detailTasks.map((t) => {
-                      const taskSubtasks = subtasksMap[t.id] ?? [];
-                      const hasSubtasks = taskSubtasks.length > 0;
-                      const isExpanded = Boolean(expandedTaskIds[t.id]);
-
-                      return (
-                        <View key={t.id} style={styles.linkedTaskBlock}>
-                          <View style={styles.linkedTaskRow}>
-                            <TouchableOpacity
-                              style={styles.taskCheckSlot}
-                              onPress={() => handleToggleLinkedTask(t.id)}
-                            >
-                              <Ionicons
-                                name={t.isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
-                                size={19}
-                                color={t.isCompleted ? colors.accent : colors.textMuted}
-                              />
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                              style={{ flex: 1 }}
-                              onPress={() => handleToggleLinkedTask(t.id)}
-                            >
-                              <Text style={[styles.linkedTaskTitle, t.isCompleted && styles.linkedTaskDone]}>
-                                {t.title}
-                              </Text>
-                              <Text style={styles.linkedTaskMeta}>
-                                {t.scope.toUpperCase()} · {t.scheduledDate}
-                                {t.type === 'Progression' && t.totalProgress
-                                  ? ` · ${t.currentProgress ?? 0}/${t.totalProgress} ${t.progressUnit ?? ''}`
-                                  : ''}
-                                {hasSubtasks
-                                  ? ` · ${taskSubtasks.filter((s) => s.isCompleted).length}/${taskSubtasks.length} subtasks`
-                                  : ''}
-                              </Text>
-                            </TouchableOpacity>
-
-                            {hasSubtasks && (
-                              <TouchableOpacity
-                                style={styles.expandSubtasksBtn}
-                                onPress={() => toggleExpand(t.id)}
-                                hitSlop={8}
-                              >
-                                <Ionicons
-                                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                                  size={16}
-                                  color={colors.textMuted}
-                                />
-                              </TouchableOpacity>
-                            )}
-                          </View>
-
-                          {/* Subtasks Expanded List */}
-                          {hasSubtasks && isExpanded && (
-                            <View style={styles.subtasksContainer}>
-                              <View style={styles.subtasksDivider} />
-                              {taskSubtasks.map((st) => (
-                                <TouchableOpacity
-                                  key={st.id}
-                                  style={styles.subtaskRow}
-                                  onPress={() => handleToggleSubtask(st.id)}
-                                  activeOpacity={0.7}
-                                >
-                                  <Ionicons
-                                    name={st.isCompleted ? 'checkbox' : 'square-outline'}
-                                    size={15}
-                                    color={st.isCompleted ? colors.accent : colors.textMuted}
-                                  />
-                                  <Text
-                                    style={[
-                                      styles.subtaskTitle,
-                                      st.isCompleted && styles.subtaskTitleDone,
-                                    ]}
-                                    numberOfLines={2}
-                                  >
-                                    {st.title}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })
-                  )}
-
-                  <Pressable style={styles.modalCloseBtn} onPress={() => setDetailPursuit(null)}>
-                    <Text style={styles.modalSaveText}>Done</Text>
-                  </Pressable>
+                  {/* Date-Grouped Timeline (Tasks, Habits, Activities, Events, Notes) */}
+                  <PursuitContents
+                    pursuitId={detailPursuit.id}
+                    tasks={detailTasks}
+                    subtasksMap={subtasksMap}
+                    expandedTaskIds={expandedTaskIds}
+                    onToggleTask={handleToggleLinkedTask}
+                    onToggleSubtask={handleToggleSubtask}
+                    onToggleExpandTask={toggleExpand}
+                    onChanged={() => {
+                      void loadPursuits();
+                      getTasksByPursuit(detailPursuit.id).then(async (tasks) => {
+                        const tasksWithProgress = await Promise.all(
+                          tasks.map(async (t) => ({ ...t, currentProgress: await getEffectiveProgress(t.id) }))
+                        );
+                        setDetailTasks(tasksWithProgress);
+                      });
+                    }}
+                    onOpenNote={(id) => {
+                      setDetailPursuit(null);
+                      router.push({ pathname: '/notes-history', params: { noteId: id } });
+                    }}
+                  />
                 </ScrollView>
               )}
-            </View>
+            </Animated.View>
           </KeyboardAvoidingView>
-        </TouchableWithoutFeedback>
+        </View>
       </Modal>
     </View>
   );
@@ -579,6 +599,16 @@ const createStyles = (colors: Palette) =>
     filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
     filterChipText: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
     filterChipTextActive: { fontSize: 12, color: colors.textOnAccent, fontWeight: '700' },
+    searchInput: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+      padding: 12,
+      borderRadius: 10,
+      color: colors.textPrimary,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
     listContent: { paddingHorizontal: 16, paddingBottom: 40 },
     emptyState: { alignItems: 'center', marginTop: 60, gap: 8 },
     emptyStateText: { fontSize: 13, color: colors.textMuted },
@@ -600,27 +630,25 @@ const createStyles = (colors: Palette) =>
     pursuitDesc: { fontSize: 12, color: colors.textMuted, marginBottom: 8 },
     statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
     statusBadgeText: { fontSize: 10, fontWeight: '700' },
-    cardProgressBlock: { marginTop: 6 },
-    progressBarTrack: {
-      height: 4,
-      backgroundColor: colors.surfaceSubtle,
-      borderRadius: 2,
-      overflow: 'hidden',
-      marginBottom: 4,
-    },
-    progressBarFill: {
-      height: 4,
-      backgroundColor: colors.accent,
-      borderRadius: 2,
-    },
     cardProgressText: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
     modalCard: {
       backgroundColor: colors.surface,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
-      paddingHorizontal: 24,
-      paddingTop: 24,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+    },
+    dragHandleArea: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+    },
+    dragIndicator: {
+      width: 40,
+      height: 5,
+      borderRadius: 2.5,
+      backgroundColor: colors.border,
     },
     modalTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
     editTitleInput: {
@@ -689,58 +717,8 @@ const createStyles = (colors: Palette) =>
       fontSize: 13,
       backgroundColor: colors.surfaceSubtle,
       color: colors.textPrimary,
-      minHeight: 85,
+      minHeight: 70,
       textAlignVertical: 'top',
-      marginBottom: 8,
-    },
-    emptyNotice: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', marginBottom: 12 },
-    linkedTaskBlock: {
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: 8,
-      marginBottom: 8,
-      overflow: 'hidden',
-    },
-    linkedTaskRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 10,
-      gap: 8,
-    },
-    taskCheckSlot: { width: 22, alignItems: 'center', justifyContent: 'center' },
-    linkedTaskTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
-    linkedTaskDone: { textDecorationLine: 'line-through', color: colors.textMuted },
-    linkedTaskMeta: { fontSize: 10, color: colors.textMuted, marginTop: 2 },
-    expandSubtasksBtn: { padding: 4 },
-    subtasksContainer: {
-      paddingHorizontal: 14,
-      paddingBottom: 10,
-    },
-    subtasksDivider: {
-      height: 1,
-      backgroundColor: colors.borderSubtle,
-      marginBottom: 8,
-    },
-    subtaskRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingVertical: 4,
-    },
-    subtaskTitle: {
-      fontSize: 12,
-      color: colors.textPrimary,
-      flex: 1,
-    },
-    subtaskTitleDone: {
-      textDecorationLine: 'line-through',
-      color: colors.textMuted,
-    },
-    modalCloseBtn: {
-      backgroundColor: colors.surfaceElevated,
-      paddingVertical: 12,
-      alignItems: 'center',
-      borderRadius: 8,
-      marginTop: 18,
-      marginBottom: 8,
+      marginBottom: 12,
     },
   });
