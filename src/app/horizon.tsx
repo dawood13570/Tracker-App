@@ -1,3 +1,5 @@
+import { forecastOccurrenceGoals } from '../db/occurrencePlanning';
+import { forecastQuantityGoals } from '../db/quantityPlanning';
 import { materializeProjection } from '../db/lifecycle';
 import { reportError } from '../utils/errors';
 import { useAppDay } from '../hooks/use-app-day';
@@ -218,7 +220,7 @@ export default function HorizonScreen() {
     setPeriodEvents(rangeEvents);
     setDayHabits(currentDayHabits);
 
-    const progressionGoals = scopedGoals.filter((t) => t.type === 'Progression');
+    const progressionGoals = scopedGoals.filter(taskHasProgress);
     const hybridGoals = scopedGoals.filter((t) => t.type === 'Hybrid');
     const countGoals = scopedGoals.filter((t) => t.occurrenceTarget != null && t.occurrenceTarget > 0);
 
@@ -323,24 +325,7 @@ export default function HorizonScreen() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const yearStart = format(startOfYear(bounds.start), 'yyyy-MM-dd');
-      const yearEnd = format(endOfYear(bounds.start), 'yyyy-MM-dd');
-      const yearlyGoals = await getYearlyTasks(yearStart, yearEnd);
-
-      const allActiveGoals = [...filteredGoals, ...yearlyGoals.filter((y) => y.occurrenceTarget)];
-      const uniqueGoals = Array.from(new Map(allActiveGoals.map((g) => [g.id, g])).values());
-
-      const fromDate = todayStr > startStr ? todayStr : startStr;
-
-      const countResults = (
-        await Promise.all(
-          uniqueGoals
-            .filter((g) => g.occurrenceTarget != null && g.occurrenceTarget > 0)
-            .map((g) => previewOccurrenceSchedule(g, fromDate, endStr))
-        )
-      ).flat();
-
-      if (active) setProjectedOccurrences(countResults);
+      if (active) setProjectedOccurrences([...forecastOccurrenceGoals(startStr, endStr, todayStr), ...forecastQuantityGoals(startStr, endStr, todayStr)]);
     })();
     return () => {
       active = false;
@@ -504,7 +489,7 @@ export default function HorizonScreen() {
   const loadCustomGoals = useCallback(async () => {
     const list = await getAllCustomGoals();
     setCustomGoals(list);
-    const progressionGoals = list.filter((t) => t.type === 'Progression');
+    const progressionGoals = list.filter(taskHasProgress);
     const hybridGoals = list.filter((t) => t.type === 'Hybrid');
     const countGoals = list.filter((t) => t.occurrenceTarget != null && t.occurrenceTarget > 0);
     const [progressEntries, subtaskEntries, countEntries] = await Promise.all([
@@ -805,6 +790,7 @@ export default function HorizonScreen() {
                   onChanged={loadData}
                   key={task.id}
                   task={task}
+                  onLogProgress={goal => { setLoggingTask(goal); progressSheetRef.current?.expand(); }}
                   scopeLabel={zoomLevel}
                   effectiveProgress={goalProgress[task.id]}
                   completedOccurrences={goalOccurrences[task.id]}
@@ -845,6 +831,7 @@ export default function HorizonScreen() {
                   onChanged={loadData}
                   key={goal.id}
                   task={goal}
+                  onLogProgress={goal => { setLoggingTask(goal); progressSheetRef.current?.expand(); }}
                   scopeLabel="custom"
                   effectiveProgress={customGoalProgress[goal.id]}
                   completedOccurrences={customGoalOccurrences[goal.id]}
@@ -947,7 +934,8 @@ export default function HorizonScreen() {
                               task={task as any}
                               onToggle={() => handleToggleTask(task.id)}
                               onProgressChanged={loadData}
-                              currentProgress={progressMap[task.id]}
+                              onLogProgress={() => { setLoggingTask(task); progressSheetRef.current?.expand(); }}
+                  currentProgress={progressMap[task.id]}
                               pace={paceMap[task.id]}
                               subtaskCount={subtaskMap[task.id]}
                               isExpanded={Boolean(expandedTaskIds[task.id])}
@@ -1064,7 +1052,8 @@ export default function HorizonScreen() {
                           task={task as any}
                           onToggle={() => handleToggleTask(task.id)}
                           onProgressChanged={loadData}
-                          currentProgress={progressMap[task.id]}
+                          onLogProgress={() => { setLoggingTask(task); progressSheetRef.current?.expand(); }}
+                  currentProgress={progressMap[task.id]}
                           pace={paceMap[task.id]}
                           subtaskCount={subtaskMap[task.id]}
                           isExpanded={Boolean(expandedTaskIds[task.id])}
@@ -1087,6 +1076,7 @@ export default function HorizonScreen() {
                           title={ghost.goalTitle}
                           priority={ghost.priority}
                           totalProgress={ghost.totalProgress}
+                          bankCovered={ghost.bankCovered}
                           progressUnit={ghost.progressUnit}
                           onPress={() => handleScheduleGhostNow(ghost)}
                         />
@@ -1138,9 +1128,9 @@ export default function HorizonScreen() {
         <ProgressLogSheet
           sheetRef={progressSheetRef}
           task={loggingTask}
-          currentProgress={loggingTask ? progressMap[loggingTask.id] ?? 0 : 0}
+          currentProgress={loggingTask ? progressMap[loggingTask.id] ?? goalProgress[loggingTask.id] ?? customGoalProgress[loggingTask.id] ?? 0 : 0}
           pace={loggingTask ? paceMap[loggingTask.id] : undefined}
-          onLogged={() => loadData()}
+          onLogged={() => { loadData(); loadCustomGoals(); }}
           onClose={() => setLoggingTask(null)}
         />
         <NoteSheet

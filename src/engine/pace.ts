@@ -88,8 +88,7 @@ export function getSurplusChoices(
 ): SurplusOptions | null {
   if (nominalTargetRate <= 0) return null;
 
-  const threshold = nominalTargetRate * 1.3;
-  if (loggedAmount <= threshold) return null;
+  if (loggedAmount <= nominalTargetRate) return null;
 
   const surplusAmount = loggedAmount - nominalTargetRate;
   const remainingAfterLog = Math.max(totalProgress - (currentProgress + loggedAmount), 0);
@@ -102,14 +101,14 @@ export function getSurplusChoices(
   );
 
   // Bank It: calculate full days earned from surplus
-  const bankedDaysEarned = Math.floor(surplusAmount / nominalTargetRate);
+  const bankedDaysEarned = surplusAmount / nominalTargetRate;
 
   // Stretch Goal: calculate rounded 20% bump
-  const suggestedNewTarget = Math.round(totalProgress * 1.2);
+  const suggestedNewTarget = Math.max(Math.ceil(totalProgress * 1.2), Math.ceil(currentProgress + loggedAmount));
 
   return {
     surplusAmount: Math.round(surplusAmount * 10) / 10,
-    bankedDaysEarned: Math.max(bankedDaysEarned, 1),
+    bankedDaysEarned: bankedDaysEarned,
     newDailyPace: Math.round(newDailyPace * 10) / 10,
     suggestedNewTarget,
   };

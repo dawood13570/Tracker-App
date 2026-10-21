@@ -640,7 +640,8 @@ export default function AppDashboard() {
                 <TaskCard
                   task={item}
                   onToggle={handleToggleTask}
-                  onProgressChanged={loadTasks}
+                  onProgressChanged={refreshDashboard}
+                  onLogProgress={() => { setLoggingTask(item); progressSheetRef.current?.expand(); }}
                   currentProgress={progressMap[item.id]}
                   pace={paceMap[item.id]}
                   subtaskCount={subtaskMap[item.id]}
@@ -800,8 +801,9 @@ export default function AppDashboard() {
                           key={`completed-task-${item.id}`}
                           task={item}
                           onToggle={handleToggleTask}
-                          onProgressChanged={loadTasks}
-                          currentProgress={progressMap[item.id]}
+                          onProgressChanged={refreshDashboard}
+                          onLogProgress={() => { setLoggingTask(item); progressSheetRef.current?.expand(); }}
+                  currentProgress={progressMap[item.id]}
                           pace={paceMap[item.id]}
                           subtaskCount={subtaskMap[item.id]}
                           isExpanded={Boolean(expandedTaskIds[item.id])}
@@ -883,7 +885,7 @@ export default function AppDashboard() {
           task={loggingTask}
           currentProgress={loggingTask ? progressMap[loggingTask.id] ?? 0 : 0}
           pace={loggingTask ? paceMap[loggingTask.id] : undefined}
-          onLogged={() => loadTasks()}
+          onLogged={() => refreshDashboard()}
           onClose={() => setLoggingTask(null)}
         />
 
