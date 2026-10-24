@@ -1,319 +1,161 @@
 import { requestLocalNotifications, scheduleMorningReminder } from '../services/notifications';
-import { shareBackup, pickBackup, importBackup, recoverLastRestore } from '../services/backup';
+import { shareBackup, pickBackup, importBackup, recoverLastRestore, hasRecoveryBackup } from '../services/backup';
 import { reportError } from '../utils/errors';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
 import { useColors, useThemeStore } from '@/store/themeStore';
 import { useStore } from '@/store/useStore';
 import { Palette } from '@/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const PRESET_HOURS = [
-  { label: '2:00 AM', value: 2 },
-  { label: '3:00 AM', value: 3 },
-  { label: '4:00 AM', value: 4 },
-];
-
-const SURPLUS_OPTIONS: { label: string; value: 'breathing_room' | 'raise_bar' | 'bank_it' | 'none' }[] = [
-  { label: 'Ask Each Time', value: 'none' },
-  { label: 'Ease Pace', value: 'breathing_room' },
-  { label: 'Bank Buffer', value: 'bank_it' },
-  { label: 'Raise Bar', value: 'raise_bar' },
-];
+type Icon = keyof typeof Ionicons.glyphMap;
+const hourLabel = (hour: number) => `${hour % 12 || 12}:00 ${hour < 12 ? 'AM' : 'PM'}`;
+const hoursWith = (presets: number[], current: number) => [...new Set([...presets, current])].sort((a, b) => a - b);
+const confirm = (title: string, message: string, label: string) => new Promise<boolean>(resolve => Alert.alert(title, message, [
+  { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+  { text: label, style: 'destructive', onPress: () => resolve(true) },
+], { cancelable: true, onDismiss: () => resolve(false) }));
 
 export default function AccountScreen() {
-  const [busy, setBusy] = useState(false);
-  const run = async (work: () => Promise<unknown>) => { if (busy) return; setBusy(true); try { await work(); } catch (error) { reportError(error); } finally { setBusy(false); } };
-  const restore = () => run(async () => { const backup = await pickBackup(); if (!backup) return; Alert.alert('Replace local data?', 'This restores the selected backup. A recovery copy of your current data will be saved first.', [{ text: 'Cancel' }, { text: 'Restore', style: 'destructive', onPress: () => { void run(async () => { await importBackup(backup); router.replace('/today'); }); } }]); });
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
-
-  const { mode, toggleTheme } = useThemeStore();
   const insets = useSafeAreaInsets();
-  const {
-    evolvingPriorityEnabled,
-    autoArchiveEnabled,
-    setEvolvingPriorityEnabled,
-    setAutoArchiveEnabled,
-    nightOwlMode,
-    setNightOwlMode,
-    dayBoundaryHour,
-    setDayBoundaryHour,
-    defaultRolloverEnabled,
-    setDefaultRolloverEnabled,
-    defaultSurplusMode,
-    setDefaultSurplusMode,
-    morningDigestEnabled, morningDigestHour, setMorningDigest,
-    criticalPaceNotificationsEnabled,
-    setCriticalPaceNotificationsEnabled,
-  } = useStore();
+  const { mode, setMode } = useThemeStore();
+  const settings = useStore();
+  const [busy, setBusy] = useState<string | null>(null);
+  const busyRef = useRef(false);
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
+  const [permission, setPermission] = useState<string | null>(null);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    const refresh = () => {
+      try { if (active) setRecoveryAvailable(hasRecoveryBackup()); } catch (error) { reportError(error); }
+      Notifications.getPermissionsAsync().then(result => { if (active) setPermission(result.granted ? 'granted' : result.status); }).catch(reportError);
+    };
+    refresh();
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') refresh(); });
+    return () => { active = false; subscription.remove(); };
+  }, []));
+  const run = async (label: string, work: () => Promise<unknown>) => {
+    if (busyRef.current) return;
+    busyRef.current = true; setBusy(label);
+    try { await work(); } catch (error) { reportError(error); }
+    finally { busyRef.current = false; setBusy(null); try { setRecoveryAvailable(hasRecoveryBackup()); } catch (error) { reportError(error); } }
+  };
+  const allowNotifications = async () => {
+    const allowed = await requestLocalNotifications(); setPermission(allowed ? 'granted' : 'denied');
+    if (!allowed) Alert.alert('Notifications are off', 'Allow notifications for Reckon in your device settings.', [
+      { text: 'Not now', style: 'cancel' }, { text: 'Open settings', onPress: () => { void Linking.openSettings().catch(reportError); } },
+    ]);
+    return allowed;
+  };
+  const section = (title: string, icon: Icon, children: ReactNode) => <View style={styles.section}>
+    <View style={styles.sectionHeading}><Ionicons name={icon} size={16} color={colors.textMuted} /><Text style={styles.sectionLabel}>{title}</Text></View>
+    <View style={styles.card}>{children}</View>
+  </View>;
+  const divider = <View style={styles.divider} />;
+  const toggle = (title: string, description: string, value: boolean, onChange: (value: boolean) => void) => <View style={styles.row}>
+    <View style={styles.rowText}><Text style={styles.rowTitle}>{title}</Text><Text style={styles.description}>{description}</Text></View>
+    <Switch accessibilityLabel={title} disabled={busy !== null} value={value} onValueChange={onChange} trackColor={{ false: colors.border, true: colors.accent }} />
+  </View>;
+  const chips = <T extends string | number,>(options: { value: T; label: string }[], selected: T, select: (value: T) => void) => <View style={styles.chips}>{options.map(option => <TouchableOpacity
+    key={option.value} accessibilityRole="radio" accessibilityState={{ checked: option.value === selected, disabled: busy !== null }} disabled={busy !== null}
+    onPress={() => select(option.value)} style={[styles.chip, option.value === selected && styles.chipSelected]}>
+    <Text style={[styles.chipText, option.value === selected && styles.chipTextSelected]}>{option.label}</Text>
+  </TouchableOpacity>)}</View>;
+  const action = (title: string, description: string, icon: Icon, onPress: () => void, disabled = false) => <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: disabled || busy !== null }} disabled={disabled || busy !== null} onPress={onPress} style={[styles.row, disabled && { opacity: 0.45 }]}>
+    <View style={styles.actionIcon}><Ionicons name={icon} size={20} color={colors.accent} /></View>
+    <View style={styles.rowText}><Text style={styles.rowTitle}>{title}</Text><Text style={styles.description}>{description}</Text></View>
+    <Ionicons name="chevron-forward" size={17} color={colors.textMuted} />
+  </TouchableOpacity>;
 
-  return (
-    <ScrollView
-      style={[styles.container, { paddingTop: insets.top }]}
-      contentContainerStyle={styles.content}
-    >
-      <Text style={styles.pageTitle}>Account</Text>
-      <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/task-history')} style={{ paddingVertical: 14 }}><Text style={{ color: colors.accent }}>View task history</Text></TouchableOpacity>
+  return <ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 }]}>
+    <Text style={styles.title}>Account</Text><Text style={styles.subtitle}>Make Reckon work your way.</Text>
+    <View style={styles.localCard}><View style={styles.localIcon}><Ionicons name="phone-portrait-outline" size={24} color={colors.accent} /></View><View style={styles.rowText}>
+      <Text style={styles.rowTitle}>Your personal workspace</Text><Text style={styles.description}>Stored on this device. Export a backup to keep a separate copy.</Text>
+    </View></View>
 
-      <Text style={styles.sectionLabel}>DAY CYCLE & TIMING</Text>
-      <View style={styles.settingsCard}>
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.settingTitle}>Extend Day Past Midnight</Text>
-            <Text style={styles.settingDesc}>
-              Keep "Today" on yesterday's tasks until your cutoff hour or until you finalize the day.
-            </Text>
-          </View>
-          <Switch
-            value={nightOwlMode}
-            onValueChange={setNightOwlMode}
-            trackColor={{ false: colors.borderSubtle, true: colors.accent }}
-          />
-        </View>
-
-        {nightOwlMode && (
-          <>
-            <View style={styles.divider} />
-            <View style={styles.settingColumn}>
-              <Text style={styles.settingTitle}>Day Cutoff Time</Text>
-              <Text style={styles.settingDesc}>
-                When does your yesterday officially switch to today?
-              </Text>
-
-              <View style={styles.presetButtonRow}>
-                {PRESET_HOURS.map((preset) => {
-                  const isSelected = dayBoundaryHour === preset.value;
-                  return (
-                    <TouchableOpacity
-                      key={preset.value}
-                      style={[
-                        styles.presetButton,
-                        isSelected && styles.presetButtonSelected,
-                      ]}
-                      onPress={() => setDayBoundaryHour(preset.value)}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.presetButtonText,
-                          isSelected && styles.presetButtonTextSelected,
-                        ]}
-                      >
-                        {preset.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          </>
-        )}
+    {section('Appearance', 'color-palette-outline', <View style={styles.column}>
+      <Text style={styles.rowTitle}>Theme</Text>
+      {chips([{ value: 'light' as const, label: 'Light' }, { value: 'dark' as const, label: 'Dark' }], mode, setMode)}
+    </View>)}
+    {section('Your day', 'moon-outline', <>
+      {toggle('Extend past midnight', 'Keep yesterday open until your cutoff, or finalize the day yourself.', settings.nightOwlMode, settings.setNightOwlMode)}
+      {settings.nightOwlMode && <>{divider}<View style={styles.column}><Text style={styles.rowTitle}>Start the next day at</Text>
+        {chips(hoursWith([2, 3, 4], settings.dayBoundaryHour).map(value => ({ value, label: hourLabel(value) })), settings.dayBoundaryHour, settings.setDayBoundaryHour)}
+      </View></>}
+    </>)}
+    {section('Tasks & focus', 'checkmark-circle-outline', <>
+      {toggle('Evolving priority', 'Give neglected tasks more priority over time.', settings.evolvingPriorityEnabled, settings.setEvolvingPriorityEnabled)}{divider}
+      {toggle('Focus filtering', 'Temporarily hide low-priority work when a neglected task needs attention.', settings.autoArchiveEnabled, settings.setAutoArchiveEnabled)}{divider}
+      {toggle('Confirm progress completion', 'Ask before marking a quantity task complete or reopening it.', !settings.skipProgressionAlerts, value => settings.setSkipProgressionAlerts(!value))}
+    </>)}
+    {section('New task defaults', 'options-outline', <>
+      {toggle('Carry unfinished tasks forward', 'Start new tasks with rollover enabled.', settings.defaultRolloverEnabled, settings.setDefaultRolloverEnabled)}{divider}
+      <View style={styles.column}><Text style={styles.rowTitle}>When you exceed the target</Text><Text style={styles.description}>Applies to new quantity tasks. Each task can override this.</Text>
+        {chips([{ value: 'none' as const, label: 'Ask each time' }, { value: 'breathing_room' as const, label: 'Ease pace' }, { value: 'bank_it' as const, label: 'Bank surplus' }], settings.defaultSurplusMode === 'raise_bar' ? 'none' : settings.defaultSurplusMode, settings.setDefaultSurplusMode)}
+        <Text style={styles.hint}>Bank covers later work. Raising a target always asks for your choice.</Text>
       </View>
-
-      <Text style={styles.sectionLabel}>TASK SETTINGS</Text>
-      <View style={styles.settingsCard}>
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.settingTitle}>Evolving Priority</Text>
-            <Text style={styles.settingDesc}>
-              Neglected low-priority tasks escalate to high over time.
-            </Text>
-          </View>
-          <Switch
-            value={evolvingPriorityEnabled}
-            onValueChange={setEvolvingPriorityEnabled}
-            trackColor={{ false: colors.borderSubtle, true: colors.accent }}
-          />
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.settingTitle}>Auto-Archive</Text>
-            <Text style={styles.settingDesc}>
-              Hide low-priority tasks while a neglected task needs attention.
-            </Text>
-          </View>
-          <Switch
-            value={autoArchiveEnabled}
-            onValueChange={setAutoArchiveEnabled}
-            trackColor={{ false: colors.borderSubtle, true: colors.accent }}
-          />
-        </View>
-      </View>
-
-      <Text style={styles.sectionLabel}>DEFAULTS FOR NEW TASKS</Text>
-      <View style={styles.settingsCard}>
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.settingTitle}>Rollover by Default</Text>
-            <Text style={styles.settingDesc}>New tasks start with "move to next day" turned on.</Text>
-          </View>
-          <Switch
-            value={defaultRolloverEnabled}
-            onValueChange={setDefaultRolloverEnabled}
-            trackColor={{ false: colors.borderSubtle, true: colors.accent }}
-          />
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.settingColumn}>
-          <Text style={styles.settingTitle}>Default Surplus Mode</Text>
-          <Text style={styles.settingDesc}>How new Progression tasks handle beating pace, until changed per-task.</Text>
-          <View style={[styles.presetButtonRow, { flexWrap: 'wrap' }]}>
-            {SURPLUS_OPTIONS.map((opt) => {
-              const isSelected = defaultSurplusMode === opt.value;
-              return (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={[styles.presetButton, isSelected && styles.presetButtonSelected]}
-                  onPress={() => setDefaultSurplusMode(opt.value)}
-                >
-                  <Text style={[styles.presetButtonText, isSelected && styles.presetButtonTextSelected]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      </View>
-
-      <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
-      <View style={styles.settingsCard}>
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1 }}><Text style={styles.settingTitle}>Morning reminder</Text><Text style={styles.settingDesc}>A daily invitation to review Today, in your device’s local time.</Text></View>
-          <Switch accessibilityLabel="Morning reminder" value={morningDigestEnabled} onValueChange={enabled => void run(async () => {
-            if (enabled && !(await requestLocalNotifications())) { Alert.alert('Notifications are off', 'Enable notifications for Reckon in device settings.'); return; }
-            await scheduleMorningReminder(enabled, morningDigestHour); setMorningDigest(enabled);
-          })} />
-        </View>
-        {morningDigestEnabled && <View style={styles.presetButtonRow}>{[6, 7, 8, 9, 10].map(hour => <TouchableOpacity key={hour} accessibilityRole="button" accessibilityState={{ selected: morningDigestHour === hour }} style={styles.presetButton} onPress={() => void run(async () => { await scheduleMorningReminder(true, hour); setMorningDigest(true, hour); })}><Text style={{ color: hour === morningDigestHour ? colors.accent : colors.textSecondary }}>{hour}:00</Text></TouchableOpacity>)}</View>}
-      </View>
-      <View style={styles.settingsCard}>
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.settingTitle}>Critical Pace Alerts</Text>
-            <Text style={styles.settingDesc}>Notify when a Progression task falls to Critical status.</Text>
-          </View>
-          <Switch
-            value={criticalPaceNotificationsEnabled}
-            onValueChange={enabled => void run(async () => { if (!enabled || await requestLocalNotifications()) setCriticalPaceNotificationsEnabled(enabled); else Alert.alert('Notifications are off', 'Enable notifications for Reckon in your device settings to receive reminders.'); })}
-            trackColor={{ false: colors.borderSubtle, true: colors.accent }}
-          />
-        </View>
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.settingTitle}>Light Mode</Text>
-            <Text style={styles.settingDesc}>Switch between dark and light appearance.</Text>
-          </View>
-          <Switch
-            value={mode === 'light'}
-            onValueChange={toggleTheme}
-            trackColor={{ false: colors.borderSubtle, true: colors.accent }}
-          />
-        </View>
-      </View>
-
-      <Text style={styles.sectionLabel}>DATA</Text>
-      <View style={styles.settingsCard}>
-        <TouchableOpacity accessibilityRole="button" disabled={busy} style={styles.settingRow} onPress={() => void run(shareBackup)}><Text style={styles.settingTitle}>{busy ? 'Working…' : 'Export backup'}</Text></TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" disabled={busy} style={styles.settingRow} onPress={restore}><Text style={styles.settingTitle}>Import and restore backup</Text></TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" disabled={busy} style={styles.settingRow} onPress={() => Alert.alert('Recover previous data?', 'Restore the recovery copy from before your last import?', [{ text: 'Cancel' }, { text: 'Recover', onPress: () => void run(async () => { await recoverLastRestore(); router.replace('/today'); }) }])}><Text style={styles.settingTitle}>Recover data from before last import</Text></TouchableOpacity>
-        <Text style={[styles.settingDesc, { padding: 14 }]}>Backups include records, settings, and saved drafts. Save a copy outside this app before uninstalling.</Text>
-      </View>
-    </ScrollView>
-  );
+    </>)}
+    {section('Reminders', 'notifications-outline', <>
+      {toggle('Morning reminder', 'A daily prompt to review Today, in your local time.', settings.morningDigestEnabled, enabled => void run('Updating reminder…', async () => {
+        if (enabled && !(await allowNotifications())) return;
+        await scheduleMorningReminder(enabled, settings.morningDigestHour); settings.setMorningDigest(enabled);
+      }))}
+      {settings.morningDigestEnabled && <View style={[styles.column, { paddingTop: 0 }]}>{chips(hoursWith([6, 7, 8, 9, 10], settings.morningDigestHour).map(value => ({ value, label: hourLabel(value) })), settings.morningDigestHour, hour => void run('Updating reminder…', async () => {
+        if (!(await allowNotifications())) return;
+        await scheduleMorningReminder(true, hour); settings.setMorningDigest(true, hour);
+      }))}</View>}{divider}
+      {toggle('Critical pace alerts', 'A check-in when a quantity task falls critically behind.', settings.criticalPaceNotificationsEnabled, enabled => void run('Updating alerts…', async () => {
+        if (!enabled || await allowNotifications()) settings.setCriticalPaceNotificationsEnabled(enabled);
+      }))}
+      {permission === 'denied' && <>{divider}{action('Notifications blocked', 'Open device settings to allow reminders.', 'notifications-off-outline', () => { void Linking.openSettings().catch(reportError); })}</>}
+    </>)}
+    {section('History & backups', 'archive-outline', <>
+      {action('Task history', 'Review completions, skips, and moved work.', 'time-outline', () => router.push('/task-history'))}{divider}
+      {action('Export backup', 'Save records, settings, and drafts outside the app.', 'download-outline', () => void run('Preparing backup…', shareBackup))}{divider}
+      {action('Restore a backup', 'Choose a file. Review before replacing current data.', 'folder-open-outline', () => void run('Restoring backup…', async () => {
+        const backup = await pickBackup(); if (!backup) return;
+        if (!(await confirm('Replace local data?', 'Your selected backup will replace current records and settings. A recovery copy is saved first.', 'Restore'))) return;
+        await importBackup(backup); router.replace('/today');
+      }))}{divider}
+      {action('Recover previous data', recoveryAvailable ? 'Undo the last import using its recovery copy.' : 'Available after your first backup restore.', 'arrow-undo-outline', () => void run('Recovering data…', async () => {
+        if (!(await confirm('Recover previous data?', 'Replace current data with the copy saved before the last import?', 'Recover'))) return;
+        await recoverLastRestore(); router.replace('/today');
+      }), !recoveryAvailable)}
+    </>)}
+    {busy && <View accessibilityLiveRegion="polite" style={styles.busy}><ActivityIndicator color={colors.accent} /><Text style={styles.description}>{busy}</Text></View>}
+    <Text style={styles.footer}>Reckon {Constants.expoConfig?.version ?? ''} · Offline workspace</Text>
+  </ScrollView>;
 }
-
-const createStyles = (colors: Palette) =>
-  StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    content: { padding: 20, paddingBottom: 60 },
-    pageTitle: {
-      fontSize: 22,
-      fontWeight: '800',
-      color: colors.textPrimary,
-      marginBottom: 24,
-    },
-    sectionLabel: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.textMuted,
-      letterSpacing: 0.5,
-      marginBottom: 8,
-      marginTop: 16,
-    },
-    settingsCard: {
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.borderSubtle,
-      padding: 4,
-    },
-    settingRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 14,
-    },
-    settingColumn: {
-      padding: 14,
-    },
-    settingTitle: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: colors.textPrimary,
-    },
-    settingDesc: {
-      fontSize: 12,
-      color: colors.textMuted,
-      marginTop: 2,
-      lineHeight: 16,
-    },
-    divider: {
-      height: 1,
-      backgroundColor: colors.borderSubtle,
-      marginHorizontal: 14,
-    },
-    presetButtonRow: {
-      flexDirection: 'row',
-      gap: 10,
-      marginTop: 14,
-    },
-    presetButton: {
-      flex: 1,
-      paddingVertical: 10,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.borderSubtle,
-      backgroundColor: colors.surfaceSubtle,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    presetButtonSelected: {
-      borderColor: colors.accent,
-      backgroundColor: colors.accent,
-    },
-    presetButtonText: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: colors.textSecondary,
-    },
-    presetButtonTextSelected: {
-      color: colors.textOnAccent,
-      fontWeight: '700',
-    },
-  });
+const createStyles = (colors: Palette) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { paddingHorizontal: 20 },
+  title: { fontSize: 28, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.6 },
+  subtitle: { fontSize: 13, lineHeight: 20, color: colors.textSecondary, marginTop: 4, marginBottom: 20 },
+  localCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.surfaceElevated, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSubtle, marginBottom: 8 },
+  localIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  section: { marginTop: 20 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, marginLeft: 2 },
+  sectionLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+  card: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSubtle, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, minHeight: 72 },
+  rowText: { flex: 1 },
+  rowTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+  description: { fontSize: 12, lineHeight: 18, color: colors.textSecondary, marginTop: 4 },
+  hint: { fontSize: 11, lineHeight: 17, color: colors.textMuted, marginTop: 12 },
+  column: { padding: 16 },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.borderSubtle, marginHorizontal: 16 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  chip: { paddingHorizontal: 14, minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+  chipSelected: { borderColor: colors.accent, backgroundColor: colors.paceOnTrackBg },
+  chipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  chipTextSelected: { color: colors.paceOnTrackText },
+  actionIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.surfaceElevated, alignItems: 'center', justifyContent: 'center' },
+  busy: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16 },
+  footer: { color: colors.textMuted, textAlign: 'center', fontSize: 11, marginTop: 28 },
+});

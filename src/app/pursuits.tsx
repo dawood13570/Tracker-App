@@ -18,7 +18,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
-  Dimensions,
+  useWindowDimensions,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -30,7 +30,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,7 +37,6 @@ import { PursuitContents } from '../components/PursuitContents';
 import { getEffectiveProgress } from '../db/queries';
 import { reportError } from '../utils/errors';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const STATUS_CONFIG: Record<PursuitRow['status'], { label: string; color: string }> = {
   active: { label: 'Active', color: '#22c55e' },
@@ -59,6 +57,7 @@ const FILTER_OPTIONS: Array<PursuitRow['status'] | 'all'> = [
 
 export default function PursuitsScreen() {
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -88,14 +87,14 @@ export default function PursuitsScreen() {
 
   const closeDetail = useCallback(() => {
     Animated.timing(panY, {
-      toValue: SCREEN_HEIGHT,
+      toValue: screenHeight,
       duration: 200,
       useNativeDriver: true,
     }).start(() => {
       setDetailPursuit(null);
       panY.setValue(0);
     });
-  }, [panY]);
+  }, [panY, screenHeight]);
 
   const panResponder = useMemo(
     () =>
@@ -119,6 +118,8 @@ export default function PursuitsScreen() {
   );
 
   // Create Modal State
+  const createLock = useRef(false);
+  const [savingPursuit, setSavingPursuit] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newStatus, setNewStatus] = useState<PursuitRow['status']>('active');
@@ -180,16 +181,18 @@ export default function PursuitsScreen() {
   };
 
   const handleCreate = async () => {
+    if (createLock.current || !newTitle.trim()) return;
+    createLock.current = true; setSavingPursuit(true);
     try {
-      if (!newTitle.trim()) return;
       await insertPursuit({ title: newTitle.trim(), status: newStatus });
+      Keyboard.dismiss();
       setNewTitle('');
       setNewStatus('active');
       setIsCreating(false);
       await loadPursuits();
     } catch (error) {
       reportError(error);
-    }
+    } finally { createLock.current = false; setSavingPursuit(false); }
   };
 
   const handleStatusChange = async (status: PursuitRow['status']) => {
@@ -368,12 +371,14 @@ export default function PursuitsScreen() {
 
       {/* Create Pursuit Modal */}
       <Modal visible={isCreating} transparent animationType="slide" onRequestClose={() => setIsCreating(false)}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+
           <KeyboardAvoidingView
             style={styles.modalOverlay}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            <View style={[styles.modalCard, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Dismiss keyboard" onPress={Keyboard.dismiss} />
+            <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" style={[styles.modalCard, { flexGrow: 0, maxHeight: screenHeight - insets.top - 24 }]} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}>
+              <View style={styles.dragHandleArea}><View style={styles.dragIndicator} /></View>
               <Text style={styles.modalTitle}>New Pursuit</Text>
               <TextInput
                 style={styles.modalInput}
@@ -381,11 +386,14 @@ export default function PursuitsScreen() {
                 onChangeText={setNewTitle}
                 placeholder="e.g. Learn Guitar, Strength Training"
                 placeholderTextColor={colors.textPlaceholder}
+                accessibilityLabel="Pursuit title"
+                returnKeyType="done"
+                onSubmitEditing={handleCreate}
                 autoFocus
               />
 
               <Text style={[styles.detailLabel, { marginTop: 14 }]}>INITIAL STATUS</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ marginBottom: 12 }}>
                 {(Object.keys(STATUS_CONFIG) as PursuitRow['status'][]).map((s) => (
                   <TouchableOpacity
                     key={s}
@@ -414,13 +422,13 @@ export default function PursuitsScreen() {
                 <Pressable style={styles.modalCancelBtn} onPress={() => setIsCreating(false)}>
                   <Text style={styles.modalCancelText}>Cancel</Text>
                 </Pressable>
-                <Pressable style={styles.modalSaveBtn} onPress={handleCreate}>
-                  <Text style={styles.modalSaveText}>Create</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Create pursuit" accessibilityState={{ disabled: savingPursuit || !newTitle.trim() }} disabled={savingPursuit || !newTitle.trim()} style={[styles.modalSaveBtn, (savingPursuit || !newTitle.trim()) && { opacity: 0.45 }]} onPress={handleCreate}>
+                  <Text style={styles.modalSaveText}>{savingPursuit ? 'Creating…' : 'Create'}</Text>
                 </Pressable>
               </View>
-            </View>
+            </ScrollView>
           </KeyboardAvoidingView>
-        </TouchableWithoutFeedback>
+
       </Modal>
 
       {/* Draggable Slide-to-Dismiss Detail Sheet */}
@@ -435,14 +443,15 @@ export default function PursuitsScreen() {
           <Pressable style={StyleSheet.absoluteFill} onPress={closeDetail} />
 
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={{ width: '100%', justifyContent: 'flex-end' }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            pointerEvents="box-none"
+            style={{ flex: 1, width: '100%', justifyContent: 'flex-end' }}
           >
             <Animated.View
               style={[
                 styles.modalCard,
                 {
-                  maxHeight: SCREEN_HEIGHT * 0.9,
+                  maxHeight: '90%',
                   paddingBottom: Math.max(insets.bottom, 16),
                   transform: [{ translateY: panY }],
                 },

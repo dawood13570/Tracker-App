@@ -1,3 +1,4 @@
+import { TaskSwipeActions } from './TaskSwipeActions';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { postponeTask, skipTask } from '../db/lifecycle';
 import { requestProgressChange } from '../services/progress';
@@ -356,8 +357,12 @@ export function TaskCard({
 
   return (
     <Swipeable enabled={!selectionMode} overshootLeft={false} overshootRight={false} dragOffsetFromLeftEdge={48} dragOffsetFromRightEdge={48}
-      renderLeftActions={(_progress, _translation, methods) => <Pressable accessibilityRole="button" accessibilityLabel={task.isCompleted ? 'Reopen task' : 'Complete task'} onPress={() => { methods.close(); handlePress(); }} style={{ padding: 20, justifyContent: 'center', backgroundColor: colors.surfaceSubtle }}><Text style={{ color: colors.accent }}>{task.isCompleted ? 'Reopen' : 'Complete'}</Text></Pressable>}
-      renderRightActions={task.isCompleted ? undefined : (_progress, _translation, methods) => <View style={{ justifyContent: 'center', backgroundColor: colors.surfaceSubtle }}><Pressable accessibilityRole="button" accessibilityLabel="Postpone until tomorrow" onPress={() => { try { postponeTask(task.id); methods.close(); onProgressChanged?.(); } catch (error) { reportError(error); } }} style={{ padding: 20, justifyContent: 'center', backgroundColor: colors.surfaceSubtle }}><Text style={{ color: colors.accent }}>Postpone</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Skip this occurrence" onPress={() => { methods.close(); Alert.alert('Skip this occurrence?', 'It stays in history. Repeating tasks schedule their next occurrence.', [{ text: 'Cancel' }, { text: 'Skip', onPress: () => { try { skipTask(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } } }]); }} style={{ minHeight: 44, padding: 12 }}><Text style={{ color: colors.textSecondary }}>Skip</Text></Pressable></View>}
+      renderLeftActions={(_progress, _translation, methods) => <TaskSwipeActions actions={[{ label: task.isCompleted ? 'Reopen' : 'Complete', icon: task.isCompleted ? 'arrow-undo-outline' : 'checkmark-circle-outline', tone: 'complete', onPress: () => { methods.close(); handlePress(); } }]} />}
+      renderRightActions={task.isCompleted || task.skippedAt ? undefined : (_progress, _translation, methods) => <TaskSwipeActions actions={[
+        { label: 'Postpone', accessibilityLabel: 'Postpone until tomorrow', icon: 'calendar-outline', tone: 'postpone', onPress: () => { methods.close(); try { postponeTask(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } } },
+        { label: 'Skip', accessibilityLabel: 'Skip this occurrence', icon: 'play-skip-forward-outline', tone: 'skip', onPress: () => { methods.close(); Alert.alert('Skip this occurrence?', 'It stays in history. Repeating tasks schedule their next occurrence.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Skip', onPress: () => { try { skipTask(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } } }]); } },
+      ]} />}
+
     >
     <View
       style={[

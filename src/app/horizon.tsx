@@ -824,7 +824,11 @@ export default function HorizonScreen() {
               </View>
             </View>
             {customGoals.length === 0 ? (
-              <Text style={styles.emptyNotice}>No custom-range goals yet — tap + to plan one with its own dates.</Text>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Create a custom goal" style={styles.emptyCard} onPress={() => { setEditingCustomGoal(null); customModalRef.current?.expand(); }}>
+                <Ionicons name="flag-outline" size={20} color={colors.textMuted} style={{ opacity: 0.5 }} />
+                <Text style={styles.emptyCardText}>No custom goals set.</Text>
+                <Text style={styles.emptyCardText}>Tap to choose your own dates.</Text>
+              </TouchableOpacity>
             ) : (
               customGoals.map((goal) => (
                 <GoalCard

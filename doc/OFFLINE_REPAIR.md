@@ -26,3 +26,11 @@ The native Expo SQLite adapter is replaced by Node's SQLite adapter in tests. SQ
 ## Deferred
 
 Cloud accounts, authentication, remote backup, bidirectional sync, conflict resolution, and online services are deliberately outside this pass. A live background-generated morning agenda is not promised by the local check-in reminder. Device checks and a production binary are release validation, not evidence provided by a Metro export.
+
+## Interface follow-up
+
+Task swipe actions use separate rounded icon tiles. Custom goal empty states share the other Horizon goal cards' dashed treatment. Notes hide generated summaries by default in history, Today previews, and period sheets. Exact legacy summary templates remain filterable even if an earlier migration cleared their flag; personal additions and summary-like titles are preserved as reflections. Renaming or linking a snapshot no longer turns it into a manual note.
+
+Account groups appearance, day timing, focus, task defaults, reminders, and backups. Restore confirmation stays inside one guarded operation; recovery is unavailable until a recovery file exists. Notification permission refreshes when returning from device settings, and saved hours outside the preset list remain visible. Pursuit creation and detail editing use keyboard avoidance on both platforms, scrollable content, and duplicate-submit protection.
+
+On a device, check Android and iOS keyboard opening/closing in both pursuit modals, taps on status/Create with the keyboard visible, small screens and large text, swipe tile alignment in both themes, note toggle behavior with old and new summaries, and cancel/confirm on backup restore.
