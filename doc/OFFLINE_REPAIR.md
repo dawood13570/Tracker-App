@@ -6,7 +6,7 @@ Pursuits now link tasks, habits, events, activities, and notes. Their status rem
 
 ## Regression coverage
 
-`npm run check` runs TypeScript and the SQLite regression suite. The suite covers recurrence idempotency, rollover metadata and identity, completion/undo propagation, stable started targets, cascade deletion and pursuit unlinking, reversible habits, night-owl dates and persistence, atomic editor rollback, recurring milestone copies, backup validation and rollback, rest-day propagation, legacy migration preservation, sequential milestone guards, carried-progress aggregation, skipping/postponing, and input validation.
+`npm run check` runs TypeScript and the SQLite regression suite. The suite covers recurrence idempotency, rollover metadata and identity, completion/undo propagation, stable started targets, cascade deletion and pursuit unlinking, reversible habits, night-owl dates and persistence, atomic editor rollback, recurring milestone copies, backup validation and rollback, automatic bank coverage and corrections, legacy migration preservation, sequential milestone guards, carried-progress aggregation, skipping/postponing, and input validation.
 
 The native Expo SQLite adapter is replaced by Node's SQLite adapter in tests. SQL migrations, Drizzle queries, transaction boundaries, constraints, and lifecycle code are real. Native file pickers, background tasks, gestures, and notification delivery still require the device checks below.
 
@@ -15,7 +15,7 @@ The native Expo SQLite adapter is replaced by Node's SQLite adapter in tests. SQ
 1. Upgrade a development installation containing existing tasks, subtasks, notes, tags, and pursuits. Verify counts and links, including notes titled “Reflection.” Keep an external backup first.
 2. Create two independent tasks with the same title. Enable Repeat and Rollover on one, log partial progress, miss an app day, and resume. Verify one carried occurrence and the unrelated task; complete/undo/complete and confirm one successor.
 3. Complete and reopen sequential milestones from Today and Pursuits. Test a recurring milestone group independently from its template. Verify sliders and the log sheet offer the same surplus choices.
-4. Use one banked day on a goal. Confirm today's allocation is paused, the buffer decreases once, history records the rest day, and allocations resume on the next app day.
+4. Log 10 pages against a 5-page allocation and select Bank. Open the next day and verify 5 pages are covered with zero actual progress. Log 5 pages there and verify coverage moves forward. Correct the original 10 to 5 and verify the bank is reversed. Repeat with 7 pages to test partial coverage. Test a December–January week and an old split-week migration.
 5. Save a draft, close the sheet, force-stop/reopen, and recover it. Open a weekly or custom note from history and confirm the correct note and scope. Toggle theme while editing and confirm the form survives.
 6. Link and unlink each entity type in a pursuit. Delete the pursuit and verify its tasks, habits, events, activities, and notes remain.
 7. Export to Files, make a change, import, and verify records/tags/settings/drafts. Recover the pre-import copy. Try a malformed backup; live data must remain intact.
@@ -26,3 +26,11 @@ The native Expo SQLite adapter is replaced by Node's SQLite adapter in tests. SQ
 ## Deferred
 
 Cloud accounts, authentication, remote backup, bidirectional sync, conflict resolution, and online services are deliberately outside this pass. A live background-generated morning agenda is not promised by the local check-in reminder. Device checks and a production binary are release validation, not evidence provided by a Metro export.
+
+## Interface follow-up
+
+Task swipe actions use separate rounded icon tiles. Custom goal empty states share the other Horizon goal cards' dashed treatment. Notes hide generated summaries by default in history, Today previews, and period sheets. Exact legacy summary templates remain filterable even if an earlier migration cleared their flag; personal additions and summary-like titles are preserved as reflections. Renaming or linking a snapshot no longer turns it into a manual note.
+
+Account groups appearance, day timing, focus, task defaults, reminders, and backups. Restore confirmation stays inside one guarded operation; recovery is unavailable until a recovery file exists. Notification permission refreshes when returning from device settings, and saved hours outside the preset list remain visible. Pursuit creation and detail editing use keyboard avoidance on both platforms, scrollable content, and duplicate-submit protection.
+
+On a device, check Android and iOS keyboard opening/closing in both pursuit modals, taps on status/Create with the keyboard visible, small screens and large text, swipe tile alignment in both themes, note toggle behavior with old and new summaries, and cancel/confirm on backup restore.

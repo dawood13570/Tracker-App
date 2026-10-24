@@ -39,7 +39,7 @@ export const ProgressionSlider: React.FC<ProgressionSliderProps> = ({
   }, [current]);
 
   const isDirty = draftVal !== current;
-  const clampNonNegative = (val: number) => Math.max(0, Math.round(val));
+  const clampNonNegative = (val: number) => Math.max(0, val);
 
   // The slider is anchored strictly to `total`.
   // If `current` was already saved above `total` (via manual input),
@@ -49,7 +49,7 @@ export const ProgressionSlider: React.FC<ProgressionSliderProps> = ({
 
   const handleTextSubmit = () => {
     const parsed = Number(textValue);
-    setDraftVal(Number.isNaN(parsed) ? draftVal : clampNonNegative(parsed));
+    setDraftVal(!Number.isFinite(parsed) ? draftVal : clampNonNegative(parsed));
     setIsEditingText(false);
     Keyboard.dismiss();
   };

@@ -134,6 +134,13 @@
       "when": 1790857248573,
       "tag": "0018_familiar_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790887009957,
+      "tag": "0019_condemned_ultimates",
+      "breakpoints": true
     }
   ]
 }

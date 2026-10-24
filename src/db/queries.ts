@@ -1,4 +1,8 @@
-import { changeTaskCompletion, changeProgress, addProgress, deleteTaskTree, copyMilestones, getAggregateProgress } from './lifecycle';
+import { withNoteOrigin, isGeneratedNote } from '../engine/noteOrigin';
+import { isOccurrenceGoal, reconcileOccurrencePlans, occurrenceSchedule } from './occurrencePlanning';
+import { reconcileQuantityPlans, reconcileQuantityGoal, isQuantityGoal } from './quantityPlanning';
+import { planRoot } from './planData';
+import { changeTaskCompletion, changeProgress, addProgress, deleteTaskTree, copyMilestones, getAggregateProgress, advanceCoveredRepeats } from './lifecycle';
 import { getAppToday } from '../utils/date';
 import { calculateHabitStreak } from '@/engine/streaks';
 import {
@@ -52,6 +56,7 @@ export interface ProjectedOccurrence {
   date: string;
   totalProgress?: number | null;
   progressUnit?: string | null;
+  bankCovered?: number;
 }
 
 export async function getTaskByDate(date: string): Promise<TaskRow[]> {
@@ -245,6 +250,7 @@ export async function decomposeWeeklyProgressionToDaily(
   targetDate: string,
   daysRemaining: number
 ): Promise<TaskRow> {
+  if (isQuantityGoal(weeklyTask)) { const result = reconcileQuantityGoal(weeklyTask.id, targetDate); if (result?.daily) return result.daily; }
   const manual = await ancestorAllocation(weeklyTask, targetDate);
   if (manual) return manual;
   const currentDone = await getEffectiveProgress(weeklyTask.id);
@@ -852,6 +858,7 @@ export async function decomposeMonthlyProgressionToWeekly(
   weekStartDate: string,
   weeksRemaining: number
 ): Promise<TaskRow> {
+  if (isQuantityGoal(monthlyTask)) { const date = weekStartDate < monthlyTask.scheduledDate ? monthlyTask.scheduledDate : weekStartDate; const result = reconcileQuantityGoal(monthlyTask.id, date); if (result?.week) return result.week; }
   const currentDone = await getEffectiveProgress(monthlyTask.id);
   const totalNeeded = monthlyTask.totalProgress ?? 0;
   const remainingTarget = Math.max(0, totalNeeded - currentDone);
@@ -983,25 +990,13 @@ export async function previewOccurrenceSchedule(
   fromDateStr: string,
   periodEndStr: string
 ): Promise<ProjectedOccurrence[]> {
-  const dates = await getProjectedRunDates(parentTask, fromDateStr, periodEndStr);
-  const children = await getChildTasks(parentTask.id);
-  const existingDailyDates = new Set(children.filter((c) => c.scope === 'daily').map((c) => c.scheduledDate));
-
-  const baseTitle = parentTask.title.replace(/\s*\((Monthly|Weekly)\)$/g, '');
-
-  return dates
-    .filter((d) => !existingDailyDates.has(d))
-    .map((dateStr) => ({
-      goalId: parentTask.id,
-      goalTitle: baseTitle,
-      type: parentTask.type as any,
-      priority: parentTask.priority as any,
-      date: dateStr,
-      totalProgress: parentTask.totalProgress
-        ? Math.ceil(parentTask.totalProgress / (parentTask.occurrenceTarget || 1))
-        : null,
-      progressUnit: parentTask.progressUnit,
-    }));
+  const all = db.select().from(tasks).all();
+  const root = planRoot(parentTask, all);
+  const existing = new Set(all.filter(t => t.scope === 'daily' && planRoot(t, all).id === root.id).map(t => t.scheduledDate));
+  return occurrenceSchedule(root, fromDateStr, all).filter(d => d.date <= periodEndStr && !existing.has(d.date)).map(d => ({
+    goalId: root.id, goalTitle: root.title, type: root.type, priority: root.priority,
+    date: d.date, totalProgress: d.target, progressUnit: root.progressUnit,
+  }));
 }
 
 export async function decomposeOccurrenceGoalToTier(
@@ -1086,6 +1081,12 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
   if (decompositionInFlight) { await decompositionInFlight; return ensureDailyDecompositionForDate(dateStr); }
 
   decompositionInFlight = (async () => {
+    reconcileQuantityPlans(dateStr);
+    advanceCoveredRepeats(dateStr);
+    reconcileQuantityPlans(dateStr);
+    reconcileOccurrencePlans(dateStr);
+    const planningTasks = db.select().from(tasks).all();
+    const managed = (t: TaskRow) => t.planSummary || isQuantityGoal(planRoot(t, planningTasks)) || isOccurrenceGoal(planRoot(t, planningTasks));
     const dayDate = parseISO(dateStr);
     const weekStart = format(startOfWeek(dayDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
     const weekEnd = format(endOfWeek(dayDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
@@ -1097,6 +1098,7 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
     // 1. YEARLY GOALS -> Monthly Tier
     const yearlyGoals = await getYearlyTasks(yearStart, yearEnd);
     for (const yearly of yearlyGoals) {
+      if (managed(yearly)) continue;
       if (yearly.isCompleted || (yearly.pausedUntil && yearly.pausedUntil > dateStr)) continue;
       if (yearly.deadline && dateStr > yearly.deadline) continue;
       const ownEnd = yearly.deadline && yearly.deadline < yearEnd ? yearly.deadline : yearEnd;
@@ -1113,6 +1115,7 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
     // 2. MONTHLY GOALS -> Weekly Tier
     const monthlyGoals = await getMonthlyTasks(monthStart, monthEnd);
     for (const monthly of monthlyGoals) {
+      if (managed(monthly)) continue;
       if (monthly.isCompleted || (monthly.pausedUntil && monthly.pausedUntil > dateStr)) continue;
       if (monthly.deadline && dateStr > monthly.deadline) continue;
       const ownEnd = monthly.deadline && monthly.deadline < monthEnd ? monthly.deadline : monthEnd;
@@ -1132,6 +1135,7 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
     // 3. WEEKLY GOALS -> Daily Tier
     const weeklyGoals = await getWeeklyTasks(weekStart, weekEnd);
     for (const weekly of weeklyGoals) {
+      if (managed(weekly)) continue;
       if (weekly.isCompleted || (weekly.pausedUntil && weekly.pausedUntil > dateStr)) continue;
       if (weekly.deadline && dateStr > weekly.deadline) continue;
       const ownEnd = weekly.deadline && weekly.deadline < weekEnd ? weekly.deadline : weekEnd;
@@ -1152,6 +1156,7 @@ export async function ensureDailyDecompositionForDate(dateStr: string): Promise<
     // 4. CUSTOM GOALS (Direct to Daily)
     const customGoals = await getActiveCustomGoals(dateStr);
     for (const custom of customGoals) {
+      if (managed(custom)) continue;
       if (custom.isCompleted || (custom.pausedUntil && custom.pausedUntil > dateStr)) continue;
       const periodEnd = custom.deadline ?? dateStr;
       if (custom.type === 'Progression') {
@@ -1183,6 +1188,8 @@ export async function setAbsoluteProgress(taskId: number, targetValue: number): 
 export async function deleteTaskCascade(id: number): Promise<void> { deleteTaskTree(id); }
 
 export async function getCompletedOccurrenceCount(goalId: number): Promise<number> {
+  const goal = await getTaskById(goalId);
+  if (goal?.planSummary) return goal.subtasksCompleted ?? 0;
   const descendants = await getAllDescendantTasks(goalId);
   return descendants.filter((d) => d.scope === 'daily' && d.isCompleted).length;
 }
@@ -1260,6 +1267,7 @@ export async function decomposeYearlyProgressionToMonthly(
   monthStartDate: string,
   monthsRemaining: number
 ): Promise<TaskRow> {
+  if (isQuantityGoal(yearlyTask)) { const date = monthStartDate < yearlyTask.scheduledDate ? yearlyTask.scheduledDate : monthStartDate; const result = reconcileQuantityGoal(yearlyTask.id, date); if (result?.month) return result.month; }
   const currentDone = await getEffectiveProgress(yearlyTask.id);
   const totalNeeded = yearlyTask.totalProgress ?? 0;
   const remainingTarget = Math.max(0, totalNeeded - currentDone);
@@ -1297,7 +1305,8 @@ export async function decomposeYearlyProgressionToMonthly(
 }
 
 export async function getNotesByScope(scope: 'daily' | 'weekly' | 'monthly' | 'yearly') {
-  return db.select().from(notes).where(eq(notes.scope, scope)).orderBy(desc(notes.dateKey));
+  const rows = await db.select().from(notes).where(eq(notes.scope, scope)).orderBy(desc(notes.dateKey));
+  return rows.map(withNoteOrigin);
 }
 
 export interface NoteSummary {
@@ -1313,7 +1322,7 @@ export interface NoteSummary {
 }
 
 export async function getAllNotesSummaries(): Promise<NoteSummary[]> {
-  return await db
+  const rows = await db
     .select({
       id: notes.id,
       pursuitId: notes.pursuitId,
@@ -1321,23 +1330,25 @@ export async function getAllNotesSummaries(): Promise<NoteSummary[]> {
       dateKey: notes.dateKey,
       title: notes.title,
       content: notes.content,
-      isAutoGenerated: notes.isAutoGenerated, // <-- ENSURE THIS IS PRESENT
+      isAutoGenerated: notes.isAutoGenerated,
       createdAt: notes.createdAt,
       updatedAt: notes.updatedAt,
     })
     .from(notes)
     .orderBy(desc(notes.createdAt));
+  return rows.map(withNoteOrigin);
 }
 
 export async function getNotesForScope(
   scope: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom',
   dateKey: string
 ) {
-  return db
+  const rows = await db
     .select()
     .from(notes)
     .where(and(eq(notes.scope, scope), eq(notes.dateKey, dateKey)))
     .orderBy(desc(notes.createdAt));
+  return rows.map(withNoteOrigin);
 }
 
 export async function createNote(
@@ -1356,12 +1367,9 @@ export async function createNote(
 }
 
 export async function updateNoteContent(id: number, content: string) {
-  const [updated] = await db
-    .update(notes)
-    .set({ content, isAutoGenerated: false, updatedAt: sql`(CURRENT_TIMESTAMP)` })
-    .where(eq(notes.id, id))
-    .returning();
-  return updated;
+  const previous = db.select().from(notes).where(eq(notes.id, id)).get();
+  if (!previous) throw new Error('This note no longer exists.');
+  return updateNoteDetails(id, { title: previous.title ?? '', content, pursuitId: previous.pursuitId });
 }
 
 export async function deleteNote(id: number) {
@@ -1680,7 +1688,10 @@ export async function getProgressByUnit(start: string, end: string) {
 }
 
 export async function updateNoteDetails(id: number, data: { title: string; content: string; pursuitId: number | null }) {
-  return db.update(notes).set({ ...data, isAutoGenerated: false, updatedAt: new Date().toISOString() }).where(eq(notes.id, id)).returning().get();
+  const previous = db.select().from(notes).where(eq(notes.id, id)).get();
+  if (!previous) throw new Error('This note no longer exists.');
+  const generated = data.content === (previous.content ?? '') && isGeneratedNote(previous);
+  return db.update(notes).set({ ...data, isAutoGenerated: generated, updatedAt: new Date().toISOString() }).where(eq(notes.id, id)).returning().get();
 }
 
 export async function getAllLinkableTasks() {

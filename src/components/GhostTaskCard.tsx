@@ -9,6 +9,7 @@ interface GhostTaskCardProps {
   title: string;
   priority?: 'Low' | 'Medium' | 'High';
   totalProgress?: number | null;
+  bankCovered?: number;
   progressUnit?: string | null;
   onPress?: () => void;
 }
@@ -17,6 +18,7 @@ export function GhostTaskCard({
   title,
   priority = 'Medium',
   totalProgress,
+  bankCovered = 0,
   progressUnit,
   onPress,
 }: GhostTaskCardProps) {
@@ -49,7 +51,7 @@ export function GhostTaskCard({
         {totalProgress != null && totalProgress > 0 && (
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>
-              Target: {totalProgress} {progressUnit ?? ''}
+              Target: {Number(totalProgress.toFixed(2))} {progressUnit ?? ''}{bankCovered > 0 ? ` · ${Number(bankCovered.toFixed(2))} covered by bank` : ''}
             </Text>
           </View>
         )}

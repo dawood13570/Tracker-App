@@ -61,3 +61,6 @@ export async function recoverLastRestore() {
   const backup = validateBackup(JSON.parse(await file.text()));
   await importBackup(backup);
 }
+export function hasRecoveryBackup(): boolean {
+  return new File(Paths.document, 'reckon-before-last-restore.json').exists;
+}

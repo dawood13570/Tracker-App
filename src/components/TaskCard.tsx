@@ -1,8 +1,8 @@
+import { TaskSwipeActions } from './TaskSwipeActions';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { postponeTask, skipTask } from '../db/lifecycle';
 import { requestProgressChange } from '../services/progress';
 import { reportError } from '../utils/errors';
-import { useBankedDay } from '../db/lifecycle';
 import { useAppDay } from '../hooks/use-app-day';
 import type { PaceResult } from '@/engine/pace';
 import { getEffectivePriority } from '@/engine/priority';
@@ -41,6 +41,7 @@ interface TaskCardProps {
   task: Task;
   onToggle: (id: number, currentStatus: boolean) => void;
   onProgressChanged?: () => void;
+  onLogProgress?: () => void;
   currentProgress?: number;
   subtaskCount?: { completed: number; total: number };
   pace?: PaceResult;
@@ -68,6 +69,7 @@ export function TaskCard({
   task,
   onToggle,
   onProgressChanged,
+  onLogProgress,
   currentProgress,
   subtaskCount,
   pace,
@@ -196,15 +198,16 @@ export function TaskCard({
     setEditingSubtaskId(null);
     Keyboard.dismiss();
 
-    if (Number.isNaN(parsed) || !sub) {
+    if (!Number.isFinite(parsed) || !sub) {
       isSubmittingSubtask.current = false;
       return;
     }
 
-    const clamped = Math.max(0, Math.round(parsed));
+    const clamped = Math.max(0, parsed);
 
+    try { if (!(await requestProgressChange(subtaskId, clamped))) { isSubmittingSubtask.current = false; return; } }
+    catch (error) { reportError(error); isSubmittingSubtask.current = false; return; }
     setLocalSubtaskProg((prev) => ({ ...prev, [subtaskId]: clamped }));
-    await setAbsoluteProgress(subtaskId, clamped);
 
     const shouldComplete = total > 0 && clamped >= total;
     const needsStatusToggle = sub.isCompleted !== shouldComplete;
@@ -354,8 +357,12 @@ export function TaskCard({
 
   return (
     <Swipeable enabled={!selectionMode} overshootLeft={false} overshootRight={false} dragOffsetFromLeftEdge={48} dragOffsetFromRightEdge={48}
-      renderLeftActions={(_progress, _translation, methods) => <Pressable accessibilityRole="button" accessibilityLabel={task.isCompleted ? 'Reopen task' : 'Complete task'} onPress={() => { methods.close(); handlePress(); }} style={{ padding: 20, justifyContent: 'center', backgroundColor: colors.surfaceSubtle }}><Text style={{ color: colors.accent }}>{task.isCompleted ? 'Reopen' : 'Complete'}</Text></Pressable>}
-      renderRightActions={task.isCompleted ? undefined : (_progress, _translation, methods) => <View style={{ justifyContent: 'center', backgroundColor: colors.surfaceSubtle }}><Pressable accessibilityRole="button" accessibilityLabel="Postpone until tomorrow" onPress={() => { try { postponeTask(task.id); methods.close(); onProgressChanged?.(); } catch (error) { reportError(error); } }} style={{ padding: 20, justifyContent: 'center', backgroundColor: colors.surfaceSubtle }}><Text style={{ color: colors.accent }}>Postpone</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Skip this occurrence" onPress={() => { methods.close(); Alert.alert('Skip this occurrence?', 'It stays in history. Repeating tasks schedule their next occurrence.', [{ text: 'Cancel' }, { text: 'Skip', onPress: () => { try { skipTask(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } } }]); }} style={{ minHeight: 44, padding: 12 }}><Text style={{ color: colors.textSecondary }}>Skip</Text></Pressable></View>}
+      renderLeftActions={(_progress, _translation, methods) => <TaskSwipeActions actions={[{ label: task.isCompleted ? 'Reopen' : 'Complete', icon: task.isCompleted ? 'arrow-undo-outline' : 'checkmark-circle-outline', tone: 'complete', onPress: () => { methods.close(); handlePress(); } }]} />}
+      renderRightActions={task.isCompleted || task.skippedAt ? undefined : (_progress, _translation, methods) => <TaskSwipeActions actions={[
+        { label: 'Postpone', accessibilityLabel: 'Postpone until tomorrow', icon: 'calendar-outline', tone: 'postpone', onPress: () => { methods.close(); try { postponeTask(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } } },
+        { label: 'Skip', accessibilityLabel: 'Skip this occurrence', icon: 'play-skip-forward-outline', tone: 'skip', onPress: () => { methods.close(); Alert.alert('Skip this occurrence?', 'It stays in history. Repeating tasks schedule their next occurrence.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Skip', onPress: () => { try { skipTask(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } } }]); } },
+      ]} />}
+
     >
     <View
       style={[
@@ -486,7 +493,7 @@ export function TaskCard({
                       {(task.bufferDays ?? 0) > 0 && (
                         <View style={styles.bankedBadge}>
                           <Text style={styles.bankedBadgeText}>
-                            {task.bufferDays} {task.bufferDays === 1 ? 'day' : 'days'} banked
+                            {Number(task.bufferDays!.toFixed(2))} {task.bufferDays === 1 ? 'day' : 'days'} banked
                           </Text>
                         </View>
                       )}
@@ -499,7 +506,8 @@ export function TaskCard({
 
           {task.skippedAt && <Text style={{ color: colors.textMuted, padding: 12 }}>Skipped · {task.skippedAt.slice(0, 10)}</Text>}
 
-          {!selectionMode && (task.bufferDays ?? 0) > 0 && <Pressable accessibilityRole="button" accessibilityLabel="Use one banked rest day" onPress={() => { try { useBankedDay(task.id); onProgressChanged?.(); } catch (error) { reportError(error); } }} style={{ padding: 12 }}><Text style={{ color: colors.accent }}>Use a banked day</Text></Pressable>}
+          {(task.bankCovered ?? 0) > 0 && <Text style={{ color: colors.accent, padding: 12 }}>{displayedProgress + task.bankCovered >= (task.totalProgress ?? 0) ? 'Covered by bank' : 'Partly covered by bank'} · {Number(task.bankCovered.toFixed(2))} {task.progressUnit}. Work logged here moves coverage forward.</Text>}
+          {!selectionMode && taskHasProgress(task) && onLogProgress && <Pressable accessibilityRole="button" onPress={onLogProgress} style={{ minHeight: 44, padding: 12 }}><Text style={{ color: colors.accent }}>Log or correct progress</Text></Pressable>}
           {/* Subtasks Accordion */}
           {!selectionMode && hasSubtasks && isExpanded && (
             <View style={styles.inlineSubtaskContainer}>
